@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef } from 'react';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useRouter } from 'next/navigation';
-import { Upload, Info, Rocket, AlertCircle, Image, Link2, X, CheckCircle, Shield, Coins } from 'lucide-react';
-import { calculateTrustScore, getTrustScoreColor, getTrustScoreLabel, getTrustScoreBgColor } from '@/lib/trustScore';
+import { Upload, Info, Rocket, AlertCircle, Image, Link2, X, CheckCircle, Coins } from 'lucide-react';
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 // Creation fee in SOL (goes to escrow to cover launch costs like metadata rent)
@@ -77,27 +76,12 @@ export default function SubmitPage() {
     description: '',
     solGoal: 10,
     duration: 3,
-    creatorTwitter: '', // Creator's personal X account (Proof Launch only)
+    creatorTwitter: '', // Creator's personal X account (Commie Launch only)
     twitter: '',
     website: '',
     telegram: '',
     discord: '',
-    // Trust score parameters (default to generous/trusted settings)
-    creatorFeePct: 2,
-    backerSharePct: 70,
-    devInitialBuySol: 0,
   });
-
-  // Calculate trust score in real-time
-  const trustScore = useMemo(() => {
-    return calculateTrustScore({
-      creator_fee_pct: formData.creatorFeePct,
-      backer_share_pct: formData.backerSharePct,
-      dev_initial_buy_sol: formData.devInitialBuySol,
-      backing_goal_sol: formData.solGoal,
-      duration: formData.duration,
-    });
-  }, [formData.creatorFeePct, formData.backerSharePct, formData.devInitialBuySol, formData.solGoal, formData.duration]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -264,11 +248,6 @@ export default function SubmitPage() {
           website: formData.website || undefined,
           backing_goal_sol: formData.solGoal,
           backing_days: formData.duration,
-          // Trust score parameters
-          creator_fee_pct: formData.creatorFeePct,
-          backer_share_pct: formData.backerSharePct,
-          dev_initial_buy_sol: formData.devInitialBuySol,
-          trust_score: trustScore.total,
           // Creation fee payment (goes to escrow for platform costs)
           creation_fee_signature: signature,
           creation_fee_sol: CREATION_FEE_SOL,
@@ -303,7 +282,7 @@ export default function SubmitPage() {
       ...prev,
       [name]: type === 'checkbox'
         ? checked
-        : ['solGoal', 'duration', 'creatorFeePct', 'backerSharePct', 'devInitialBuySol'].includes(name)
+        : ['solGoal', 'duration'].includes(name)
         ? Number(value)
         : value
     }));
@@ -336,13 +315,19 @@ export default function SubmitPage() {
   if (success) {
     return (
       <div className="max-w-2xl mx-auto">
-        <div className="card p-8 text-center">
-          <CheckCircle className="w-16 h-16 mx-auto text-[var(--success)] mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Meme Submitted!</h2>
-          <p className="text-[var(--muted)] mb-4">
-            Your meme is now in the Proving Grounds. Redirecting...
+        <div className="relative border-2 border-[var(--success)] bg-[var(--card)] p-8 text-center">
+          {/* Victory Banner */}
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-6 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
+            ★ Victory ★
+          </div>
+          <div className="w-20 h-20 mx-auto bg-[var(--success)]/20 flex items-center justify-center border-2 border-[var(--success)] mb-4">
+            <span className="text-4xl">★</span>
+          </div>
+          <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Revolution Initiated!</h2>
+          <p className="text-[var(--muted)] mb-4 uppercase tracking-wide">
+            The people await. Redirecting to your movement...
           </p>
-          <div className="w-8 h-8 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] rounded-full animate-spin mx-auto" />
+          <div className="w-8 h-8 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] animate-spin mx-auto" />
         </div>
       </div>
     );
@@ -382,40 +367,48 @@ export default function SubmitPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold mb-2">
-          <span className="gradient-text">Submit Your Meme</span>
+      {/* Propaganda-style Header */}
+      <div className="relative text-center mb-8 py-6">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
+        <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
+          <span className="gradient-text">Start a Revolution</span>
         </h1>
-        <p className="text-[var(--muted)]">
-          Launch your meme coin to the Proving Grounds
+        <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
+          Submit your meme • Rally the comrades • Seize the market
         </p>
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
       </div>
 
       {!connected ? (
-        <div className="card p-8 text-center">
-          <AlertCircle className="w-12 h-12 mx-auto text-[var(--warning)] mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Connect Your Wallet</h2>
-          <p className="text-[var(--muted)]">
-            Please connect your wallet to submit a meme
+        <div className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-8 text-center">
+          <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
+            <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
+          </div>
+          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Comrade Identification Required</h2>
+          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
+            Connect your wallet to join the revolution
           </p>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Error Display */}
           {error && (
-            <div className="bg-[var(--error)]/10 border border-[var(--error)]/30 rounded-lg p-4">
+            <div className="bg-[var(--error)]/10 border-2 border-[var(--error)]/30 p-4">
               <div className="flex gap-3 items-center">
                 <AlertCircle className="w-5 h-5 text-[var(--error)]" />
-                <p className="text-[var(--error)]">{error}</p>
+                <p className="text-[var(--error)] font-bold uppercase tracking-wide text-sm">{error}</p>
               </div>
             </div>
           )}
 
           {/* Basic Info */}
-          <div className="card p-6 space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
+          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
+            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
+              ★ Identity
+            </div>
+            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Rocket className="w-5 h-5 text-[var(--accent)]" />
-              Basic Information
+              Meme Identity
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
@@ -501,10 +494,13 @@ export default function SubmitPage() {
           </div>
 
           {/* Image Upload */}
-          <div className="card p-6 space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
+          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
+            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
+              ★ Propaganda
+            </div>
+            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Image className="w-5 h-5 text-[var(--accent)]" />
-              Token Image
+              Revolutionary Image
             </h2>
 
             <div className="flex gap-4">
@@ -514,12 +510,12 @@ export default function SubmitPage() {
                     <img
                       src={imagePreview}
                       alt="Token preview"
-                      className="w-32 h-32 rounded-xl object-cover border border-[var(--border)]"
+                      className="w-32 h-32 object-cover border-2 border-[var(--accent)]"
                     />
                     <button
                       type="button"
                       onClick={removeImage}
-                      className="absolute -top-2 -right-2 w-6 h-6 bg-[var(--error)] rounded-full flex items-center justify-center hover:bg-[var(--error)]/80 transition-colors"
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-[var(--error)] flex items-center justify-center hover:bg-[var(--error)]/80 transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -528,10 +524,10 @@ export default function SubmitPage() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-32 h-32 rounded-xl border-2 border-dashed border-[var(--border)] hover:border-[var(--accent)] transition-colors flex flex-col items-center justify-center gap-2 text-[var(--muted)] hover:text-[var(--foreground)]"
+                    className="w-32 h-32 border-2 border-dashed border-[var(--border)] hover:border-[var(--accent)] transition-colors flex flex-col items-center justify-center gap-2 text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
                     <Upload className="w-8 h-8" />
-                    <span className="text-xs">Upload</span>
+                    <span className="text-xs uppercase font-bold">Upload</span>
                   </button>
                 )}
                 <input
@@ -544,33 +540,36 @@ export default function SubmitPage() {
               </div>
 
               <div className="flex-1 text-sm text-[var(--muted)]">
-                <p className="mb-2">Upload your token's image or logo.</p>
+                <p className="mb-2 uppercase tracking-wide font-bold text-xs">Upload your token&apos;s image</p>
                 <ul className="space-y-1 text-xs">
-                  <li>• PNG, JPG, GIF, or WebP</li>
-                  <li>• Max 5MB</li>
-                  <li>• Square images work best (1:1 ratio)</li>
+                  <li>★ PNG, JPG, GIF, or WebP</li>
+                  <li>★ Max 5MB</li>
+                  <li>★ Square images work best (1:1 ratio)</li>
                 </ul>
               </div>
             </div>
           </div>
 
           {/* Creator Info */}
-          <div className="card p-6 space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Link2 className="w-5 h-5 text-[var(--accent)]" />
-              Creator Info
+          <div className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-6 space-y-4">
+            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent-gold)] text-black text-xs font-bold uppercase tracking-wider">
+              ★ Comrade ID
+            </div>
+            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
+              <Link2 className="w-5 h-5 text-[var(--accent-gold)]" />
+              Creator Identity
             </h2>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Your X (Twitter)</label>
+              <label className="block text-sm font-bold uppercase tracking-wide mb-2">X Profile or Community</label>
               <input
                 type="text"
                 name="creatorTwitter"
                 value={formData.creatorTwitter}
                 onChange={handleChange}
                 onBlur={() => handleBlur('creatorTwitter')}
-                placeholder="https://x.com/yourusername"
-                className={`w-full px-4 py-3 rounded-lg bg-[var(--background)] border focus:outline-none ${
+                placeholder="https://x.com/profile or https://x.com/i/communities/..."
+                className={`w-full px-4 py-3 bg-[var(--background)] border-2 focus:outline-none ${
                   touched.creatorTwitter && fieldErrors.creatorTwitter
                     ? 'border-[var(--error)] focus:border-[var(--error)]'
                     : 'border-[var(--border)] focus:border-[var(--accent)]'
@@ -580,17 +579,20 @@ export default function SubmitPage() {
                 <span className="text-xs text-[var(--error)]">{fieldErrors.creatorTwitter}</span>
               )}
               <span className="text-xs text-[var(--muted)] mt-1 block">
-                Displayed on Proof Launch so backers can see who created this meme. Not included in token metadata.
+                Displayed on Commie Launch so users can identify you. Not included in token metadata.
               </span>
             </div>
           </div>
 
           {/* Social Links */}
-          <div className="card p-6 space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
+          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
+            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
+              ★ Channels
+            </div>
+            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Link2 className="w-5 h-5 text-[var(--accent)]" />
-              Token Social Links
-              <span className="text-xs font-normal text-[var(--muted)]">(optional - shown on Pump.fun/Axiom/Photon)</span>
+              Communication Channels
+              <span className="text-xs font-normal text-[var(--muted)]">(optional)</span>
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
@@ -674,21 +676,25 @@ export default function SubmitPage() {
           </div>
 
           {/* Goals */}
-          <div className="card p-6 space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
+          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
+            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
+              ★ Objectives
+            </div>
+            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Upload className="w-5 h-5 text-[var(--accent)]" />
-              Backing Goals
+              Revolutionary Objectives
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-2">SOL Goal *</label>
+                <label className="block text-sm font-bold uppercase tracking-wide mb-2">Collective Goal *</label>
                 <select
                   name="solGoal"
                   value={formData.solGoal}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-lg bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
+                  className="w-full px-4 py-3 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
                 >
+                  <option value={0.5}>0.5 SOL</option>
                   <option value={1}>1 SOL</option>
                   <option value={5}>5 SOL</option>
                   <option value={10}>10 SOL</option>
@@ -696,15 +702,15 @@ export default function SubmitPage() {
                   <option value={50}>50 SOL</option>
                   <option value={100}>100 SOL</option>
                 </select>
-                <span className="text-xs text-[var(--muted)]">Amount needed to launch</span>
+                <span className="text-xs text-[var(--muted)]">Resources needed to launch</span>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Backing Duration *</label>
+                <label className="block text-sm font-bold uppercase tracking-wide mb-2">Backing Duration *</label>
                 <select
                   name="duration"
                   value={formData.duration}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-lg bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
+                  className="w-full px-4 py-3 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
                 >
                   <option value={1}>1 day</option>
                   <option value={3}>3 days</option>
@@ -715,124 +721,14 @@ export default function SubmitPage() {
             </div>
           </div>
 
-          {/* Trust Score Settings */}
-          <div className="card p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Shield className="w-5 h-5 text-[var(--accent)]" />
-                Trust Score Settings
-              </h2>
-              <div className={`px-3 py-1 rounded-full ${getTrustScoreBgColor(trustScore.total)} flex items-center gap-2`}>
-                <span className={`text-xl font-bold ${getTrustScoreColor(trustScore.total)}`}>
-                  {trustScore.total}
-                </span>
-                <span className="text-xs text-[var(--muted)]">/100</span>
-              </div>
-            </div>
-            <p className="text-sm text-[var(--muted)]">
-              Set your parameters to build trust with backers. Higher trust scores attract more support.
-            </p>
-
-            {/* Creator Fee Slider */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium">Creator Fee</label>
-                <span className="text-sm font-semibold">{formData.creatorFeePct}%</span>
-              </div>
-              <input
-                type="range"
-                name="creatorFeePct"
-                min="0"
-                max="10"
-                step="0.5"
-                value={formData.creatorFeePct}
-                onChange={handleChange}
-                className="w-full h-2 bg-[var(--background)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
-              />
-              <div className="flex justify-between text-xs text-[var(--muted)]">
-                <span>0% (Max trust)</span>
-                <span>10% (Min trust)</span>
-              </div>
-            </div>
-
-            {/* Backer Share Slider */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium">Genesis Backer Share</label>
-                <span className="text-sm font-semibold">{formData.backerSharePct}%</span>
-              </div>
-              <input
-                type="range"
-                name="backerSharePct"
-                min="50"
-                max="90"
-                step="5"
-                value={formData.backerSharePct}
-                onChange={handleChange}
-                className="w-full h-2 bg-[var(--background)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
-              />
-              <div className="flex justify-between text-xs text-[var(--muted)]">
-                <span>50% of trading fees</span>
-                <span>90% of trading fees</span>
-              </div>
-            </div>
-
-            {/* Dev Initial Buy */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium">Your Initial Buy</label>
-                <span className="text-sm font-semibold">
-                  {formData.devInitialBuySol === 0 ? 'None' : `${formData.devInitialBuySol} SOL`}
-                </span>
-              </div>
-              <input
-                type="range"
-                name="devInitialBuySol"
-                min="0"
-                max={formData.solGoal}
-                step="0.5"
-                value={formData.devInitialBuySol}
-                onChange={handleChange}
-                className="w-full h-2 bg-[var(--background)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
-              />
-              <div className="flex justify-between text-xs text-[var(--muted)]">
-                <span>0 SOL (No snipe - max trust)</span>
-                <span>{formData.solGoal} SOL (Buying all)</span>
-              </div>
-            </div>
-
-            {/* Trust Score Breakdown */}
-            <div className="mt-4 pt-4 border-t border-[var(--border)]">
-              <div className="text-sm font-medium mb-2">Score Breakdown</div>
-              <div className="space-y-1">
-                {trustScore.components.map((component, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs">
-                    <span className="text-[var(--muted)]">{component.label}: {component.value}</span>
-                    <span className={component.points >= component.maxPoints * 0.7 ? 'text-green-500' : component.points >= component.maxPoints * 0.4 ? 'text-yellow-500' : 'text-red-500'}>
-                      +{component.points}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 pt-2 border-t border-[var(--border)] flex justify-between items-center">
-                <span className={`font-semibold ${getTrustScoreColor(trustScore.total)}`}>
-                  {getTrustScoreLabel(trustScore.total)}
-                </span>
-                <span className={`text-lg font-bold ${getTrustScoreColor(trustScore.total)}`}>
-                  {trustScore.total}/100
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* Creation Fee Info */}
-          <div className="bg-[var(--warning)]/10 border border-[var(--warning)]/30 rounded-lg p-4">
+          <div className="border-2 border-[var(--warning)]/30 p-4">
             <div className="flex gap-3">
-              <Coins className="w-5 h-5 text-[var(--warning)] flex-shrink-0 mt-0.5" />
+              <Coins className="w-6 h-6 text-[var(--warning)] flex-shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-medium text-[var(--warning)] mb-1">Creation Fee: {CREATION_FEE_SOL} SOL</p>
-                <p className="text-[var(--muted)]">
-                  A small fee is required to submit your meme. This covers token creation costs on Pump.fun.
+                <p className="font-bold text-[var(--warning)] mb-1 uppercase tracking-wide">Revolutionary Tax: {CREATION_FEE_SOL} SOL</p>
+                <p className="text-[var(--foreground)]/80">
+                  A small fee covers token creation on Pump.fun.
                   To receive tokens at launch, you must also back your own meme separately.
                 </p>
               </div>
@@ -840,15 +736,15 @@ export default function SubmitPage() {
           </div>
 
           {/* Info Box */}
-          <div className="bg-[var(--accent)]/10 border border-[var(--accent)]/30 rounded-lg p-4">
+          <div className="border-2 border-[var(--accent)]/30 p-4">
             <div className="flex gap-3">
-              <Info className="w-5 h-5 text-[var(--accent)] flex-shrink-0 mt-0.5" />
+              <Info className="w-6 h-6 text-[var(--accent)] flex-shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-medium text-[var(--accent)] mb-1">How it works</p>
-                <p className="text-[var(--muted)]">
-                  Once your meme reaches its SOL goal, it will automatically launch on Pump.fun.
-                  Your token will be instantly visible on Axiom, Photon, and other aggregators.
-                  If the goal isn't reached, backers get their SOL back (minus 2% withdrawal fee).
+                <p className="font-bold text-[var(--accent)] mb-1 uppercase tracking-wide">The Path to Victory</p>
+                <p className="text-[var(--foreground)]/80">
+                  Once your meme reaches its SOL goal, it will deploy on Pump.fun.
+                  Your token will be instantly visible on Axiom, Photon, and other platforms.
+                  If the goal isn&apos;t reached, backers get their SOL back (minus 2% early withdrawal fee).
                 </p>
               </div>
             </div>
@@ -858,17 +754,18 @@ export default function SubmitPage() {
           <button
             type="submit"
             disabled={isSubmitting || !formData.name || !formData.symbol || Object.keys(fieldErrors).some(k => fieldErrors[k as keyof ValidationErrors])}
-            className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-4 font-black uppercase tracking-wide text-lg bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] text-white border-2 border-[var(--accent)] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
           >
             {isSubmitting ? (
               <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Processing Payment...
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white animate-spin" />
+                Processing Contribution...
               </>
             ) : (
               <>
-                <Rocket className="w-5 h-5" />
-                Pay {CREATION_FEE_SOL} SOL & Submit
+                <span className="text-xl">★</span>
+                Pay {CREATION_FEE_SOL} SOL & Start Revolution
+                <span className="text-xl">★</span>
               </>
             )}
           </button>

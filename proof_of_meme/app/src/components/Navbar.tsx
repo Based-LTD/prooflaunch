@@ -2,9 +2,10 @@
 
 import { FC } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { Flame, Plus, BarChart3, Coins, BookOpen } from 'lucide-react';
+import { Star, Plus, BarChart3, Coins, BookOpen } from 'lucide-react';
 
 // Dynamically import wallet button to avoid SSR hydration mismatch
 const WalletMultiButton = dynamic(
@@ -16,11 +17,11 @@ export const Navbar: FC = () => {
   const pathname = usePathname();
 
   const navLinks = [
-    { href: '/', label: 'Proving Grounds', icon: Flame },
+    { href: '/', label: 'The Revolution', icon: Star },
     { href: '/submit', label: 'Submit Meme', icon: Plus },
     { href: '/launched', label: 'Launched', icon: BarChart3 },
     { href: '/portfolio', label: 'Portfolio', icon: Coins },
-    { href: '/docs', label: 'Docs', icon: BookOpen },
+    { href: '/docs', label: 'Manifesto', icon: BookOpen },
   ];
 
   return (
@@ -29,11 +30,16 @@ export const Navbar: FC = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center">
-              <Flame className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 relative">
+              <Image
+                src="/images/new favcoin.png"
+                alt="Commie Launch"
+                fill
+                className="object-contain"
+              />
             </div>
-            <span className="text-xl font-bold gradient-text">
-              Proof Launch
+            <span className="text-xl font-bold gradient-text uppercase tracking-wider">
+              Commie Launch
             </span>
           </Link>
 

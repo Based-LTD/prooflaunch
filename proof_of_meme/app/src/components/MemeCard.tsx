@@ -86,33 +86,41 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
 
   return (
     <Link href={`/meme/${id}`}>
-      <div className="card p-5 cursor-pointer glow-hover group">
+      <div className="relative border-2 border-[var(--border)] bg-[var(--card)] p-5 cursor-pointer hover:border-[var(--accent)] transition-all group">
+        {/* Decorative corner */}
+        <div className="absolute top-0 left-0 w-8 h-8 border-b-2 border-r-2 border-[var(--accent)] opacity-30" />
+
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             {image_url ? (
-              <img
-                src={image_url}
-                alt={name}
-                className="w-12 h-12 rounded-xl object-cover"
-              />
+              <div className="relative">
+                <img
+                  src={image_url}
+                  alt={name}
+                  className="w-14 h-14 object-cover border-2 border-[var(--accent)]"
+                />
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[var(--accent)] flex items-center justify-center">
+                  <span className="text-white text-[8px] font-bold">★</span>
+                </div>
+              </div>
             ) : (
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center text-xl font-bold">
+              <div className="w-14 h-14 bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center text-xl font-bold border-2 border-[var(--accent)]">
                 {symbol.charAt(0)}
               </div>
             )}
             <div>
-              <h3 className="font-bold text-lg group-hover:text-[var(--accent)] transition-colors">
+              <h3 className="font-black text-lg uppercase tracking-tight group-hover:text-[var(--accent)] transition-colors">
                 {name}
               </h3>
-              <span className="text-sm text-[var(--muted)]">${symbol}</span>
+              <span className="text-sm text-[var(--accent-gold)] font-bold">${symbol}</span>
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusClass}`}>
+            <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider ${statusClass}`}>
               {statusLabel}
             </span>
-            <div className={`flex items-center gap-1 text-xs ${getTrustScoreColor(trust_score)}`}>
+            <div className={`flex items-center gap-1 text-xs font-bold ${getTrustScoreColor(trust_score)}`}>
               <Shield className="w-3 h-3" />
               <span>{trust_score}</span>
             </div>
@@ -128,25 +136,29 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
         {status === 'backing' && (
           <div className="space-y-3 mb-4">
             <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-[var(--muted)] flex items-center gap-1">
-                  <Target className="w-3 h-3" /> SOL Goal
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-[var(--muted)] flex items-center gap-1 uppercase text-xs font-bold tracking-wide">
+                  <Target className="w-3 h-3" /> Goal
                 </span>
-                <span className="font-medium">
+                <span className="font-black">
                   {Number(current_backing_sol).toFixed(2)} / {Number(backing_goal_sol)} SOL
                 </span>
               </div>
-              <div className="progress-bar h-2">
+              <div className="relative h-3 bg-[var(--background)] border border-[var(--border)]">
                 <div
-                  className="progress-fill"
+                  className="h-full bg-gradient-to-r from-[var(--gradient-start)] to-[var(--accent-gold)] transition-all"
                   style={{ width: `${Math.min(progress, 100)}%` }}
                 />
+                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md">
+                  {progress.toFixed(0)}%
+                </span>
               </div>
             </div>
 
             <div className="flex items-center gap-1 text-sm text-[var(--muted)]">
-              <Users className="w-4 h-4" />
-              <span>{backer_count} backers</span>
+              <Users className="w-4 h-4 text-[var(--accent)]" />
+              <span className="font-bold">{backer_count}</span>
+              <span className="uppercase text-xs">comrades</span>
             </div>
           </div>
         )}
@@ -157,7 +169,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1 text-sm">
                 <TrendingUp className="w-4 h-4 text-[var(--success)]" />
-                <span className="text-[var(--success)]">Live on Pump.fun</span>
+                <span className="text-[var(--success)] font-bold uppercase text-xs tracking-wide">Victory Achieved</span>
               </div>
               {pump_fun_url && (
                 <span
@@ -166,7 +178,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
                     e.stopPropagation();
                     window.open(pump_fun_url, '_blank', 'noopener,noreferrer');
                   }}
-                  className="flex items-center gap-1 text-sm text-[var(--accent)] hover:underline cursor-pointer"
+                  className="flex items-center gap-1 text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] cursor-pointer font-bold uppercase"
                 >
                   <ExternalLink className="w-3 h-3" />
                   Trade
@@ -177,9 +189,9 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
             {mint_address && (
               <button
                 onClick={handleCopyCA}
-                className="w-full flex items-center gap-2 px-3 py-2 bg-[var(--background)] hover:bg-[var(--border)] rounded-lg transition-colors group/ca"
+                className="w-full flex items-center gap-2 px-3 py-2 bg-[var(--background)] hover:bg-[var(--accent)]/10 border-2 border-[var(--border)] hover:border-[var(--accent)] transition-colors group/ca"
               >
-                <span className="text-xs text-[var(--muted)]">CA:</span>
+                <span className="text-xs text-[var(--muted)] uppercase font-bold">CA:</span>
                 <code className="flex-1 text-xs font-mono truncate text-[var(--foreground)]">
                   {mint_address}
                 </code>
@@ -195,23 +207,23 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
 
         {/* Funded - ready to launch */}
         {status === 'funded' && (
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-[var(--warning)]/10 border-2 border-[var(--warning)]/30">
             <Flame className="w-4 h-4 text-[var(--warning)]" />
-            <span className="text-sm text-[var(--warning)]">Ready to launch!</span>
+            <span className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide">Ready to Deploy!</span>
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
+        <div className="flex items-center justify-between pt-3 border-t-2 border-[var(--border)]">
           {status === 'backing' && (
-            <div className="flex items-center gap-1 text-sm text-[var(--warning)]">
+            <div className="flex items-center gap-1 text-sm text-[var(--warning)] font-bold">
               <Clock className="w-4 h-4" />
               <span>{timeRemaining}</span>
             </div>
           )}
 
-          <span className="text-xs text-[var(--muted)] ml-auto">
-            {creator_wallet.slice(0, 4)}...{creator_wallet.slice(-4)}
+          <span className="text-xs text-[var(--muted)] ml-auto uppercase tracking-wide">
+            Comrade {creator_wallet.slice(0, 4)}...{creator_wallet.slice(-4)}
           </span>
         </div>
       </div>

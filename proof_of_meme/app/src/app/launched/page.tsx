@@ -50,26 +50,36 @@ export default function LaunchedPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="text-center space-y-4">
-        <h1 className="text-3xl font-bold">
-          <span className="gradient-text">Live Tokens</span>
+      {/* Header - Victory Banner Style */}
+      <div className="relative text-center py-8">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--success)] to-transparent" />
+        <div className="inline-block mb-4">
+          <div className="w-20 h-20 mx-auto bg-[var(--success)]/20 flex items-center justify-center border-2 border-[var(--success)]">
+            <span className="text-4xl">★</span>
+          </div>
+        </div>
+        <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
+          <span className="gradient-text">Hall of Victories</span>
         </h1>
-        <p className="text-[var(--muted)] max-w-xl mx-auto">
-          Tokens that made it through the Proving Grounds. Now live on Pump.fun
-          with full visibility on Axiom, Photon, and Birdeye.
+        <p className="text-[var(--muted)] max-w-xl mx-auto uppercase tracking-wide text-sm">
+          Revolutions that succeeded • Now trading on Pump.fun • Visible on Axiom, Photon, and Birdeye
         </p>
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--success)] to-transparent" />
       </div>
 
-      {/* Stats */}
+      {/* Stats - Medal Style */}
       <div className="grid grid-cols-3 gap-4">
-        {statsDisplay.map((stat) => {
+        {statsDisplay.map((stat, index) => {
           const Icon = stat.icon;
+          const borderColors = ['border-[var(--success)]', 'border-[var(--accent)]', 'border-[var(--accent-gold)]'];
           return (
-            <div key={stat.label} className="card p-4 text-center">
-              <Icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <div className="text-sm text-[var(--muted)]">{stat.label}</div>
+            <div key={stat.label} className={`relative border-2 ${borderColors[index]} bg-[var(--card)] p-4 text-center`}>
+              <div className={`absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] ${stat.color} text-xs font-bold uppercase`}>
+                {stat.label.split(' ')[0]}
+              </div>
+              <Icon className={`w-8 h-8 mx-auto mb-2 mt-2 ${stat.color}`} />
+              <div className="text-3xl font-black">{stat.value}</div>
+              <div className="text-xs text-[var(--muted)] uppercase tracking-wide">{stat.label}</div>
             </div>
           );
         })}
@@ -84,18 +94,26 @@ export default function LaunchedPage() {
 
       {/* Token Grid */}
       {!loading && memes.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {memes.map((meme) => (
-            <MemeCard key={meme.id} meme={meme as any} />
-          ))}
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-1 h-8 bg-gradient-to-b from-[var(--success)] to-[var(--accent-gold)]" />
+            <h2 className="text-2xl font-black uppercase tracking-tight">Victorious Tokens</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {memes.map((meme) => (
+              <MemeCard key={meme.id} meme={meme as any} />
+            ))}
+          </div>
         </div>
       )}
 
       {!loading && memes.length === 0 && (
-        <div className="text-center py-12">
-          <BarChart3 className="w-12 h-12 mx-auto text-[var(--muted)] mb-4" />
-          <h3 className="text-lg font-medium mb-2">No launched tokens yet</h3>
-          <p className="text-[var(--muted)]">Check back soon!</p>
+        <div className="relative border-2 border-dashed border-[var(--border)] bg-[var(--card)] text-center py-12">
+          <div className="w-16 h-16 mx-auto bg-[var(--background)] flex items-center justify-center border-2 border-[var(--border)] mb-4">
+            <BarChart3 className="w-8 h-8 text-[var(--muted)]" />
+          </div>
+          <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Victories Yet</h3>
+          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">The first revolution awaits</p>
         </div>
       )}
     </div>

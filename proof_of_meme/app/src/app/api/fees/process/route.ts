@@ -67,11 +67,9 @@ async function processFees() {
       continue;
     }
 
-    // Calculate fee distribution
+    // Calculate fee distribution (all backers split 90% equally based on backing amount)
     const distribution = calculateFeeDistribution(
       feeTx.amountSol,
-      meme.backer_share_pct || 70,
-      meme.creator_fee_pct || 2,
       backers.map((b) => ({ wallet: b.backer_wallet, backingAmount: Number(b.amount_sol) }))
     );
 
@@ -94,19 +92,8 @@ async function processFees() {
       }
     }
 
-    // Update creator claimable fees
-    const { data: currentMeme } = await supabase
-      .from('memes')
-      .select('creator_claimable_fees_sol')
-      .eq('id', meme.id)
-      .single();
-
-    await supabase
-      .from('memes')
-      .update({
-        creator_claimable_fees_sol: (Number(currentMeme?.creator_claimable_fees_sol) || 0) + distribution.creatorAmount,
-      })
-      .eq('id', meme.id);
+    // Note: Creators get their share as backers now (no special creator cut)
+    // If the creator backed, their share is already included in backerAmounts
 
     // Update token_fees total
     const { data: existingFees } = await supabase
@@ -143,7 +130,7 @@ async function processFees() {
     processedCount++;
     totalFeesProcessed += feeTx.amountSol;
 
-    console.log(`Processed fee tx ${feeTx.signature}: ${feeTx.amountSol} SOL for ${meme.id}`);
+    console.log(`Processed fee tx ${feeTx.signature}: ${feeTx.amountSol} SOL for ${meme.id} (platform: ${distribution.platformAmount.toFixed(4)} SOL)`);
   }
 
   return {

@@ -1,7 +1,7 @@
 import { Connection, PublicKey, ParsedTransactionWithMeta } from '@solana/web3.js';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-const ESCROW_WALLET = process.env.NEXT_PUBLIC_ESCROW_WALLET || 'HfkGmHTpQigABpkSK3ECETTxdBgFyt2CgYVoCLDqDffv';
+const ESCROW_WALLET = process.env.NEXT_PUBLIC_ESCROW_WALLET || 'CEGgJZF6AXGkj3BBTmmhagudwU9FKscMB25RJM5iwFYY';
 
 // Pump.fun fee program - this is the program that sends creator fees
 const PUMP_FUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
@@ -135,29 +135,32 @@ function extractPumpFunFee(
   return null;
 }
 
+// Platform takes 10% of trading fees for sustainability
+const PLATFORM_FEE_CUT = 0.10;
+
 /**
  * Distribute fees to backers for a specific token
  * Called after processing new fee transactions
  *
- * 100% of fees are distributed - no escrow cut:
- * - Creator gets their creator_fee_pct (0-10%)
- * - Backers split the rest (90-100%) proportionally by backing amount
+ * Distribution:
+ * - Platform keeps 10% for sustainability
+ * - All backers (including creator if they backed) split the remaining 90% proportionally
+ *
+ * Note: Creators are treated equally to other backers - no special cut.
+ * To receive trading fees, creators must back their own meme like everyone else.
  */
 export function calculateFeeDistribution(
   totalFeeSol: number,
-  _backerSharePct: number, // Not used anymore - backers get everything after creator
-  creatorFeePct: number,
   backers: Array<{ wallet: string; backingAmount: number }>
 ): {
-  creatorAmount: number;
+  platformAmount: number;
   backerAmounts: Array<{ wallet: string; amount: number }>;
 } {
-  // Calculate creator's cut (from their creator_fee_pct)
-  const creatorAmount = (totalFeeSol * creatorFeePct) / 100;
+  // Platform takes 10% cut first
+  const platformAmount = totalFeeSol * PLATFORM_FEE_CUT;
 
-  // Backers get EVERYTHING else (100% - creator fee)
-  // This ensures no fees stay in escrow
-  const backerPoolAmount = totalFeeSol - creatorAmount;
+  // All backers split the remaining 90% proportionally based on backing amount
+  const backerPoolAmount = totalFeeSol - platformAmount;
 
   // Calculate total backing to get each backer's percentage
   const totalBacking = backers.reduce((sum, b) => sum + b.backingAmount, 0);
@@ -168,5 +171,5 @@ export function calculateFeeDistribution(
     amount: totalBacking > 0 ? (backer.backingAmount / totalBacking) * backerPoolAmount : 0,
   }));
 
-  return { creatorAmount, backerAmounts };
+  return { platformAmount, backerAmounts };
 }

@@ -69,15 +69,15 @@ export const BackersList: FC<BackersListProps> = ({
     <div className="card p-4">
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[var(--border)]">
         <Users className="w-5 h-5 text-[var(--accent)]" />
-        <h3 className="font-semibold">Genesis Backers</h3>
-        <span className="text-xs text-[var(--muted)]">({backings.length} backers)</span>
+        <h3 className="font-semibold uppercase">Founding Comrades</h3>
+        <span className="text-xs text-[var(--muted)]">({backings.length} comrades)</span>
       </div>
 
       {backings.length === 0 ? (
         <div className="text-center py-8 text-[var(--muted)]">
           <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No backers yet</p>
-          <p className="text-xs">Be the first to back this meme!</p>
+          <p className="text-sm">No comrades yet</p>
+          <p className="text-xs">Be the first to join the revolution!</p>
         </div>
       ) : (
         <div className="space-y-2 max-h-[350px] overflow-y-auto">

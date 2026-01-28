@@ -256,11 +256,13 @@ export default function PortfolioPage() {
   if (!connected) {
     return (
       <div className="max-w-2xl mx-auto">
-        <div className="card p-8 text-center">
-          <AlertCircle className="w-12 h-12 mx-auto text-[var(--warning)] mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Connect Your Wallet</h2>
-          <p className="text-[var(--muted)]">
-            Connect your wallet to view your portfolio and backings
+        <div className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-8 text-center">
+          <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
+            <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
+          </div>
+          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Comrade Identification Required</h2>
+          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
+            Connect your wallet to access the collective dashboard
           </p>
         </div>
       </div>
@@ -277,46 +279,54 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">
-            <span className="gradient-text">Your Portfolio</span>
-          </h1>
-          <p className="text-[var(--muted)]">
-            Manage your backings and track your memes
-          </p>
+      {/* Header - Propaganda Style */}
+      <div className="relative py-6">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
+              <span className="gradient-text">Comrade Dashboard</span>
+            </h1>
+            <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
+              Your contributions to the revolution
+            </p>
+          </div>
+          <button
+            onClick={fetchPortfolio}
+            className="p-3 border-2 border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
         </div>
-        <button
-          onClick={fetchPortfolio}
-          className="p-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
       </div>
 
-      {/* Stats */}
+      {/* Stats - Medal Style */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="card p-4 text-center">
-          <Coins className="w-6 h-6 mx-auto mb-2 text-[var(--accent)]" />
-          <div className="text-2xl font-bold">{totalBacked.toFixed(2)} SOL</div>
-          <div className="text-sm text-[var(--muted)]">Total Backed</div>
+        <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-4 text-center">
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-[var(--accent)] text-xs font-bold uppercase">Contributed</div>
+          <Coins className="w-8 h-8 mx-auto mb-2 mt-2 text-[var(--accent)]" />
+          <div className="text-3xl font-black">{totalBacked.toFixed(2)}</div>
+          <div className="text-xs text-[var(--muted)] uppercase tracking-wide">SOL Pledged</div>
         </div>
-        <div className="card p-4 text-center">
-          <Clock className="w-6 h-6 mx-auto mb-2 text-blue-400" />
-          <div className="text-2xl font-bold">{activeBackings}</div>
-          <div className="text-sm text-[var(--muted)]">Active Backings</div>
+        <div className="relative border-2 border-blue-500 bg-[var(--card)] p-4 text-center">
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-blue-400 text-xs font-bold uppercase">Active</div>
+          <Clock className="w-8 h-8 mx-auto mb-2 mt-2 text-blue-400" />
+          <div className="text-3xl font-black">{activeBackings}</div>
+          <div className="text-xs text-[var(--muted)] uppercase tracking-wide">In Progress</div>
         </div>
-        <div className="card p-4 text-center">
-          <TrendingUp className="w-6 h-6 mx-auto mb-2 text-green-400" />
-          <div className="text-2xl font-bold">{launchedBackings}</div>
-          <div className="text-sm text-[var(--muted)]">Launched</div>
+        <div className="relative border-2 border-green-500 bg-[var(--card)] p-4 text-center">
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-green-400 text-xs font-bold uppercase">Victories</div>
+          <TrendingUp className="w-8 h-8 mx-auto mb-2 mt-2 text-green-400" />
+          <div className="text-3xl font-black">{launchedBackings}</div>
+          <div className="text-xs text-[var(--muted)] uppercase tracking-wide">Launched</div>
         </div>
-        <div className="card p-4 text-center">
-          <Gift className="w-6 h-6 mx-auto mb-2 text-yellow-400" />
-          <div className="text-2xl font-bold">{refundedAmount.toFixed(2)} SOL</div>
-          <div className="text-sm text-[var(--muted)]">Refunded</div>
+        <div className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-4 text-center">
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-[var(--accent-gold)] text-xs font-bold uppercase">Reclaimed</div>
+          <Gift className="w-8 h-8 mx-auto mb-2 mt-2 text-[var(--accent-gold)]" />
+          <div className="text-3xl font-black">{refundedAmount.toFixed(2)}</div>
+          <div className="text-xs text-[var(--muted)] uppercase tracking-wide">SOL Refunded</div>
         </div>
       </div>
 
@@ -325,17 +335,22 @@ export default function PortfolioPage() {
 
       {/* Backings List */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Your Backings</h2>
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-8 bg-gradient-to-b from-[var(--accent)] to-[var(--accent-gold)]" />
+          <h2 className="text-2xl font-black uppercase tracking-tight">Your Allegiances</h2>
+        </div>
 
         {visibleBackings.length === 0 ? (
-          <div className="card p-8 text-center">
-            <Coins className="w-12 h-12 mx-auto text-[var(--muted)] mb-4 opacity-50" />
-            <h3 className="text-lg font-semibold mb-2">No backings yet</h3>
-            <p className="text-[var(--muted)] mb-4">
-              Start backing memes in the Proving Grounds
+          <div className="relative border-2 border-dashed border-[var(--border)] bg-[var(--card)] p-8 text-center">
+            <div className="w-16 h-16 mx-auto bg-[var(--background)] flex items-center justify-center border-2 border-[var(--border)] mb-4">
+              <Coins className="w-8 h-8 text-[var(--muted)] opacity-50" />
+            </div>
+            <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Allegiances Yet</h3>
+            <p className="text-[var(--muted)] mb-4 uppercase tracking-wide text-sm">
+              Join the revolution in the Proving Grounds
             </p>
-            <Link href="/" className="btn-primary inline-block">
-              Browse Memes
+            <Link href="/" className="inline-block px-6 py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 transition-opacity border-2 border-[var(--accent)]">
+              Browse Revolutions
             </Link>
           </div>
         ) : (
@@ -349,7 +364,7 @@ export default function PortfolioPage() {
             const canRefund = backing.status === 'confirmed' && isPastDeadline && !isLive;
 
             return (
-              <div key={backing.id} className="card p-5">
+              <div key={backing.id} className="relative border-2 border-[var(--border)] bg-[var(--card)] p-5 hover:border-[var(--accent)] transition-colors">
                 <div className="flex items-center justify-between">
                   <Link
                     href={`/meme/${meme.id}`}
@@ -359,21 +374,21 @@ export default function PortfolioPage() {
                       <img
                         src={meme.image_url}
                         alt={meme.name}
-                        className="w-12 h-12 rounded-xl object-cover"
+                        className="w-14 h-14 object-cover border-2 border-[var(--accent)]"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center text-xl font-bold">
+                      <div className="w-14 h-14 bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center text-xl font-bold border-2 border-[var(--accent)]">
                         {meme.symbol.charAt(0)}
                       </div>
                     )}
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">{meme.name}</h3>
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${statusBadge.class}`}>
+                        <h3 className="font-black uppercase tracking-tight">{meme.name}</h3>
+                        <span className={`px-2 py-0.5 text-xs font-bold uppercase ${statusBadge.class}`}>
                           {statusBadge.label}
                         </span>
                       </div>
-                      <span className="text-sm text-[var(--muted)]">${meme.symbol}</span>
+                      <span className="text-sm text-[var(--accent-gold)] font-bold">${meme.symbol}</span>
                     </div>
                   </Link>
 
@@ -551,20 +566,25 @@ export default function PortfolioPage() {
 
       {/* Your Creations Section */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-[var(--accent)]" />
-          Your Creations
-        </h2>
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-8 bg-gradient-to-b from-[var(--accent-gold)] to-[var(--accent)]" />
+          <h2 className="text-2xl font-black uppercase tracking-tight flex items-center gap-2">
+            <Sparkles className="w-6 h-6 text-[var(--accent-gold)]" />
+            Your Movements
+          </h2>
+        </div>
 
         {visibleCreatedMemes.length === 0 ? (
-          <div className="card p-8 text-center">
-            <Sparkles className="w-12 h-12 mx-auto text-[var(--muted)] mb-4 opacity-50" />
-            <h3 className="text-lg font-semibold mb-2">No memes created yet</h3>
-            <p className="text-[var(--muted)] mb-4">
-              Submit your first meme to the Proving Grounds
+          <div className="relative border-2 border-dashed border-[var(--border)] bg-[var(--card)] p-8 text-center">
+            <div className="w-16 h-16 mx-auto bg-[var(--background)] flex items-center justify-center border-2 border-[var(--border)] mb-4">
+              <Sparkles className="w-8 h-8 text-[var(--muted)] opacity-50" />
+            </div>
+            <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Movements Started</h3>
+            <p className="text-[var(--muted)] mb-4 uppercase tracking-wide text-sm">
+              Start your first revolution
             </p>
-            <Link href="/submit" className="btn-primary inline-block">
-              Create Meme
+            <Link href="/submit" className="inline-block px-6 py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 transition-opacity border-2 border-[var(--accent)]">
+              Start Revolution
             </Link>
           </div>
         ) : (
@@ -578,8 +598,9 @@ export default function PortfolioPage() {
               : 0;
 
             return (
-              <div key={meme.id} className="card p-5">
-                <div className="flex items-center justify-between">
+              <div key={meme.id} className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-5 hover:border-[var(--accent)] transition-colors">
+                <div className="absolute -top-2 left-4 px-2 bg-[var(--card)] text-[var(--accent-gold)] text-xs font-bold uppercase">Creator</div>
+                <div className="flex items-center justify-between pt-1">
                   <Link
                     href={`/meme/${meme.id}`}
                     className="flex items-center gap-4 hover:opacity-80 transition-opacity"
@@ -588,21 +609,21 @@ export default function PortfolioPage() {
                       <img
                         src={meme.image_url}
                         alt={meme.name}
-                        className="w-12 h-12 rounded-xl object-cover"
+                        className="w-14 h-14 object-cover border-2 border-[var(--accent-gold)]"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center text-xl font-bold">
+                      <div className="w-14 h-14 bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center text-xl font-bold border-2 border-[var(--accent-gold)]">
                         {meme.symbol.charAt(0)}
                       </div>
                     )}
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">{meme.name}</h3>
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${statusBadge.class}`}>
+                        <h3 className="font-black uppercase tracking-tight">{meme.name}</h3>
+                        <span className={`px-2 py-0.5 text-xs font-bold uppercase ${statusBadge.class}`}>
                           {statusBadge.label}
                         </span>
                       </div>
-                      <span className="text-sm text-[var(--muted)]">${meme.symbol}</span>
+                      <span className="text-sm text-[var(--accent-gold)] font-bold">${meme.symbol}</span>
                     </div>
                   </Link>
 

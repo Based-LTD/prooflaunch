@@ -80,9 +80,10 @@ export async function POST(request: NextRequest) {
       website,
       backing_goal_sol,
       backing_days,
-      // Trust score parameters
-      creator_fee_pct = 2,
-      backer_share_pct = 70,
+      // Legacy trust score parameters (no longer used in fee distribution)
+      // All backers (including creator) now split 90% equally
+      creator_fee_pct = 0, // Creator gets no special cut - must back to earn fees
+      backer_share_pct = 100, // All fee share goes to backers proportionally
       dev_initial_buy_sol = 0,
       trust_score = 75,
       // Creation fee payment (goes to escrow for platform costs)
