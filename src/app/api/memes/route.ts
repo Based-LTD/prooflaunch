@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       // Legacy trust score parameters (no longer used in fee distribution)
       // All backers (including creator) now split 90% equally
       creator_fee_pct = 0, // Creator gets no special cut - must back to earn fees
-      backer_share_pct = 100, // All fee share goes to backers proportionally
+      backer_share_pct = 90, // Max allowed by DB constraint (actual distribution uses feeTracker.ts)
       dev_initial_buy_sol = 0,
       trust_score = 75,
       // Creation fee payment (goes to escrow for platform costs)
