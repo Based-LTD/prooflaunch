@@ -12,7 +12,7 @@ type SortOption = 'newest' | 'trust_high' | 'trust_low' | 'progress' | 'ending_s
 
 const ITEMS_PER_PAGE = 20;
 
-const PLATFORM_TOKEN_CA = 'TBD';
+const PLATFORM_TOKEN_CA: string = 'TBD';
 
 export default function Home() {
   const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('all');
