@@ -121,8 +121,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check max backing per wallet (10% of goal)
-    const maxBackingPercent = 0.1; // 10% max per wallet
+    // TESTING: Raised from 10% to 50% for testing
+    const maxBackingPercent = 0.5; // 50% max per wallet (was 10%)
 
     // Check if meme exists and is in backing phase
     const { data: meme, error: memeError } = await supabase

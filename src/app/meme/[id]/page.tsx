@@ -172,11 +172,11 @@ export default function MemeDetailPage() {
       return;
     }
 
-    // Check max backing limit (10% of goal)
-    const maxBackingPerWallet = Number(meme.backing_goal_sol) * 0.1;
+    // TESTING: Raised from 10% to 50%
+    const maxBackingPerWallet = Number(meme.backing_goal_sol) * 0.5;
     if (amountSol > maxBackingPerWallet) {
       setBackingStatus(
-        `Error: Maximum backing is ${maxBackingPerWallet.toFixed(2)} SOL per wallet (10% of goal).`
+        `Error: Maximum backing is ${maxBackingPerWallet.toFixed(2)} SOL per wallet (50% of goal).`
       );
       return;
     }
@@ -302,11 +302,11 @@ export default function MemeDetailPage() {
           return;
         }
 
-        // Check max backing limit (10% of goal)
-        const maxBackingPerWallet = Number(meme.backing_goal_sol) * 0.1;
+        // TESTING: Raised from 10% to 50%
+        const maxBackingPerWallet = Number(meme.backing_goal_sol) * 0.5;
         if (amountSol > maxBackingPerWallet) {
           setBackingStatus(
-            `Error: Maximum backing is ${maxBackingPerWallet.toFixed(2)} SOL per wallet (10% of goal).`
+            `Error: Maximum backing is ${maxBackingPerWallet.toFixed(2)} SOL per wallet (50% of goal).`
           );
           return;
         }
@@ -556,7 +556,7 @@ export default function MemeDetailPage() {
   const isFunded = status === 'funded';
   const isLaunching = status === 'launching';
   const isLaunched = status === 'live';
-  const maxBacking = Number(backing_goal_sol) * 0.1; // 10% max per wallet
+  const maxBacking = Number(backing_goal_sol) * 0.5; // TESTING: 50% max per wallet (was 10%)
   const isCreator = connected && publicKey?.toBase58() === creator_wallet;
   const isBacker = connected && backings.some(
     (b) => b.backer_wallet === publicKey?.toBase58() && b.status === 'distributed'

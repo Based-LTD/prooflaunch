@@ -694,6 +694,7 @@ export default function SubmitPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
                 >
+                  <option value={0.1}>0.1 SOL (Test)</option>
                   <option value={0.5}>0.5 SOL</option>
                   <option value={1}>1 SOL</option>
                   <option value={5}>5 SOL</option>
