@@ -12,7 +12,7 @@ type SortOption = 'newest' | 'trust_high' | 'trust_low' | 'progress' | 'ending_s
 
 const ITEMS_PER_PAGE = 20;
 
-const PLATFORM_TOKEN_CA = '6EbtoNRhjrBemVjPo7QpjazdRrHiADkNDUkBbzCTpump';
+const PLATFORM_TOKEN_CA = 'TBD';
 
 export default function Home() {
   const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('all');
@@ -134,17 +134,19 @@ export default function Home() {
           {/* CA and Social */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
             <button
-              onClick={handleCopyCA}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--card)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors group"
+              onClick={PLATFORM_TOKEN_CA !== 'TBD' ? handleCopyCA : undefined}
+              className={`flex items-center gap-2 px-4 py-2 bg-[var(--card)] border border-[var(--border)] transition-colors group ${PLATFORM_TOKEN_CA !== 'TBD' ? 'hover:border-[var(--accent)] cursor-pointer' : 'cursor-default'}`}
             >
               <span className="text-xs text-[var(--muted)]">$COMMIE:</span>
               <code className="text-xs font-mono text-[var(--foreground)]">
-                {PLATFORM_TOKEN_CA.slice(0, 8)}...{PLATFORM_TOKEN_CA.slice(-4)}
+                {PLATFORM_TOKEN_CA === 'TBD' ? 'TBD' : `${PLATFORM_TOKEN_CA.slice(0, 8)}...${PLATFORM_TOKEN_CA.slice(-4)}`}
               </code>
-              {caCopied ? (
-                <Check className="w-4 h-4 text-[var(--success)]" />
-              ) : (
-                <Copy className="w-4 h-4 text-[var(--muted)] group-hover:text-[var(--accent)]" />
+              {PLATFORM_TOKEN_CA !== 'TBD' && (
+                caCopied ? (
+                  <Check className="w-4 h-4 text-[var(--success)]" />
+                ) : (
+                  <Copy className="w-4 h-4 text-[var(--muted)] group-hover:text-[var(--accent)]" />
+                )
               )}
             </button>
             <a
