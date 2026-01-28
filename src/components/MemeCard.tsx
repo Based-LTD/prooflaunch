@@ -2,7 +2,7 @@
 
 import { FC, useState } from 'react';
 import Link from 'next/link';
-import { Users, Target, Clock, TrendingUp, Flame, ExternalLink, Shield, Copy, Check } from 'lucide-react';
+import { Users, Target, Clock, TrendingUp, Zap, ExternalLink, Shield, Copy, Check } from 'lucide-react';
 import type { Meme } from '@/types/database';
 
 // Get trust score color based on value
@@ -208,8 +208,8 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
         {/* Funded - ready to launch */}
         {status === 'funded' && (
           <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-[var(--warning)]/10 border-2 border-[var(--warning)]/30">
-            <Flame className="w-4 h-4 text-[var(--warning)]" />
-            <span className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide">Ready to Deploy!</span>
+            <Zap className="w-4 h-4 text-[var(--warning)]" />
+            <span className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide">★ Ready to Deploy ★</span>
           </div>
         )}
 

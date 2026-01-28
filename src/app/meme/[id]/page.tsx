@@ -1191,16 +1191,16 @@ export default function MemeDetailPage() {
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-2">
                       <button
-                        onClick={() => setAmount('0.5')}
+                        onClick={() => setAmount(String(Number((Number(backing_goal_sol) * 0.1).toFixed(4))))}
                         className="text-xs bg-[var(--card)] px-2 py-1 rounded hover:bg-[var(--border)]"
                       >
-                        0.5
+                        10%
                       </button>
                       <button
-                        onClick={() => setAmount('1')}
+                        onClick={() => setAmount(String(Number((Number(backing_goal_sol) * 0.25).toFixed(4))))}
                         className="text-xs bg-[var(--card)] px-2 py-1 rounded hover:bg-[var(--border)]"
                       >
-                        1
+                        25%
                       </button>
                       <button
                         onClick={() => setAmount(String(maxBacking))}
