@@ -21,10 +21,8 @@ import {
 import Link from 'next/link';
 import { MemeChat } from '@/components/MemeChat';
 import { BackersList } from '@/components/BackersList';
-import { TrustScoreDisplay } from '@/components/TrustScoreDisplay';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClaimRewards } from '@/components/ClaimRewards';
-import { calculateTrustScore } from '@/lib/trustScore';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
 import { createBurnerWallet, getSignMessage } from '@/lib/burnerWallet';
 
@@ -539,15 +537,6 @@ export default function MemeDetailPage() {
     website,
   } = meme;
 
-  // Calculate trust score breakdown
-  const trustScoreBreakdown = calculateTrustScore({
-    creator_fee_pct,
-    backer_share_pct,
-    dev_initial_buy_sol,
-    backing_goal_sol: Number(backing_goal_sol),
-    duration: Math.ceil((new Date(backing_deadline).getTime() - new Date(meme.created_at).getTime()) / (1000 * 60 * 60 * 24)),
-  });
-
   const progress = (Number(current_backing_sol) / Number(backing_goal_sol)) * 100;
   const timeRemaining = getTimeRemaining(backing_deadline);
   const { label: statusLabel, class: statusClass } = getStatusConfig(status);
@@ -1021,8 +1010,6 @@ export default function MemeDetailPage() {
             />
           )}
 
-          {/* Trust Score */}
-          <TrustScoreDisplay breakdown={trustScoreBreakdown} />
 
           {/* Rules - Revolutionary Doctrine */}
           <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6">
