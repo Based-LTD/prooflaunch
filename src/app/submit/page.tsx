@@ -365,6 +365,9 @@ export default function SubmitPage() {
     );
   }
 
+  // Submissions temporarily disabled for maintenance
+  const SUBMISSIONS_PAUSED = true;
+
   return (
     <div className="max-w-2xl mx-auto">
       {/* Propaganda-style Header */}
@@ -379,7 +382,17 @@ export default function SubmitPage() {
         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
       </div>
 
-      {!connected ? (
+      {SUBMISSIONS_PAUSED ? (
+        <div className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-8 text-center">
+          <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
+            <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
+          </div>
+          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Revolution Temporarily Paused</h2>
+          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
+            Submissions are temporarily disabled while we upgrade the launch system. Check back soon, comrade.
+          </p>
+        </div>
+      ) : !connected ? (
         <div className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-8 text-center">
           <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
             <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
@@ -694,7 +707,6 @@ export default function SubmitPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
                 >
-                  <option value={0.1}>0.1 SOL (Test)</option>
                   <option value={0.5}>0.5 SOL</option>
                   <option value={1}>1 SOL</option>
                   <option value={5}>5 SOL</option>

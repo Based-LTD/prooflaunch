@@ -121,10 +121,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TESTING: Lowered from 1 SOL to 0.1 SOL for testing
-    if (!backing_goal_sol || backing_goal_sol < 0.1) {
+    if (!backing_goal_sol || backing_goal_sol < 0.5) {
       return NextResponse.json(
-        { error: 'Backing goal must be at least 0.1 SOL' },
+        { error: 'Backing goal must be at least 0.5 SOL' },
         { status: 400 }
       );
     }

@@ -1,4 +1,4 @@
-import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, TransactionInstruction } from '@solana/web3.js';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, Transaction, SystemProgram, TransactionInstruction, VersionedTransaction, TransactionMessage, ComputeBudgetProgram } from '@solana/web3.js';
 import { PumpFunSDK } from 'pumpdotfun-sdk';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import type { Wallet as WalletInterface } from '@coral-xyz/anchor/dist/cjs/provider';
@@ -793,6 +793,296 @@ export interface BurnerBuyResult {
 // Jito bundle endpoint
 const JITO_BUNDLE_URL = 'https://mainnet.block-engine.jito.wtf/api/v1/bundles';
 
+// === JITO BUNDLE SUPPORT ===
+
+// Jito tip accounts (mainnet) - one is randomly selected per bundle
+const JITO_TIP_ACCOUNTS = [
+  '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
+  'HFqU5x63VTqvQss8hp11i4bVqkfRtQ7NmXwkiNPLFzWn',
+  'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
+  'ADaUMid9yfUytqMBgopwjb2DTLSLzA2A1qkb6YsP2kaY',
+  'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
+  'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
+  'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
+  '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
+];
+
+function getRandomJitoTipAccount(): PublicKey {
+  return new PublicKey(JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)]);
+}
+
+// Predicted bonding curve state for pre-building buy transactions in Jito bundles
+interface PredictedCurveState {
+  virtualTokenReserves: bigint;
+  virtualSolReserves: bigint;
+  realTokenReserves: bigint;
+  realSolReserves: bigint;
+}
+
+// Fetch initial curve constants from pump.fun global account (on-chain)
+async function fetchInitialCurveConstants(sdk: PumpFunSDK): Promise<PredictedCurveState> {
+  const globalAccount = await sdk.getGlobalAccount();
+  return {
+    virtualTokenReserves: globalAccount.initialVirtualTokenReserves,
+    virtualSolReserves: globalAccount.initialVirtualSolReserves,
+    realTokenReserves: globalAccount.initialRealTokenReserves,
+    realSolReserves: BigInt(0),
+  };
+}
+
+// Simulate a buy on the bonding curve - returns tokens out and new state
+// Uses same formula as pump.fun's on-chain program
+function simulateBuy(
+  state: PredictedCurveState,
+  solAmountLamports: bigint
+): { tokensOut: bigint; newState: PredictedCurveState } {
+  const n = state.virtualSolReserves * state.virtualTokenReserves;
+  const i = state.virtualSolReserves + solAmountLamports;
+  const r = n / i + BigInt(1);
+  const s = state.virtualTokenReserves - r;
+  const tokensOut = s < state.realTokenReserves ? s : state.realTokenReserves;
+
+  return {
+    tokensOut,
+    newState: {
+      virtualTokenReserves: state.virtualTokenReserves - tokensOut,
+      virtualSolReserves: state.virtualSolReserves + solAmountLamports,
+      realTokenReserves: state.realTokenReserves - tokensOut,
+      realSolReserves: state.realSolReserves + solAmountLamports,
+    },
+  };
+}
+
+// Calculate available SOL for a bundled buy after accounting for all fees/reserves
+function calculateBundledBuyAmount(burnerBalanceLamports: number): bigint {
+  // Same deductions as executeBurnerBuy
+  const ataRent = 2_039_280; // Always needed - new token
+  const walletRentExempt = 890_880;
+  const reserveForTransfer = 2_550_000;
+  const baseTxFee = 5_000;
+  const priorityFee = 5_000;
+
+  const afterFixedCosts = burnerBalanceLamports - ataRent - walletRentExempt
+    - reserveForTransfer - baseTxFee - priorityFee;
+  const availableForBuy = Math.floor(afterFixedCosts / 1.20);
+  return availableForBuy > 0 ? BigInt(availableForBuy) : BigInt(0);
+}
+
+// Build token creation as a VersionedTransaction for Jito bundle
+async function buildCreationVersionedTx(
+  sdk: PumpFunSDK,
+  escrowKeypair: Keypair,
+  mintKeypair: Keypair,
+  metadataUri: string,
+  config: LaunchConfig,
+  blockhash: string
+): Promise<VersionedTransaction> {
+  // Get raw create instructions from SDK (doesn't send)
+  const createTx = await sdk.getCreateInstructions(
+    escrowKeypair.publicKey,
+    config.name,
+    config.symbol,
+    metadataUri,
+    mintKeypair
+  );
+
+  // Build full transaction with compute budget for priority
+  const fullTx = new Transaction();
+  fullTx.add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 500000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 })
+  );
+  fullTx.add(...createTx.instructions);
+
+  // Convert to VersionedTransaction
+  const messageV0 = new TransactionMessage({
+    payerKey: escrowKeypair.publicKey,
+    recentBlockhash: blockhash,
+    instructions: fullTx.instructions,
+  }).compileToV0Message();
+
+  const versionedTx = new VersionedTransaction(messageV0);
+  versionedTx.sign([escrowKeypair, mintKeypair]);
+
+  return versionedTx;
+}
+
+// Build a burner wallet buy as a VersionedTransaction for Jito bundle
+// Uses predicted bonding curve state instead of fetching from chain
+async function buildBundledBuyVersionedTx(
+  burnerKeypair: Keypair,
+  mintPubkey: PublicKey,
+  creatorPubkey: PublicKey,
+  solAmountLamports: bigint,
+  predictedTokensOut: bigint,
+  blockhash: string
+): Promise<VersionedTransaction> {
+  const bondingCurvePda = deriveBondingCurve(mintPubkey);
+  const associatedBondingCurve = await getAssociatedTokenAddress(
+    mintPubkey,
+    bondingCurvePda,
+    true
+  );
+  const associatedUser = await getAssociatedTokenAddress(
+    mintPubkey,
+    burnerKeypair.publicKey
+  );
+
+  const tx = new Transaction();
+
+  // Compute budget with higher priority for bundle
+  tx.add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 })
+  );
+
+  // Always create ATA (token is brand new in the same bundle)
+  tx.add(
+    createAssociatedTokenAccountInstruction(
+      burnerKeypair.publicKey,
+      associatedUser,
+      burnerKeypair.publicKey,
+      mintPubkey
+    )
+  );
+
+  // Buy instruction - generous 50% slippage since bundle is atomic (no external trades possible)
+  const maxSolCost = (solAmountLamports * BigInt(150)) / BigInt(100);
+  tx.add(
+    buildBuyInstruction(
+      burnerKeypair.publicKey,
+      mintPubkey,
+      bondingCurvePda,
+      associatedBondingCurve,
+      associatedUser,
+      creatorPubkey,
+      predictedTokensOut,
+      maxSolCost
+    )
+  );
+
+  // Convert to VersionedTransaction
+  const messageV0 = new TransactionMessage({
+    payerKey: burnerKeypair.publicKey,
+    recentBlockhash: blockhash,
+    instructions: tx.instructions,
+  }).compileToV0Message();
+
+  const versionedTx = new VersionedTransaction(messageV0);
+  versionedTx.sign([burnerKeypair]);
+
+  return versionedTx;
+}
+
+// Build Jito tip transaction as VersionedTransaction
+function buildJitoTipVersionedTx(
+  escrowKeypair: Keypair,
+  tipLamports: number,
+  blockhash: string
+): VersionedTransaction {
+  const tipAccount = getRandomJitoTipAccount();
+
+  const tx = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: escrowKeypair.publicKey,
+      toPubkey: tipAccount,
+      lamports: tipLamports,
+    })
+  );
+
+  const messageV0 = new TransactionMessage({
+    payerKey: escrowKeypair.publicKey,
+    recentBlockhash: blockhash,
+    instructions: tx.instructions,
+  }).compileToV0Message();
+
+  const versionedTx = new VersionedTransaction(messageV0);
+  versionedTx.sign([escrowKeypair]);
+
+  return versionedTx;
+}
+
+// Submit a bundle of VersionedTransactions to Jito block engine
+async function submitJitoBundle(transactions: VersionedTransaction[]): Promise<string> {
+  const encodedTxs = transactions.map(tx =>
+    bs58.encode(Buffer.from(tx.serialize()))
+  );
+  console.log(`Submitting Jito bundle with ${transactions.length} transactions...`);
+
+  const response = await fetch(JITO_BUNDLE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'sendBundle',
+      params: [encodedTxs],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Jito bundle submission failed: ${response.status} ${errorText}`);
+  }
+
+  const result = await response.json();
+  if (result.error) {
+    throw new Error(`Jito bundle error: ${JSON.stringify(result.error)}`);
+  }
+
+  console.log(`Jito bundle submitted: ${result.result}`);
+  return result.result; // Bundle ID
+}
+
+// Poll Jito for bundle confirmation status
+async function confirmJitoBundle(
+  bundleId: string,
+  timeoutMs: number = 60000
+): Promise<{ landed: boolean; signatures?: string[] }> {
+  const startTime = Date.now();
+  const pollIntervalMs = 2000;
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(JITO_BUNDLE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getBundleStatuses',
+          params: [[bundleId]],
+        }),
+      });
+
+      const result = await response.json();
+      const statuses = result?.result?.value;
+
+      if (statuses?.length > 0) {
+        const status = statuses[0];
+        console.log(`Bundle ${bundleId} status:`, status.confirmation_status || 'pending');
+
+        if (status.confirmation_status === 'confirmed' ||
+            status.confirmation_status === 'finalized') {
+          return { landed: true, signatures: status.transactions };
+        }
+
+        if (status.err) {
+          console.error('Bundle failed with error:', status.err);
+          return { landed: false };
+        }
+      }
+    } catch (err) {
+      console.warn('Bundle status poll error:', err);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+  }
+
+  console.warn(`Bundle ${bundleId} timed out after ${timeoutMs}ms`);
+  return { landed: false };
+}
+
 // Execute buy from a burner wallet using custom instruction with volume accumulators
 // This is required since pump.fun's Aug 2025 update added global_volume_accumulator and user_volume_accumulator
 async function executeBurnerBuy(
@@ -1147,6 +1437,270 @@ export async function launchWithBurnerWallets(
       buyResults,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
+  }
+}
+
+// Execute buys using standard flow with reduced stagger (used for overflow buys after bundle)
+async function executeAllBuysStandard(
+  sdk: PumpFunSDK,
+  connection: Connection,
+  mintPubkey: PublicKey,
+  backers: BurnerBackerInfo[]
+): Promise<BurnerBuyResult[]> {
+  const STAGGER_DELAY_MS = 150; // Reduced from 500ms for speed
+
+  const buyPromises = backers.map(async (backer, i) => {
+    if (i > 0) {
+      await new Promise(resolve => setTimeout(resolve, i * STAGGER_DELAY_MS));
+    }
+
+    try {
+      const burnerKeypair = decryptBurnerKey(backer.encryptedPrivateKey);
+      if (burnerKeypair.publicKey.toBase58() !== backer.burnerWallet) {
+        return {
+          mainWallet: backer.mainWallet,
+          burnerWallet: backer.burnerWallet,
+          amountSol: backer.amountSol,
+          tokensReceived: 0,
+          error: 'Decrypted key mismatch',
+        };
+      }
+
+      const result = await executeBurnerBuy(sdk, connection, burnerKeypair, mintPubkey, backer.amountSol);
+      return {
+        mainWallet: backer.mainWallet,
+        burnerWallet: backer.burnerWallet,
+        amountSol: backer.amountSol,
+        tokensReceived: result.tokensReceived,
+        buySignature: result.signature,
+        error: result.error,
+      };
+    } catch (err) {
+      return {
+        mainWallet: backer.mainWallet,
+        burnerWallet: backer.burnerWallet,
+        amountSol: backer.amountSol,
+        tokensReceived: 0,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
+  });
+
+  return Promise.all(buyPromises);
+}
+
+// Launch with Jito bundle - bundles token creation + first backer buys atomically
+// Falls back to standard launchWithBurnerWallets if Jito bundle fails
+export async function launchWithJitoBundle(
+  config: LaunchConfig,
+  burnerBackers: BurnerBackerInfo[]
+): Promise<{
+  success: boolean;
+  mintAddress?: string;
+  pumpFunUrl?: string;
+  createSignature?: string;
+  buyResults: BurnerBuyResult[];
+  bundleUsed?: boolean;
+  bundleId?: string;
+  error?: string;
+}> {
+  const JITO_TIP_LAMPORTS = 7_000_000; // 0.007 SOL tip
+  const MAX_BUNDLED_BUYS = 3; // 1 create + 3 buys + 1 tip = 5 max
+
+  try {
+    console.log(`=== JITO BUNDLE LAUNCH START ===`);
+    console.log(`Token: ${config.name} (${config.symbol})`);
+    console.log(`Backers: ${burnerBackers.length}`);
+    console.log(`Total backing: ${config.totalBackingSol} SOL`);
+
+    // Sort backers by backing time (earliest first = best price)
+    const sortedBackers = [...burnerBackers].sort(
+      (a, b) => new Date(a.backedAt).getTime() - new Date(b.backedAt).getTime()
+    );
+
+    // Split into bundled (first 3) and overflow (rest)
+    const bundledBackers = sortedBackers.slice(0, MAX_BUNDLED_BUYS);
+    const overflowBackers = sortedBackers.slice(MAX_BUNDLED_BUYS);
+    console.log(`Bundle: ${bundledBackers.length} buys | Overflow: ${overflowBackers.length} buys`);
+
+    // 1. Upload metadata to IPFS
+    console.log('Step 1: Uploading metadata to IPFS...');
+    const { metadataUri } = await uploadMetadata(config);
+    console.log(`Metadata uploaded: ${metadataUri}`);
+
+    // 2. Prepare keys and SDK
+    const escrowKeypair = getEscrowWallet();
+    const mintKeypair = Keypair.generate();
+    const sdk = await createPumpFunSDK();
+    const connection = new Connection(RPC_URL, 'confirmed');
+
+    // 3. Fetch initial bonding curve constants from chain
+    console.log('Step 2: Fetching bonding curve constants...');
+    const initialCurveState = await fetchInitialCurveConstants(sdk);
+    console.log(`Initial curve: vTokens=${initialCurveState.virtualTokenReserves}, vSol=${initialCurveState.virtualSolReserves}`);
+
+    // 4. Fetch all bundled burner wallet balances in parallel
+    console.log('Step 3: Checking burner wallet balances...');
+    const balances = await Promise.all(
+      bundledBackers.map(b => connection.getBalance(new PublicKey(b.burnerWallet)))
+    );
+
+    // 5. Get a fresh blockhash (shared by all txs in bundle)
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+    // 6. Build all transactions for the genesis bundle
+    console.log('Step 4: Building genesis bundle...');
+    const transactions: VersionedTransaction[] = [];
+
+    // Transaction 1: Token creation
+    const createTx = await buildCreationVersionedTx(
+      sdk, escrowKeypair, mintKeypair, metadataUri, config, blockhash
+    );
+    transactions.push(createTx);
+
+    // Transactions 2-4: Bundled backer buys (simulate curve sequentially)
+    let curveState = { ...initialCurveState };
+    const bundledBuyInfo: { backer: BurnerBackerInfo; predictedTokens: bigint; buyAmount: bigint }[] = [];
+
+    for (let i = 0; i < bundledBackers.length; i++) {
+      const backer = bundledBackers[i];
+      const buyAmount = calculateBundledBuyAmount(balances[i]);
+
+      if (buyAmount <= BigInt(0)) {
+        console.warn(`Skipping bundled buy for ${backer.burnerWallet.slice(0, 8)}: insufficient balance (${balances[i]} lamports)`);
+        continue;
+      }
+
+      // Simulate buy on predicted curve to get expected tokens
+      const { tokensOut, newState } = simulateBuy(curveState, buyAmount);
+      curveState = newState;
+
+      console.log(`  Backer ${i + 1}: ${Number(buyAmount) / LAMPORTS_PER_SOL} SOL -> ~${tokensOut} tokens (predicted)`);
+
+      const burnerKeypair = decryptBurnerKey(backer.encryptedPrivateKey);
+      const buyTx = await buildBundledBuyVersionedTx(
+        burnerKeypair,
+        mintKeypair.publicKey,
+        escrowKeypair.publicKey,
+        buyAmount,
+        tokensOut,
+        blockhash
+      );
+      transactions.push(buyTx);
+      bundledBuyInfo.push({ backer, predictedTokens: tokensOut, buyAmount });
+    }
+
+    // Transaction 5: Jito tip
+    const tipTx = buildJitoTipVersionedTx(escrowKeypair, JITO_TIP_LAMPORTS, blockhash);
+    transactions.push(tipTx);
+
+    console.log(`Bundle has ${transactions.length} transactions (max 5)`);
+    if (transactions.length > 5) {
+      throw new Error(`Bundle exceeds 5 transaction limit: ${transactions.length}`);
+    }
+
+    // 7. Submit bundle to Jito
+    console.log('Step 5: Submitting Jito bundle...');
+    const bundleId = await submitJitoBundle(transactions);
+
+    // 8. Wait for confirmation
+    console.log('Step 6: Waiting for bundle confirmation...');
+    const confirmation = await confirmJitoBundle(bundleId);
+
+    if (!confirmation.landed) {
+      console.warn('Jito bundle did not land, checking if token was created...');
+
+      // Check if token was created anyway (bundle timeout doesn't mean failure)
+      const mintInfo = await connection.getAccountInfo(mintKeypair.publicKey);
+      if (mintInfo) {
+        console.log('Token was created despite bundle timeout - executing all buys via standard flow');
+        const allBuyResults = await executeAllBuysStandard(sdk, connection, mintKeypair.publicKey, sortedBackers);
+        return {
+          success: allBuyResults.some(r => r.buySignature),
+          mintAddress: mintKeypair.publicKey.toBase58(),
+          pumpFunUrl: `https://pump.fun/coin/${mintKeypair.publicKey.toBase58()}`,
+          buyResults: allBuyResults,
+          bundleUsed: false,
+          bundleId,
+        };
+      }
+
+      // Full fallback to standard launch
+      console.log('Falling back to standard launchWithBurnerWallets...');
+      const fallbackResult = await launchWithBurnerWallets(config, burnerBackers);
+      return { ...fallbackResult, bundleUsed: false, bundleId };
+    }
+
+    console.log(`Genesis bundle landed! ${bundledBuyInfo.length} buys included.`);
+
+    // 9. Build results for bundled buys - verify actual token balances
+    const buyResults: BurnerBuyResult[] = [];
+
+    for (let idx = 0; idx < bundledBuyInfo.length; idx++) {
+      const { backer, predictedTokens } = bundledBuyInfo[idx];
+      let tokensReceived = Number(predictedTokens);
+      let buySignature: string | undefined;
+
+      // Try to get actual token balance from chain
+      try {
+        const ata = await getAssociatedTokenAddress(mintKeypair.publicKey, new PublicKey(backer.burnerWallet));
+        const accountInfo = await getAccount(connection, ata);
+        tokensReceived = Number(accountInfo.amount);
+      } catch {
+        // Use predicted amount if account not readable yet
+      }
+
+      // Get buy signature from bundle confirmation (order: create, buy1, buy2, buy3, tip)
+      if (confirmation.signatures && confirmation.signatures.length > idx + 1) {
+        buySignature = confirmation.signatures[idx + 1]; // +1 to skip create tx
+      }
+
+      buyResults.push({
+        mainWallet: backer.mainWallet,
+        burnerWallet: backer.burnerWallet,
+        amountSol: backer.amountSol,
+        tokensReceived,
+        buySignature,
+      });
+    }
+
+    // 10. Execute overflow buys (backers 4+) via standard fast flow
+    if (overflowBackers.length > 0) {
+      console.log(`Step 7: Executing ${overflowBackers.length} overflow buys...`);
+      const overflowResults = await executeAllBuysStandard(sdk, connection, mintKeypair.publicKey, overflowBackers);
+      buyResults.push(...overflowResults);
+    }
+
+    const successfulBuys = buyResults.filter(r => r.buySignature || r.tokensReceived > 0);
+    console.log(`=== JITO LAUNCH COMPLETE ===`);
+    console.log(`${successfulBuys.length}/${sortedBackers.length} buys successful`);
+    console.log(`Bundle ID: ${bundleId}`);
+
+    return {
+      success: true,
+      mintAddress: mintKeypair.publicKey.toBase58(),
+      pumpFunUrl: `https://pump.fun/coin/${mintKeypair.publicKey.toBase58()}`,
+      buyResults,
+      bundleUsed: true,
+      bundleId,
+    };
+  } catch (error) {
+    console.error('Jito bundle launch failed:', error);
+
+    // Fallback to standard launch
+    console.log('Falling back to standard launchWithBurnerWallets...');
+    try {
+      const fallbackResult = await launchWithBurnerWallets(config, burnerBackers);
+      return { ...fallbackResult, bundleUsed: false };
+    } catch (fallbackError) {
+      console.error('Fallback launch also failed:', fallbackError);
+      return {
+        success: false,
+        buyResults: [],
+        bundleUsed: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
   }
 }
 
