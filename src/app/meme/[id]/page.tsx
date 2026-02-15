@@ -16,7 +16,8 @@ import {
   Info,
   Coins,
   Key,
-  ExternalLink
+  ExternalLink,
+  ChevronDown
 } from 'lucide-react';
 import Link from 'next/link';
 import { MemeChat } from '@/components/MemeChat';
@@ -90,11 +91,11 @@ export default function MemeDetailPage() {
   const [showExportKey, setShowExportKey] = useState(false);
   const [exportedKey, setExportedKey] = useState<string | null>(null);
   const [exportKeyCopied, setExportKeyCopied] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   // Platform config
   const [escrowAddress, setEscrowAddress] = useState<string | null>(null);
   const PLATFORM_FEE_PERCENT = 0.02; // 2%
-  const PLATFORM_FEE_MINIMUM = 0.01; // 0.01 SOL minimum
 
   // Use real-time hooks for meme and backings
   const { meme, loading, error, refetch: refetchMeme } = useRealtimeMeme(id as string);
@@ -170,11 +171,17 @@ export default function MemeDetailPage() {
       return;
     }
 
-    const maxBackingPerWallet = Number(meme.backing_goal_sol) * 0.1;
-    if (amountSol > maxBackingPerWallet) {
+    // Validate minimum backing amount
+    if (amountSol < minBacking) {
       setBackingStatus(
-        `Error: Maximum backing is ${maxBackingPerWallet.toFixed(2)} SOL per wallet (10% of goal).`
+        `Error: Minimum backing is ${minBacking} SOL.`
       );
+      return;
+    }
+
+    // Check if slots available
+    if (slotsRemaining <= 0) {
+      setBackingStatus('Error: All backer slots are filled.');
       return;
     }
 
@@ -196,10 +203,10 @@ export default function MemeDetailPage() {
       setPendingBurnerKeypair(burnerWallet.keypair);
 
       // 3. Create SOL transfer transaction to burner wallet + platform fee
-      // User sends backing amount to burner wallet, and fee (2% or 0.01 SOL minimum) to escrow
+      // User sends backing amount to burner wallet, and 2% fee to escrow
       const burnerPubkey = new PublicKey(burnerWallet.publicKey);
       const backingLamports = Math.floor(amountSol * LAMPORTS_PER_SOL);
-      const platformFee = Math.max(amountSol * PLATFORM_FEE_PERCENT, PLATFORM_FEE_MINIMUM);
+      const platformFee = amountSol * PLATFORM_FEE_PERCENT;
       const feeLamports = Math.floor(platformFee * LAMPORTS_PER_SOL);
 
       const transaction = new Transaction();
@@ -299,10 +306,11 @@ export default function MemeDetailPage() {
           return;
         }
 
-        const maxBackingPerWallet = Number(meme.backing_goal_sol) * 0.1;
-        if (amountSol > maxBackingPerWallet) {
+        // Validate minimum backing
+        const minBackingAmount = Number(meme.min_backing_sol) || 0.1;
+        if (amountSol < minBackingAmount) {
           setBackingStatus(
-            `Error: Maximum backing is ${maxBackingPerWallet.toFixed(2)} SOL per wallet (10% of goal).`
+            `Error: Minimum backing is ${minBackingAmount} SOL.`
           );
           return;
         }
@@ -523,6 +531,9 @@ export default function MemeDetailPage() {
     creator_wallet,
     image_url,
     backer_count = 0,
+    // Slot-based backing system
+    total_slots = 8,
+    min_backing_sol = 0.1,
     // Trust score params (with defaults for backwards compatibility)
     creator_fee_pct = 2,
     backer_share_pct = 70,
@@ -535,7 +546,11 @@ export default function MemeDetailPage() {
     website,
   } = meme;
 
-  const progress = (Number(current_backing_sol) / Number(backing_goal_sol)) * 100;
+  const totalSlots = Number(total_slots) || 8;
+  const minBacking = Number(min_backing_sol) || 0.1;
+  const filledSlots = backer_count;
+  const slotsRemaining = totalSlots - filledSlots;
+  const progress = (filledSlots / totalSlots) * 100;
   const timeRemaining = getTimeRemaining(backing_deadline);
   const { label: statusLabel, class: statusClass } = getStatusConfig(status);
 
@@ -543,14 +558,20 @@ export default function MemeDetailPage() {
   const isFunded = status === 'funded';
   const isLaunching = status === 'launching';
   const isLaunched = status === 'live';
-  const maxBacking = Number(backing_goal_sol) * 0.1; // 10% max per wallet
   const isCreator = connected && publicKey?.toBase58() === creator_wallet;
   const isBacker = connected && backings.some(
     (b) => b.backer_wallet === publicKey?.toBase58() && b.status === 'distributed'
   );
 
+  // Calculate projected token percentage for current backer
+  const totalBackingSol = Number(current_backing_sol) || 0;
+  const getProjectedPercent = (amountSol: number) => {
+    if (totalBackingSol + amountSol <= 0) return 0;
+    return (amountSol / (totalBackingSol + amountSol)) * 100;
+  };
+
   // Backing is currently paused for maintenance
-  const backingPaused = true;
+  const backingPaused = false;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -713,585 +734,362 @@ export default function MemeDetailPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Progress / Stats */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Launch Section - shown when funded */}
-          {(isFunded || isLaunching) && (
-            <div className="relative border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-4">
-              {/* Victory Banner */}
-              <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
-                ★ Victory Achieved ★
-              </div>
-
-              <h2 className="text-xl font-black uppercase tracking-tight pt-2">
-                {isLaunching ? 'Launching Revolution...' : 'The People Have Spoken!'}
-              </h2>
-
-              <div className="bg-[var(--success)]/10 border-2 border-[var(--success)]/30 p-4">
-                <p className="text-[var(--success)] font-bold mb-2 uppercase tracking-wide">
-                  Goal Reached: {Number(current_backing_sol).toFixed(2)} / {Number(backing_goal_sol)} SOL
-                </p>
-                <p className="text-sm text-[var(--muted)]">
-                  This meme has been fully funded and is ready to launch on pump.fun
-                </p>
-              </div>
-
-              {/* Only creator can launch */}
-              {isCreator ? (
-                <button
-                  onClick={requestLaunch}
-                  disabled={launching || isLaunching}
-                  className="w-full py-4 font-black text-lg uppercase tracking-wide bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed border-2 border-[var(--accent)]"
-                >
-                  {launching || isLaunching ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Deploying Revolution...
-                    </span>
-                  ) : (
-                    '★ Launch the Revolution ★'
-                  )}
-                </button>
+      {/* Launch Section - shown when funded */}
+      {(isFunded || isLaunching) && (
+        <div className="relative border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-4">
+          <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
+            ★ Victory Achieved ★
+          </div>
+          <h2 className="text-xl font-black uppercase tracking-tight pt-2">
+            {isLaunching ? 'Launching Revolution...' : 'The People Have Spoken!'}
+          </h2>
+          <div className="bg-[var(--success)]/10 border-2 border-[var(--success)]/30 p-4">
+            <p className="text-[var(--success)] font-bold mb-2 uppercase tracking-wide">
+              All {totalSlots} Slots Filled - {Number(current_backing_sol).toFixed(2)} SOL Raised
+            </p>
+            <p className="text-sm text-[var(--muted)]">
+              This meme has all backer slots filled and is ready to launch on pump.fun
+            </p>
+          </div>
+          {isCreator ? (
+            <button
+              onClick={requestLaunch}
+              disabled={launching || isLaunching}
+              className="w-full py-4 font-black text-lg uppercase tracking-wide bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed border-2 border-[var(--accent)]"
+            >
+              {launching || isLaunching ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Deploying Revolution...
+                </span>
               ) : (
-                <div className="text-center py-3 text-sm text-[var(--muted)] bg-[var(--background)] border-2 border-[var(--border)] uppercase tracking-wide">
-                  {connected
-                    ? 'Awaiting comrade creator...'
-                    : 'Connect wallet to witness history'}
-                </div>
+                '★ Launch the Revolution ★'
               )}
-
-              {/* Launch status message */}
-              {launchStatus && (
-                <div className={`p-3 text-sm text-center font-bold uppercase tracking-wide ${
-                  launchStatus.includes('Error')
-                    ? 'bg-[var(--error)]/20 text-[var(--error)] border-2 border-[var(--error)]/30'
-                    : launchStatus.includes('successfully')
-                    ? 'bg-[var(--success)]/20 text-[var(--success)] border-2 border-[var(--success)]/30'
-                    : 'bg-[var(--accent)]/20 text-[var(--accent)] border-2 border-[var(--accent)]/30'
-                }`}>
-                  {launchStatus}
-                </div>
-              )}
+            </button>
+          ) : (
+            <div className="text-center py-3 text-sm text-[var(--muted)] bg-[var(--background)] border-2 border-[var(--border)] uppercase tracking-wide">
+              {connected ? 'Awaiting comrade creator...' : 'Connect wallet to witness history'}
             </div>
           )}
+          {launchStatus && (
+            <div className={`p-3 text-sm text-center font-bold uppercase tracking-wide ${
+              launchStatus.includes('Error')
+                ? 'bg-[var(--error)]/20 text-[var(--error)] border-2 border-[var(--error)]/30'
+                : launchStatus.includes('successfully')
+                ? 'bg-[var(--success)]/20 text-[var(--success)] border-2 border-[var(--success)]/30'
+                : 'bg-[var(--accent)]/20 text-[var(--accent)] border-2 border-[var(--accent)]/30'
+            }`}>
+              {launchStatus}
+            </div>
+          )}
+        </div>
+      )}
 
+      {/* Backing / Trade Panel - full width, right below header */}
+      <div className="relative bg-[var(--card)] border-2 border-[var(--accent)]" style={isProving ? { borderWidth: '3px' } : {}}>
+        {isProving && (
+          <div className="bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] w-full py-2.5 text-center text-white text-sm font-black uppercase tracking-widest">
+            ★ Back This Token ★
+          </div>
+        )}
+
+        <div className="p-6">
           {isProving && (
-            <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-6">
-              {/* Section Header */}
-              <div className="flex items-center gap-3">
-                <div className="w-1 h-8 bg-gradient-to-b from-[var(--accent)] to-[var(--accent-gold)]" />
-                <h2 className="text-xl font-black uppercase tracking-tight">Revolution Progress</h2>
-              </div>
-
-              {/* SOL Progress */}
-              <div>
-                <div className="flex justify-between text-sm mb-3">
-                  <span className="flex items-center gap-2 text-[var(--muted)] uppercase text-xs tracking-wide font-bold">
-                    <Target className="w-4 h-4 text-[var(--accent)]" /> Collective Goal
+            <>
+              {/* Compact info bar */}
+              <div className="flex items-center gap-4 mb-5 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-[var(--accent)]" />
+                  <span className="font-black">{slotsRemaining}</span>
+                  <span className="text-xs text-[var(--muted)] uppercase">slots open</span>
+                </div>
+                <div className="w-px h-5 bg-[var(--border)]" />
+                <div className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-[var(--accent-gold)]" />
+                  <span className="font-black">{Number(current_backing_sol).toFixed(2)} SOL</span>
+                  <span className="text-xs text-[var(--muted)] uppercase">raised</span>
+                </div>
+                <div className="w-px h-5 bg-[var(--border)]" />
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[var(--warning)]" />
+                  <span className="font-black text-[var(--warning)]">{timeRemaining}</span>
+                  <span className="text-xs text-[var(--muted)] uppercase">left</span>
+                </div>
+                {filledSlots < 4 ? (
+                  <span className="ml-auto text-xs bg-[var(--accent-gold)]/20 text-[var(--accent-gold)] px-2 py-1 font-bold uppercase border border-[var(--accent-gold)]/30">
+                    Next: Bourgeoisie
                   </span>
-                  <span className="font-black text-lg">
-                    {Number(current_backing_sol).toFixed(2)} / {Number(backing_goal_sol)} SOL
+                ) : (
+                  <span className="ml-auto text-xs bg-[var(--accent)]/20 text-[var(--accent)] px-2 py-1 font-bold uppercase border border-[var(--accent)]/30">
+                    Next: Proletariat
                   </span>
-                </div>
-                <div className="relative h-6 bg-[var(--background)] border-2 border-[var(--border)]">
-                  <div
-                    className="h-full bg-gradient-to-r from-[var(--gradient-start)] to-[var(--accent-gold)] transition-all duration-500"
-                    style={{ width: `${Math.min(progress, 100)}%` }}
-                  />
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md">
-                    {progress.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Stats Row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-[var(--background)] border-2 border-[var(--border)] p-3 text-center">
-                  <Users className="w-5 h-5 mx-auto mb-1 text-[var(--accent)]" />
-                  <span className="text-2xl font-black">{backer_count}</span>
-                  <p className="text-xs text-[var(--muted)] uppercase tracking-wide">Comrades</p>
-                </div>
-                <div className="bg-[var(--background)] border-2 border-[var(--warning)]/50 p-3 text-center">
-                  <Clock className="w-5 h-5 mx-auto mb-1 text-[var(--warning)]" />
-                  <span className="text-2xl font-black text-[var(--warning)]">{timeRemaining}</span>
-                  <p className="text-xs text-[var(--muted)] uppercase tracking-wide">Remaining</p>
-                </div>
-              </div>
-
-              {/* Fee Distribution Preview */}
-              <div className="border-t-2 border-[var(--border)] pt-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Coins className="w-5 h-5 text-[var(--accent-gold)]" />
-                  <span className="text-sm font-bold uppercase tracking-wide">Spoils of War Distribution</span>
-                  <div className="group relative">
-                    <Info className="w-4 h-4 text-[var(--muted)] cursor-help" />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-[var(--card)] border-2 border-[var(--border)] shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-xs">
-                      <p className="text-[var(--muted)] mb-2">
-                        When this token launches and trades on pump.fun, 0.5% of all trading volume flows as creator fees.
-                      </p>
-                      <p className="text-[var(--muted)]">
-                        These fees are distributed 100% to backers and creator - no platform cut!
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center p-3 bg-[var(--background)] border-l-4 border-[var(--accent)]">
-                    <span className="text-[var(--muted)] uppercase text-xs font-bold">Platform</span>
-                    <span className="font-black text-lg text-[var(--accent)]">10%</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 bg-[var(--background)] border-l-4 border-[var(--success)]">
-                    <span className="text-[var(--muted)] uppercase text-xs font-bold">All Backers</span>
-                    <span className="font-black text-lg text-[var(--success)]">90%</span>
-                  </div>
-                </div>
-                <p className="text-xs text-[var(--muted)] mt-3 uppercase tracking-wide">
-                  All backers (including creator) share fees proportionally
-                </p>
-              </div>
-            </div>
-          )}
-
-          {isLaunched && (
-            <div className="relative border-2 border-[var(--success)] bg-[var(--card)] p-6">
-              {/* Section Header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-1 h-8 bg-gradient-to-b from-[var(--success)] to-[var(--accent-gold)]" />
-                <h2 className="text-xl font-black uppercase tracking-tight">Victory Statistics</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
-                  <div className="text-xs text-[var(--muted)] uppercase tracking-wide font-bold mb-2">Price</div>
-                  <div className="text-2xl font-black">-- SOL</div>
-                </div>
-                <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
-                  <div className="text-xs text-[var(--muted)] uppercase tracking-wide font-bold mb-2">Volume (24h)</div>
-                  <div className="text-2xl font-black">-- SOL</div>
-                </div>
-                <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
-                  <div className="text-xs text-[var(--muted)] uppercase tracking-wide font-bold mb-2">Market Cap</div>
-                  <div className="text-2xl font-black">--</div>
-                </div>
-                <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
-                  <div className="text-xs text-[var(--muted)] uppercase tracking-wide font-bold mb-2">Curve Progress</div>
-                  <div className="text-2xl font-black">--%</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Token Wallet Actions - shown to backers after launch */}
-          {isLaunched && connected && burnerInfo && burnerInfo.burner_wallet && !burnerInfo.swept && (
-            <div className="card p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-[var(--accent)]/20 flex items-center justify-center">
-                  <Key className="w-5 h-5 text-[var(--accent)]" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold">Your Tokens</h2>
-                  <p className="text-sm text-[var(--muted)]">Claim tokens from your token wallet</p>
-                </div>
-              </div>
-
-              <div className="bg-[var(--background)] rounded-lg p-4 mb-4">
-                <p className="text-sm text-[var(--muted)] mb-1">Token Wallet:</p>
-                <code className="text-xs break-all">{burnerInfo.burner_wallet}</code>
-                {burnerInfo.amount_sol && (
-                  <p className="text-sm mt-2">
-                    <span className="text-[var(--muted)]">Backed:</span>{' '}
-                    <span className="font-medium">{Number(burnerInfo.amount_sol).toFixed(2)} SOL</span>
-                  </p>
                 )}
               </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleSweep('transfer')}
-                    disabled={sweeping}
-                    className="flex-1 flex items-center justify-center gap-3 p-4 bg-[var(--success)]/10 hover:bg-[var(--success)]/20 border border-[var(--success)]/30 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    <ArrowUpRight className="w-6 h-6 text-[var(--success)]" />
-                    <div className="text-left">
-                      <span className="font-medium block">Claim Tokens</span>
-                      <span className="text-xs text-[var(--muted)]">Transfer to your main wallet</span>
-                    </div>
-                  </button>
-                  <div className="group relative">
-                    <div className="p-3 bg-[var(--background)] hover:bg-[var(--border)] border border-[var(--border)] rounded-lg cursor-help transition-colors">
-                      <Info className="w-5 h-5 text-[var(--muted)]" />
-                    </div>
-                    <div className="absolute bottom-full right-0 mb-2 w-72 p-4 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                      <p className="text-sm text-[var(--foreground)] mb-2 font-medium">After claiming tokens:</p>
-                      <p className="text-xs text-[var(--muted)] mb-3">
-                        Your tokens may not appear in Phantom or Solflare at first - this is normal for new tokens!
-                      </p>
-                      <p className="text-sm text-[var(--foreground)] mb-2 font-medium">To sell your tokens:</p>
-                      <ol className="text-xs text-[var(--muted)] space-y-1 list-decimal list-inside">
-                        <li>Go to pump.fun and connect your wallet</li>
-                        <li>Search for this token or use the trade link below</li>
-                        <li>Your tokens will appear there - sell from pump.fun</li>
-                      </ol>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-[var(--border)]"></div>
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="px-2 bg-[var(--card)] text-[var(--muted)]">or</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleExportPrivateKey}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-[var(--background)] hover:bg-[var(--border)] border border-[var(--border)] rounded-lg transition-colors text-sm"
-                >
-                  <Key className="w-4 h-4" />
-                  <span>Export Private Key</span>
-                </button>
+              {/* Visual Slot Grid - compact */}
+              <div className="flex gap-1.5 mb-5">
+                {Array.from({ length: totalSlots }).map((_, i) => {
+                  const isFilled = i < filledSlots;
+                  const isBourgeoisie = i < 4;
+                  return (
+                    <div
+                      key={i}
+                      className={`flex-1 h-2 transition-all ${
+                        isFilled
+                          ? isBourgeoisie
+                            ? 'bg-[var(--accent-gold)]'
+                            : 'bg-[var(--accent)]'
+                          : 'bg-[var(--border)]'
+                      }`}
+                    />
+                  );
+                })}
               </div>
-
-              {/* Sweep status message */}
-              {sweepStatus && (
-                <div className={`mt-4 p-3 rounded-lg text-sm text-center ${
-                  sweepStatus.includes('Error')
-                    ? 'bg-[var(--error)]/20 text-[var(--error)]'
-                    : sweepStatus.includes('Sold') || sweepStatus.includes('Transferred')
-                    ? 'bg-[var(--success)]/20 text-[var(--success)]'
-                    : 'bg-[var(--accent)]/20 text-[var(--accent)]'
-                }`}>
-                  {sweeping && <Loader2 className="w-4 h-4 animate-spin inline mr-2" />}
-                  {sweepStatus}
-                </div>
-              )}
-            </div>
+            </>
           )}
-
-          {/* Already swept message */}
-          {isLaunched && connected && burnerInfo && burnerInfo.swept && (
-            <div className="card p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-[var(--success)]/20 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-[var(--success)]" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold">Tokens Claimed</h2>
-                  <p className="text-sm text-[var(--muted)]">
-                    {burnerInfo.sweep_action === 'sell'
-                      ? 'You sold your tokens for SOL'
-                      : 'Tokens transferred to your main wallet'}
-                  </p>
-                </div>
-              </div>
-              <a
-                href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-2 p-3 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white rounded-lg transition-colors font-medium"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Trade on pump.fun
-              </a>
-            </div>
-          )}
-
-          {/* Claim Rewards - shown for live tokens to creators/backers */}
-          {isLaunched && (isCreator || isBacker) && (
-            <ClaimRewards
-              memeId={meme.id}
-              isCreator={isCreator}
-              isBacker={isBacker}
-            />
-          )}
-
-
-          {/* Rules - Revolutionary Doctrine */}
-          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6">
-            {/* Section Header */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-1 h-8 bg-gradient-to-b from-[var(--accent)] to-[var(--accent-gold)]" />
-              <h2 className="text-xl font-black uppercase tracking-tight">Revolutionary Doctrine</h2>
-            </div>
-            <ul className="space-y-3 text-sm">
-              <li className="flex items-start gap-3 p-2 bg-[var(--background)] border-l-4 border-[var(--accent)]">
-                <span className="text-[var(--accent)] font-bold">★</span>
-                <span className="text-[var(--muted)]">Maximum backing per comrade: <span className="text-[var(--foreground)] font-bold">{maxBacking.toFixed(1)} SOL</span> (10% of goal)</span>
-              </li>
-              <li className="flex items-start gap-3 p-2 bg-[var(--background)] border-l-4 border-[var(--accent)]">
-                <span className="text-[var(--accent)] font-bold">★</span>
-                <span className="text-[var(--muted)]">Spoils distributed proportional to contribution</span>
-              </li>
-              <li className="flex items-start gap-3 p-2 bg-[var(--background)] border-l-4 border-[var(--success)]">
-                <span className="text-[var(--success)] font-bold">★</span>
-                <span className="text-[var(--muted)]">Genesis backers earn <span className="text-[var(--success)] font-bold">90%</span> of all trading fees</span>
-              </li>
-              <li className="flex items-start gap-3 p-2 bg-[var(--background)] border-l-4 border-[var(--accent)]">
-                <span className="text-[var(--accent)] font-bold">★</span>
-                <span className="text-[var(--muted)]">Creator = backer: <span className="text-[var(--accent)] font-bold">Equal share</span> (no special cut)</span>
-              </li>
-              {dev_initial_buy_sol > 0 && (
-                <li className="flex items-start gap-3 p-2 bg-[var(--warning)]/10 border-l-4 border-[var(--warning)]">
-                  <span className="text-[var(--warning)] font-bold">⚠</span>
-                  <span className="text-[var(--muted)]">Dev plans to acquire: <span className="text-[var(--warning)] font-bold">{dev_initial_buy_sol} SOL</span> at launch</span>
-                </li>
-              )}
-              <li className="flex items-start gap-3 p-2 bg-[var(--success)]/10 border-l-4 border-[var(--success)]">
-                <span className="text-[var(--success)] font-bold">✓</span>
-                <span className="text-[var(--muted)]">Goal not reached? Claim refund from Portfolio</span>
-              </li>
-              <li className="flex items-start gap-3 p-2 bg-[var(--background)] border-l-4 border-[var(--warning)]">
-                <span className="text-[var(--warning)] font-bold">⚠</span>
-                <span className="text-[var(--muted)]">Early desertion fee: <span className="text-[var(--warning)] font-bold">2%</span></span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Trading Panel - Revolutionary Action */}
-        <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 h-fit">
-          {/* Decorative top banner */}
-          <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-            {isProving ? '★ Join the Cause ★' : '★ Trade ★'}
-          </div>
-
-          <h2 className="text-xl font-black uppercase tracking-tight mb-4 pt-2">
-            {isProving ? 'Back This Revolution' : 'Seize Tokens'}
-          </h2>
 
           {!connected ? (
-            <div className="text-center py-8 text-[var(--muted)] border-2 border-dashed border-[var(--border)] uppercase text-sm font-bold tracking-wide">
-              Connect wallet to {isProving ? 'join' : 'trade'}
+            <div className="text-center py-8 text-[var(--muted)] border-2 border-dashed border-[var(--accent)]/40 uppercase text-sm font-bold tracking-wide bg-[var(--accent)]/5">
+              <div className="text-3xl mb-3">★</div>
+              Connect wallet to {isProving ? 'join the cause' : 'trade'}
             </div>
           ) : isLaunched ? (
             /* Trading options for launched tokens */
             <div className="space-y-4">
               {burnerInfo && burnerInfo.burner_wallet && !burnerInfo.swept ? (
-                /* Backer has tokens to claim */
                 <>
-                  <div className="bg-[var(--background)] rounded-lg p-4">
-                    <p className="text-sm text-[var(--muted)] mb-1">Your token wallet:</p>
-                    <code className="text-xs break-all">{burnerInfo.burner_wallet}</code>
-                    {burnerInfo.amount_sol && (
-                      <p className="text-sm mt-2 font-medium">
-                        {Number(burnerInfo.amount_sol).toFixed(2)} SOL backed
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-4">
                     <button
                       onClick={() => handleSweep('transfer')}
                       disabled={sweeping}
-                      className="flex-1 flex items-center justify-center gap-2 p-3 bg-[var(--success)] hover:bg-[var(--success)]/90 text-white rounded-lg transition-colors disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-2 py-4 bg-[var(--success)] hover:bg-[var(--success)]/90 text-white font-black uppercase tracking-wide transition-colors disabled:opacity-50 border-2 border-[var(--success)]"
                     >
-                      {sweeping ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <ArrowUpRight className="w-4 h-4" />
-                      )}
-                      <span className="font-medium">Claim Tokens</span>
+                      {sweeping ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowUpRight className="w-5 h-5" />}
+                      Claim Tokens
                     </button>
-                    <div className="group relative">
-                      <div className="p-3 bg-[var(--background)] hover:bg-[var(--border)] border border-[var(--border)] rounded-lg cursor-help transition-colors">
-                        <Info className="w-4 h-4 text-[var(--muted)]" />
-                      </div>
-                      <div className="absolute bottom-full right-0 mb-2 w-64 p-3 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                        <p className="text-xs text-[var(--muted)] mb-2">
-                          Tokens may not show in Phantom/Solflare at first - this is normal!
-                        </p>
-                        <p className="text-xs text-[var(--muted)]">
-                          Go to pump.fun to sell your tokens after claiming.
-                        </p>
-                      </div>
-                    </div>
+                    <a
+                      href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 px-6 py-4 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold uppercase tracking-wide transition-colors border-2 border-[var(--accent)]"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Trade
+                    </a>
                   </div>
-
+                  <button
+                    onClick={handleExportPrivateKey}
+                    className="w-full flex items-center justify-center gap-2 p-2.5 bg-[var(--background)] hover:bg-[var(--border)] border border-[var(--border)] transition-colors text-xs uppercase tracking-wide text-[var(--muted)]"
+                  >
+                    <Key className="w-3 h-3" />
+                    Export Private Key
+                  </button>
                   {sweepStatus && (
-                    <div className={`p-3 rounded-lg text-sm text-center ${
+                    <div className={`p-3 text-sm text-center ${
                       sweepStatus.includes('Error')
                         ? 'bg-[var(--error)]/20 text-[var(--error)]'
-                        : sweepStatus.includes('Sold') || sweepStatus.includes('Transferred')
-                        ? 'bg-[var(--success)]/20 text-[var(--success)]'
-                        : 'bg-[var(--accent)]/20 text-[var(--accent)]'
+                        : 'bg-[var(--success)]/20 text-[var(--success)]'
                     }`}>
                       {sweeping && <Loader2 className="w-4 h-4 animate-spin inline mr-2" />}
                       {sweepStatus}
                     </div>
                   )}
-
-                  <button
-                    onClick={handleExportPrivateKey}
-                    className="w-full flex items-center justify-center gap-2 p-3 bg-[var(--background)] hover:bg-[var(--border)] border border-[var(--border)] rounded-lg transition-colors text-sm"
-                  >
-                    <Key className="w-4 h-4" />
-                    Export Private Key
-                  </button>
                 </>
               ) : burnerInfo?.swept ? (
-                /* Tokens already claimed */
-                <div className="space-y-3">
-                  <div className="text-center py-2">
-                    <Check className="w-8 h-8 mx-auto mb-2 text-[var(--success)]" />
-                    <p className="text-sm text-[var(--muted)]">
-                      Tokens claimed!
-                    </p>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-[var(--success)]">
+                    <Check className="w-5 h-5" />
+                    <span className="font-bold uppercase text-sm">Tokens claimed</span>
                   </div>
                   <a
                     href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center gap-2 p-3 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white rounded-lg transition-colors font-medium"
+                    className="ml-auto flex items-center gap-2 px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold uppercase tracking-wide transition-colors border-2 border-[var(--accent)]"
                   >
                     <ExternalLink className="w-4 h-4" />
                     Trade on pump.fun
                   </a>
                 </div>
               ) : (
-                /* Not a backer - show trade on pump.fun */
-                <div className="text-center py-4">
-                  <p className="text-sm text-[var(--muted)] mb-4">
-                    Trade this token on pump.fun
-                  </p>
-                  <a
-                    href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white rounded-lg hover:opacity-90"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Trade on pump.fun
-                  </a>
-                </div>
+                <a
+                  href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 py-4 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-black uppercase tracking-wide transition-colors border-2 border-[var(--accent)]"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  Trade on pump.fun
+                </a>
               )}
             </div>
           ) : (
-            /* Backing panel for proving tokens */
-            <>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-[var(--muted)] mb-2">
-                    Amount ({isProving || tradeType === 'buy' ? 'SOL' : symbol})
+            /* Backing panel */
+            <div className="space-y-4">
+              <div className="flex gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-bold text-[var(--foreground)] mb-2 uppercase tracking-wide">
+                    Your Pledge (SOL)
                   </label>
                   <div className="relative">
                     <input
                       type="number"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      placeholder="0.0"
-                      min="0"
+                      placeholder={minBacking.toString()}
+                      min={minBacking}
                       step="0.1"
-                      className="w-full px-4 py-3 rounded-lg bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-lg"
+                      className="w-full px-5 py-4 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-2xl font-bold"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-2">
                       <button
-                        onClick={() => setAmount(String(Number((maxBacking * 0.5).toFixed(4))))}
-                        className="text-xs bg-[var(--card)] px-2 py-1 rounded hover:bg-[var(--border)]"
+                        onClick={() => setAmount(String(minBacking))}
+                        className="text-xs bg-[var(--card)] border border-[var(--border)] px-3 py-1.5 hover:bg-[var(--border)] font-bold uppercase"
                       >
-                        Half
+                        Min
                       </button>
                       <button
-                        onClick={() => setAmount(String(maxBacking))}
-                        className="text-xs bg-[var(--card)] px-2 py-1 rounded hover:bg-[var(--border)]"
+                        onClick={() => setAmount(String(minBacking * 2))}
+                        className="text-xs bg-[var(--card)] border border-[var(--border)] px-3 py-1.5 hover:bg-[var(--border)] font-bold uppercase"
                       >
-                        Max
+                        2x
                       </button>
                     </div>
                   </div>
                 </div>
-
-                {/* Fee breakdown for backing */}
-                {isProving && amount && Number(amount) > 0 && (
-                  <div className="bg-[var(--background)] rounded-lg p-3 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[var(--muted)]">Backing amount</span>
-                      <span className="font-medium">{Number(amount).toFixed(4)} SOL</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[var(--muted)]">Platform fee (2%)</span>
-                        <div className="group relative">
-                          <Info className="w-3 h-3 text-[var(--muted)] cursor-help" />
-                          <div className="absolute bottom-full left-0 mb-2 w-48 p-2 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 text-xs">
-                            This fee supports the platform and is sent to the escrow wallet.
-                          </div>
-                        </div>
-                      </div>
-                      <span>{(Number(amount) * 0.02).toFixed(4)} SOL</span>
-                    </div>
-                    <div className="border-t border-[var(--border)] pt-2 flex justify-between text-sm font-medium">
-                      <span>Total</span>
-                      <span className="text-[var(--accent)]">{(Number(amount) * 1.02).toFixed(4)} SOL</span>
-                    </div>
-                  </div>
-                )}
-
-                {isLaunched && amount && (
-                  <div className="bg-[var(--background)] rounded-lg p-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[var(--muted)]">You receive</span>
-                      <span className="font-medium">-- {tradeType === 'buy' ? symbol : 'SOL'}</span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-2">
-                      <span className="text-[var(--muted)]">Fee (1%)</span>
-                      <span>{(Number(amount) * 0.01).toFixed(4)}</span>
-                    </div>
-                  </div>
-                )}
-
                 <button
                   onClick={handleTrade}
-                  disabled={!amount || Number(amount) <= 0 || backing || (isProving && backingPaused)}
-                  className={`w-full py-4 font-black uppercase tracking-wide transition-all border-2 ${
-                    isProving
-                      ? 'bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] text-white border-[var(--accent)] hover:opacity-90'
-                      : tradeType === 'buy'
-                      ? 'bg-[var(--success)] hover:bg-[var(--success)]/90 text-white border-[var(--success)]'
-                      : 'bg-[var(--error)] hover:bg-[var(--error)]/90 text-white border-[var(--error)]'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  disabled={!amount || Number(amount) <= 0 || backing || backingPaused || slotsRemaining <= 0}
+                  className="px-8 py-4 text-lg font-black uppercase tracking-wide transition-all border-2 bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] text-white border-[var(--accent)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
                   {backing ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
-                    </span>
-                  ) : isProving && backingPaused ? (
-                    'Revolution Paused'
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    isProving ? '★ Join the Revolution ★' : tradeType === 'buy' ? 'Seize Tokens' : 'Liquidate Holdings'
+                    '★ Pledge ★'
                   )}
                 </button>
-
-                {/* Status message */}
-                {backingStatus && (
-                  <div className={`mt-3 p-3 text-sm text-center font-bold uppercase tracking-wide ${
-                    backingStatus.includes('Error')
-                      ? 'bg-[var(--error)]/20 text-[var(--error)] border-2 border-[var(--error)]/30'
-                      : backingStatus.includes('successful')
-                      ? 'bg-[var(--success)]/20 text-[var(--success)] border-2 border-[var(--success)]/30'
-                      : 'bg-[var(--accent)]/20 text-[var(--accent)] border-2 border-[var(--accent)]/30'
-                  }`}>
-                    {backingStatus}
-                  </div>
-                )}
               </div>
-            </>
-          )}
 
-          {/* Fee Info */}
-          {isProving && (
-            <div className="mt-4 p-3 bg-[var(--accent)]/10 border-2 border-[var(--accent)]/30">
-              <p className="text-xs text-[var(--muted)] uppercase tracking-wide">
-                All backers share <span className="text-[var(--accent)] font-bold">90%</span> of trading fees proportional to contribution
-              </p>
+              {/* Fee + share summary - inline */}
+              {amount && Number(amount) > 0 && (
+                <div className="flex items-center gap-4 text-sm text-[var(--muted)] flex-wrap">
+                  <span>Total: <span className="text-[var(--foreground)] font-bold">{(Number(amount) * 1.02).toFixed(4)} SOL</span> (inc. 2% fee)</span>
+                  <span>Share: <span className="text-[var(--success)] font-bold">~{getProjectedPercent(Number(amount)).toFixed(1)}%</span></span>
+                  <span className="ml-auto text-xs">Min: {minBacking} SOL</span>
+                </div>
+              )}
+
+              {backingStatus && (
+                <div className={`p-3 text-sm text-center font-bold uppercase tracking-wide ${
+                  backingStatus.includes('Error')
+                    ? 'bg-[var(--error)]/20 text-[var(--error)] border-2 border-[var(--error)]/30'
+                    : backingStatus.includes('successful')
+                    ? 'bg-[var(--success)]/20 text-[var(--success)] border-2 border-[var(--success)]/30'
+                    : 'bg-[var(--accent)]/20 text-[var(--accent)] border-2 border-[var(--accent)]/30'
+                }`}>
+                  {backingStatus}
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Token Wallet Actions - shown to backers after launch */}
+      {isLaunched && (isCreator || isBacker) && (
+        <ClaimRewards
+          memeId={meme.id}
+          isCreator={isCreator}
+          isBacker={isBacker}
+        />
+      )}
+
+      {/* Details toggle */}
+      <button
+        onClick={() => setShowDetails(!showDetails)}
+        className="w-full flex items-center justify-center gap-2 py-3 bg-[var(--card)] border-2 border-[var(--border)] hover:border-[var(--accent)] text-sm font-bold uppercase tracking-wide text-[var(--muted)] hover:text-[var(--foreground)] transition-all"
+      >
+        <ChevronDown className={`w-4 h-4 transition-transform ${showDetails ? 'rotate-180' : ''}`} />
+        {showDetails ? 'Hide Details' : 'Show Details'}
+      </button>
+
+      {showDetails && (
+        <div className="space-y-4">
+          {/* Slot Grid + Stats (for proving) */}
+          {isProving && (
+            <div className="border-2 border-[var(--border)] bg-[var(--card)] p-5 space-y-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-[var(--muted)] uppercase text-xs tracking-wide font-bold">Backer Slots</span>
+                <span className="font-black">{filledSlots} / {totalSlots} filled</span>
+              </div>
+              <div className="flex gap-2">
+                {Array.from({ length: totalSlots }).map((_, i) => {
+                  const isFilled = i < filledSlots;
+                  const isBourgeoisie = i < 4;
+                  const slotBacking = backings[i];
+                  return (
+                    <div
+                      key={i}
+                      className={`flex-1 h-12 flex flex-col items-center justify-center text-xs font-bold border-2 transition-all ${
+                        isFilled
+                          ? isBourgeoisie
+                            ? 'border-[var(--accent-gold)] bg-[var(--accent-gold)]/20 text-[var(--accent-gold)]'
+                            : 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
+                          : 'border-[var(--border)] bg-[var(--background)] text-[var(--muted)]'
+                      }`}
+                      title={isFilled && slotBacking ? `${Number(slotBacking.amount_sol).toFixed(2)} SOL` : `Slot ${i + 1}`}
+                    >
+                      <span>{i + 1}</span>
+                      {isFilled && slotBacking && (
+                        <span className="text-[10px] opacity-75">{Number(slotBacking.amount_sol).toFixed(1)}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-[var(--accent-gold)]/20 border border-[var(--accent-gold)]" />
+                  <span className="text-[var(--muted)]">Bourgeoisie (first to buy)</span>
+                </div>
+                {totalSlots > 4 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-[var(--accent)]/20 border border-[var(--accent)]" />
+                    <span className="text-[var(--muted)]">Proletariat (fast follow)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* How it works */}
+          <div className="border-2 border-[var(--border)] bg-[var(--card)] p-5">
+            <h3 className="text-sm font-bold uppercase tracking-wide mb-3">How It Works</h3>
+            <ul className="space-y-2 text-sm text-[var(--muted)]">
+              <li className="flex items-start gap-2">
+                <span className="text-[var(--accent-gold)] font-bold">1.</span>
+                <span>Backers pledge SOL to fill {totalSlots} slots</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[var(--accent-gold)] font-bold">2.</span>
+                <span>When full, creator launches on pump.fun</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[var(--accent-gold)] font-bold">3.</span>
+                <span>Your wallet buys automatically — Bourgeoisie first, Proletariat follow</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[var(--accent-gold)] font-bold">4.</span>
+                <span>Claim tokens to your main wallet after launch</span>
+              </li>
+            </ul>
+            <div className="mt-3 pt-3 border-t border-[var(--border)] flex gap-4 text-xs text-[var(--muted)]">
+              <span>Backers earn <span className="text-[var(--success)] font-bold">90%</span> of trading fees</span>
+              <span>Withdrawal fee: <span className="text-[var(--warning)] font-bold">2%</span></span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Comrades & Communications Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">

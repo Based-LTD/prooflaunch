@@ -2,16 +2,8 @@
 
 import { FC, useState } from 'react';
 import Link from 'next/link';
-import { Users, Target, Clock, TrendingUp, Zap, ExternalLink, Shield, Copy, Check } from 'lucide-react';
+import { Users, Target, Clock, TrendingUp, Zap, ExternalLink, Copy, Check } from 'lucide-react';
 import type { Meme } from '@/types/database';
-
-// Get trust score color based on value
-function getTrustScoreColor(score: number): string {
-  if (score >= 80) return 'text-green-400';
-  if (score >= 60) return 'text-yellow-400';
-  if (score >= 40) return 'text-orange-400';
-  return 'text-red-400';
-}
 
 interface MemeCardProps {
   meme: Meme & {
@@ -67,7 +59,6 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
     pump_fun_url,
     mint_address,
     backer_count = 0,
-    trust_score = 75,
   } = meme;
 
   const handleCopyCA = (e: React.MouseEvent) => {
@@ -116,15 +107,9 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
               <span className="text-sm text-[var(--accent-gold)] font-bold">${symbol}</span>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1">
-            <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider ${statusClass}`}>
-              {statusLabel}
-            </span>
-            <div className={`flex items-center gap-1 text-xs font-bold ${getTrustScoreColor(trust_score)}`}>
-              <Shield className="w-3 h-3" />
-              <span>{trust_score}</span>
-            </div>
-          </div>
+          <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider ${statusClass}`}>
+            {statusLabel}
+          </span>
         </div>
 
         {/* Description */}

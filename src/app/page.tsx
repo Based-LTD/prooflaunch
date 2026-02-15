@@ -4,11 +4,11 @@ import { useState, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { MemeCard } from '@/components/MemeCard';
-import { Star, TrendingUp, Users, Search, Loader2, Shield, ArrowUpDown, SlidersHorizontal, ChevronLeft, ChevronRight, Copy, Check, Rocket, Zap } from 'lucide-react';
+import { Star, TrendingUp, Users, Search, Loader2, ArrowUpDown, SlidersHorizontal, ChevronLeft, ChevronRight, Copy, Check, Rocket, Zap } from 'lucide-react';
 import { useRealtimeMemes } from '@/hooks/useRealtimeMemes';
 import type { Meme } from '@/types/database';
 
-type SortOption = 'newest' | 'trust_high' | 'trust_low' | 'progress' | 'ending_soon';
+type SortOption = 'newest' | 'progress' | 'ending_soon';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -18,7 +18,6 @@ export default function Home() {
   const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [minTrustScore, setMinTrustScore] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [caCopied, setCaCopied] = useState(false);
@@ -46,17 +45,12 @@ export default function Home() {
 
   const filteredMemes = useMemo(() => {
     let result = memes.filter(meme =>
-      (meme.name.toLowerCase().includes(search.toLowerCase()) ||
-       meme.symbol.toLowerCase().includes(search.toLowerCase())) &&
-      (meme.trust_score || 75) >= minTrustScore
+      meme.name.toLowerCase().includes(search.toLowerCase()) ||
+       meme.symbol.toLowerCase().includes(search.toLowerCase())
     );
 
     result.sort((a, b) => {
       switch (sortBy) {
-        case 'trust_high':
-          return (b.trust_score || 75) - (a.trust_score || 75);
-        case 'trust_low':
-          return (a.trust_score || 75) - (b.trust_score || 75);
         case 'progress':
           const progressA = Number(a.current_backing_sol) / Number(a.backing_goal_sol);
           const progressB = Number(b.current_backing_sol) / Number(b.backing_goal_sol);
@@ -70,7 +64,7 @@ export default function Home() {
     });
 
     return result;
-  }, [memes, search, minTrustScore, sortBy]);
+  }, [memes, search, sortBy]);
 
   const totalPages = Math.ceil(filteredMemes.length / ITEMS_PER_PAGE);
   const paginatedMemes = useMemo(() => {
@@ -93,10 +87,6 @@ export default function Home() {
     setCurrentPage(1);
   };
 
-  const handleTrustScoreChange = (value: number) => {
-    setMinTrustScore(value);
-    setCurrentPage(1);
-  };
 
   return (
     <div className="space-y-5 -mt-10">
@@ -248,7 +238,7 @@ export default function Home() {
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`px-4 py-2 text-sm font-bold uppercase transition-colors flex items-center gap-2 ${
-                showFilters || minTrustScore > 0
+                showFilters
                   ? 'bg-[var(--accent)] text-white border-2 border-[var(--accent)]'
                   : 'bg-[var(--card)] text-[var(--muted)] border-2 border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--foreground)]'
               }`}
@@ -269,37 +259,14 @@ export default function Home() {
                 className="px-3 py-2 bg-[var(--background)] border-2 border-[var(--border)] text-sm focus:border-[var(--accent)] focus:outline-none"
               >
                 <option value="newest">Newest</option>
-                <option value="trust_high">Trust (High)</option>
-                <option value="trust_low">Trust (Low)</option>
                 <option value="progress">Progress</option>
                 <option value="ending_soon">Ending Soon</option>
               </select>
             </div>
 
-            <div className="flex items-center gap-3 flex-1">
-              <Shield className="w-4 h-4 text-[var(--muted)]" />
-              <span className="text-sm text-[var(--muted)] uppercase whitespace-nowrap">Min Trust:</span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={minTrustScore}
-                onChange={(e) => handleTrustScoreChange(Number(e.target.value))}
-                className="flex-1 h-2 appearance-none cursor-pointer accent-[var(--accent)]"
-              />
-              <span className={`text-sm font-bold min-w-[3rem] ${
-                minTrustScore >= 80 ? 'text-green-400' :
-                minTrustScore >= 60 ? 'text-yellow-400' :
-                minTrustScore >= 40 ? 'text-orange-400' : 'text-[var(--muted)]'
-              }`}>
-                {minTrustScore}+
-              </span>
-            </div>
-
-            {(minTrustScore > 0 || sortBy !== 'newest') && (
+            {sortBy !== 'newest' && (
               <button
                 onClick={() => {
-                  setMinTrustScore(0);
                   setSortBy('newest');
                   setCurrentPage(1);
                 }}

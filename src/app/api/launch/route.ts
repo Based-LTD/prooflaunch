@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { launchWithBurnerWallets, launchWithJitoBundle, LaunchConfig, BurnerBackerInfo } from '@/services/pumpfun';
+import { launchWithBatchedBuys, LaunchConfig, BurnerBackerInfo } from '@/services/pumpfun';
 import { rateLimiters } from '@/lib/rateLimit';
 
-// POST /api/launch - Launch a funded meme token with burner wallet flow
-// Creates token with 0 dev buy, then executes buys from each backer's burner wallet
-// Earlier backers get better prices (lower on bonding curve) - rewards early conviction!
+// POST /api/launch - Launch a funded meme token via batched RPC buys
+// Creates token on pump.fun, then executes buys from each backer's burner wallet
+// Bourgeoisie (slots 1-4) buy first at best prices, Proletariat (slots 5-8) follow in second wave
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient();
@@ -112,8 +112,8 @@ export async function POST(request: NextRequest) {
     console.log(`Launching ${config.name} with ${burnerBackers.length} burner wallets...`);
     console.log('Burner wallets will buy in order of backing time (earliest first = best price)');
 
-    // Launch with Jito bundle (falls back to standard flow if bundle fails)
-    const result = await launchWithJitoBundle(config, burnerBackers);
+    // Launch with batched RPC buys (Bourgeoisie batch 1, Proletariat batch 2)
+    const result = await launchWithBatchedBuys(config, burnerBackers);
 
     if (!result.success || !result.mintAddress) {
       // Revert status on failure
@@ -206,8 +206,6 @@ export async function POST(request: NextRequest) {
       mint_address: result.mintAddress,
       pump_fun_url: result.pumpFunUrl,
       create_signature: result.createSignature,
-      bundle_used: result.bundleUsed || false,
-      bundle_id: result.bundleId || null,
       buy_results: result.buyResults.map(r => ({
         main_wallet: r.mainWallet,
         burner_wallet: r.burnerWallet,

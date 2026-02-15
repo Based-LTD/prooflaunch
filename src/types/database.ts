@@ -25,10 +25,14 @@ export interface Meme {
   discord?: string;
   website?: string;
 
-  // Backing config
-  backing_goal_sol: number;      // How much SOL needed to launch (e.g., 10 SOL)
-  current_backing_sol: number;   // Current amount backed
-  backing_deadline: string;      // ISO date - when backing period ends
+  // Backing config (slot-based system)
+  total_slots: number;           // 2-8 backer slots
+  min_backing_sol: number;       // Minimum SOL per backer (set by creator)
+  current_backing_sol: number;   // Total amount backed (sum of all backings)
+  backing_deadline: string;      // ISO date - when backing period ends (3 days default)
+
+  // Legacy field (deprecated, kept for backward compatibility)
+  backing_goal_sol?: number;     // Old goal-based system - no longer used
 
   // Status
   status: MemeStatus;
@@ -57,6 +61,7 @@ export interface Backing {
   meme_id: string;
   backer_wallet: string;
   amount_sol: number;
+  slot_number: number;           // 1-8, assigned in order of backing
 
   // Transaction tracking
   deposit_tx?: string;           // SOL deposit to escrow
@@ -65,6 +70,13 @@ export interface Backing {
 
   // Status
   status: 'pending' | 'confirmed' | 'refunded' | 'distributed' | 'withdrawn';
+}
+
+// Slot tier types
+export type SlotTier = 'bourgeoisie' | 'proletariat';
+
+export function getSlotTier(slotNumber: number): SlotTier {
+  return slotNumber <= 4 ? 'bourgeoisie' : 'proletariat';
 }
 
 export interface User {
@@ -91,9 +103,9 @@ export interface SubmitMemeRequest {
   telegram?: string;
   discord?: string;
   website?: string;
-  backing_goal_sol: number;
-  backing_days: number;  // How many days for backing period
-  // Trust score parameters
+  total_slots: number;       // 2-8 backer slots
+  min_backing_sol: number;   // Minimum SOL per backer
+  // Trust score parameters (legacy, mostly unused now)
   creator_fee_pct: number;
   backer_share_pct: number;
   dev_initial_buy_sol: number;

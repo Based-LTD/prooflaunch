@@ -74,8 +74,8 @@ export default function SubmitPage() {
     name: '',
     symbol: '',
     description: '',
-    solGoal: 10,
-    duration: 3,
+    totalSlots: 4,        // 2-8 backer slots
+    minBackingSol: 0.1,   // Minimum SOL per backer
     creatorTwitter: '', // Creator's personal X account (Commie Launch only)
     twitter: '',
     website: '',
@@ -246,8 +246,9 @@ export default function SubmitPage() {
           telegram: formData.telegram || undefined,
           discord: formData.discord || undefined,
           website: formData.website || undefined,
-          backing_goal_sol: formData.solGoal,
-          backing_days: formData.duration,
+          total_slots: formData.totalSlots,
+          min_backing_sol: formData.minBackingSol,
+          backing_days: 3, // Fixed 3-day backing period
           // Creation fee payment (goes to escrow for platform costs)
           creation_fee_signature: signature,
           creation_fee_sol: CREATION_FEE_SOL,
@@ -282,7 +283,7 @@ export default function SubmitPage() {
       ...prev,
       [name]: type === 'checkbox'
         ? checked
-        : ['solGoal', 'duration'].includes(name)
+        : ['totalSlots', 'minBackingSol'].includes(name)
         ? Number(value)
         : value
     }));
@@ -366,7 +367,7 @@ export default function SubmitPage() {
   }
 
   // Submissions temporarily disabled for maintenance
-  const SUBMISSIONS_PAUSED = true;
+  const SUBMISSIONS_PAUSED = false;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -688,48 +689,89 @@ export default function SubmitPage() {
             </div>
           </div>
 
-          {/* Goals */}
+          {/* Backer Slots */}
           <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
             <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ Objectives
+              ★ The Collective
             </div>
             <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Upload className="w-5 h-5 text-[var(--accent)]" />
-              Revolutionary Objectives
+              Backer Slots
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-bold uppercase tracking-wide mb-2">Collective Goal *</label>
+                <label className="block text-sm font-bold uppercase tracking-wide mb-2">Number of Slots *</label>
                 <select
-                  name="solGoal"
-                  value={formData.solGoal}
+                  name="totalSlots"
+                  value={formData.totalSlots}
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
                 >
-                  <option value={0.5}>0.5 SOL</option>
-                  <option value={1}>1 SOL</option>
-                  <option value={5}>5 SOL</option>
-                  <option value={10}>10 SOL</option>
-                  <option value={25}>25 SOL</option>
-                  <option value={50}>50 SOL</option>
-                  <option value={100}>100 SOL</option>
+                  <option value={2}>2 slots (2 Bourgeoisie)</option>
+                  <option value={3}>3 slots (3 Bourgeoisie)</option>
+                  <option value={4}>4 slots (4 Bourgeoisie)</option>
+                  <option value={5}>5 slots (4 Bourgeoisie + 1 Proletariat)</option>
+                  <option value={6}>6 slots (4 Bourgeoisie + 2 Proletariat)</option>
+                  <option value={7}>7 slots (4 Bourgeoisie + 3 Proletariat)</option>
+                  <option value={8}>8 slots (4 Bourgeoisie + 4 Proletariat)</option>
                 </select>
-                <span className="text-xs text-[var(--muted)]">Resources needed to launch</span>
+                <span className="text-xs text-[var(--muted)]">Token launches when all slots are filled</span>
               </div>
               <div>
-                <label className="block text-sm font-bold uppercase tracking-wide mb-2">Backing Duration *</label>
+                <label className="block text-sm font-bold uppercase tracking-wide mb-2">Minimum Backing *</label>
                 <select
-                  name="duration"
-                  value={formData.duration}
+                  name="minBackingSol"
+                  value={formData.minBackingSol}
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
                 >
-                  <option value={1}>1 day</option>
-                  <option value={3}>3 days</option>
-                  <option value={5}>5 days</option>
-                  <option value={7}>7 days</option>
+                  <option value={0.1}>0.1 SOL minimum</option>
+                  <option value={0.25}>0.25 SOL minimum</option>
+                  <option value={0.5}>0.5 SOL minimum</option>
+                  <option value={1}>1 SOL minimum</option>
+                  <option value={2}>2 SOL minimum</option>
+                  <option value={5}>5 SOL minimum</option>
                 </select>
+                <span className="text-xs text-[var(--muted)]">Each backer must contribute at least this amount</span>
+              </div>
+            </div>
+
+            {/* Slot Preview */}
+            <div className="mt-4 p-4 bg-[var(--background)] border border-[var(--border)]">
+              <div className="text-sm font-bold uppercase tracking-wide mb-3">Launch Preview</div>
+              <div className="flex gap-2 flex-wrap mb-3">
+                {Array.from({ length: formData.totalSlots }).map((_, i) => {
+                  const isBourgeoisie = i < 4;
+                  return (
+                    <div
+                      key={i}
+                      className={`w-10 h-10 flex items-center justify-center text-xs font-bold border-2 ${
+                        isBourgeoisie
+                          ? 'border-[var(--accent-gold)] bg-[var(--accent-gold)]/10 text-[var(--accent-gold)]'
+                          : 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                      }`}
+                    >
+                      {i + 1}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-[var(--accent-gold)]/20 border border-[var(--accent-gold)]" />
+                  <span className="text-[var(--muted)]">Bourgeoisie (first to buy)</span>
+                </div>
+                {formData.totalSlots > 4 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-[var(--accent)]/20 border border-[var(--accent)]" />
+                    <span className="text-[var(--muted)]">Proletariat (fast follow-up)</span>
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 text-sm text-[var(--muted)]">
+                Minimum raise: <span className="font-bold text-[var(--foreground)]">{(formData.totalSlots * formData.minBackingSol).toFixed(2)} SOL</span>
+                <span className="text-xs ml-2">(if everyone backs minimum)</span>
               </div>
             </div>
           </div>
@@ -755,9 +797,10 @@ export default function SubmitPage() {
               <div className="text-sm">
                 <p className="font-bold text-[var(--accent)] mb-1 uppercase tracking-wide">The Path to Victory</p>
                 <p className="text-[var(--foreground)]/80">
-                  Once your meme reaches its SOL goal, it will deploy on Pump.fun.
-                  Your token will be instantly visible on Axiom, Photon, and other platforms.
-                  If the goal isn&apos;t reached, backers get their SOL back (minus 2% early withdrawal fee).
+                  Once all backer slots are filled, the token launches on Pump.fun.
+                  <strong> Bourgeoisie</strong> backers (slots 1-4) buy first at the best prices on the bonding curve.
+                  <strong> Proletariat</strong> backers (slots 5-8) buy immediately after.
+                  3-day deadline. If slots don&apos;t fill, backers get refunds.
                 </p>
               </div>
             </div>

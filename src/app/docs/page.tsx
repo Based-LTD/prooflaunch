@@ -104,22 +104,24 @@ export default function DocsPage() {
               <p className="text-[var(--foreground)]/80 leading-relaxed">
                 Commie Launch is the people's meme coin launchpad on Solana. Unlike bourgeois
                 launches where developers control everything, here <strong>the people unite BEFORE
-                tokens launch</strong>. Comrades pool SOL to prove solidarity in a meme, and once the
-                goal is reached, the token launches on Pump.fun with comrades receiving tokens
-                proportional to their contribution.
+                tokens launch</strong>. Creators set up to 8 backer slots, and once all slots are filled,
+                the token launches on Pump.fun with comrades receiving tokens proportional to their contribution.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
                   <div className="text-3xl font-black text-[var(--accent)]">1</div>
                   <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Submit a Meme</div>
+                  <div className="text-xs text-[var(--muted)] mt-1">Set 2-8 slots + minimum</div>
                 </div>
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
                   <div className="text-3xl font-black text-[var(--accent)]">2</div>
-                  <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Comrades Unite</div>
+                  <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Fill All Slots</div>
+                  <div className="text-xs text-[var(--muted)] mt-1">Comrades claim slots</div>
                 </div>
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
                   <div className="text-3xl font-black text-[var(--accent)]">3</div>
                   <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Launch on Pump.fun</div>
+                  <div className="text-xs text-[var(--muted)] mt-1">All buy instantly</div>
                 </div>
               </div>
             </section>
@@ -139,10 +141,10 @@ export default function DocsPage() {
               </p>
               <div className="space-y-3 pt-2">
                 {[
-                  { num: '1', title: 'You Back a Meme', desc: 'When you click "Join the Revolution", a fresh keypair (token wallet) is generated. Your SOL goes directly to this wallet - not to a shared pool.' },
-                  { num: '2', title: 'Wallet is Locked', desc: 'Until launch, your token wallet is locked - you cannot add more SOL or spend from it. This ensures fair ordering and prevents manipulation.' },
-                  { num: '3', title: 'Token Launches', desc: 'When the goal is reached and the creator launches, each token wallet executes its own buy on Pump.fun. Earlier backers get better prices!' },
-                  { num: '4', title: 'Full Access', desc: 'Immediately after launch, your token wallet is unlocked. Transfer tokens to your main wallet, export the private key to Phantom, or sell directly.' },
+                  { num: '1', title: 'Claim a Slot', desc: 'When you click "Join the Revolution", you claim one of 2-8 available slots. A token wallet is created for your backing.' },
+                  { num: '2', title: 'Wallet is Locked', desc: 'Until launch, your token wallet is locked. This ensures fair ordering and prevents manipulation.' },
+                  { num: '3', title: 'All Slots Fill → Launch', desc: 'When all slots are filled, the token launches. Slots 1-4 (Bourgeoisie) buy first at the lowest prices. Slots 5-8 (Proletariat) buy immediately after.' },
+                  { num: '4', title: 'Full Access', desc: 'After launch, transfer tokens to your main wallet, export the private key to Phantom, or sell directly on pump.fun.' },
                 ].map((step) => (
                   <div key={step.num} className="flex items-start gap-4 p-4 bg-[var(--background)] border-l-4 border-[var(--warning)]">
                     <div className="w-8 h-8 bg-[var(--warning)] text-black flex items-center justify-center text-sm font-black flex-shrink-0">
@@ -155,13 +157,13 @@ export default function DocsPage() {
                   </div>
                 ))}
               </div>
-              <div className="bg-[var(--success)]/10 border-2 border-[var(--success)]/30 p-4 mt-4">
-                <h3 className="font-bold text-[var(--success)] mb-2 uppercase tracking-wide">Why Token Wallets?</h3>
+              <div className="bg-[var(--accent-gold)]/10 border-2 border-[var(--accent-gold)]/30 p-4 mt-4">
+                <h3 className="font-bold text-[var(--accent-gold)] mb-2 uppercase tracking-wide">The Two Tiers</h3>
                 <ul className="text-sm text-[var(--muted)] space-y-1">
-                  <li>★ <strong>Organic on-chain activity:</strong> Each buy is a separate transaction from a unique wallet</li>
-                  <li>★ <strong>Fair ordering:</strong> Earlier backers buy first and get better prices</li>
-                  <li>★ <strong>No front-running:</strong> Nobody can snipe ahead of the community</li>
-                  <li>★ <strong>Transparent:</strong> All buys are visible on-chain from identifiable wallets</li>
+                  <li>★ <strong className="text-[var(--accent-gold)]">Bourgeoisie (slots 1-4):</strong> First to buy right after token creation - best prices on the curve</li>
+                  <li>★ <strong className="text-[var(--accent)]">Proletariat (slots 5-8):</strong> Second wave buys immediately after Bourgeoisie</li>
+                  <li>★ <strong>First come, first served:</strong> Earlier backers get the protected slots</li>
+                  <li>★ <strong>No max per wallet:</strong> Back as much as you want (just meet the minimum)</li>
                 </ul>
               </div>
             </section>
@@ -173,14 +175,14 @@ export default function DocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">The Proving Phase</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                When a meme is submitted, it enters the "Proving" phase. During this time:
+                When a meme is submitted, it enters the "Proving" phase. Comrades race to fill the available slots:
               </p>
               <ul className="space-y-3">
                 {[
-                  { title: 'Backers pledge SOL', desc: 'Send SOL to your token wallet to show support. Your funds stay in your wallet until launch.' },
-                  { title: 'Max 10% per wallet', desc: 'No single wallet can back more than 10% of the goal, ensuring fair distribution.' },
-                  { title: 'Withdraw anytime', desc: 'Changed your mind? Withdraw your backing before launch (2% withdrawal fee).' },
-                  { title: 'Time-limited', desc: 'Each meme has a deadline. If the goal isn\'t reached, backers can claim a refund from Portfolio.' },
+                  { title: 'Claim a slot', desc: 'Back at least the creator\'s minimum amount to claim one of 2-8 available slots. No maximum - back as much as you want!' },
+                  { title: 'First 4 = Bourgeoisie', desc: 'The first 4 backers get Bourgeoisie slots and buy first at the best prices on the bonding curve.' },
+                  { title: 'Slots 5-8 = Proletariat', desc: 'Additional backers get Proletariat slots and buy in the second wave, right after Bourgeoisie.' },
+                  { title: 'Withdraw anytime', desc: 'Changed your mind? Withdraw before launch (2% fee). If slots don\'t fill in 3 days, claim refund from Portfolio.' },
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 p-3 bg-[var(--background)] border-l-4 border-[var(--success)]">
                     <CheckCircle className="w-5 h-5 text-[var(--success)] mt-0.5 flex-shrink-0" />
@@ -206,12 +208,12 @@ export default function DocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { icon: Coins, color: 'text-[var(--accent)]', title: 'Back Memes You Believe In', desc: 'Browse the Proving Grounds and back memes with SOL. Your backing shows community support and helps reach the launch goal.' },
-                { icon: Key, color: 'text-[var(--warning)]', title: 'Your Own Token Wallet', desc: 'Each backing creates a unique wallet. You can export the private key and import it into Phantom for full control of your tokens.' },
-                { icon: Zap, color: 'text-[var(--success)]', title: 'Early Backers Get Better Prices', desc: 'Token wallets buy in order of backing time. Be early to get lower prices on the bonding curve and more tokens for your SOL!' },
-                { icon: Wallet, color: 'text-[var(--accent-gold)]', title: 'Transfer or Sell After Launch', desc: 'After launch, visit your Portfolio to transfer tokens to your main wallet, or sell directly from the token wallet. You have full control.' },
-                { icon: Undo2, color: 'text-[var(--error)]', title: 'Withdraw Anytime', desc: 'Changed your mind? Withdraw your backing before the token launches. Your SOL is returned directly to your wallet (minus 2% fee).' },
-                { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Earn Trading Fees', desc: 'Genesis backers earn a share of all trading fees proportional to their contribution. 90% of fees go to backers, 10% to the platform.' },
+                { icon: Coins, color: 'text-[var(--accent)]', title: 'Claim a Slot', desc: 'Browse the Proving Grounds and claim one of 2-8 backer slots. First 4 slots (Bourgeoisie) buy first at the best prices!' },
+                { icon: Key, color: 'text-[var(--warning)]', title: 'Your Own Token Wallet', desc: 'Each backing creates a unique wallet. Export the private key and import it into Phantom for full control of your tokens.' },
+                { icon: Zap, color: 'text-[var(--success)]', title: 'Bourgeoisie = Best Prices', desc: 'Slots 1-4 are first to buy right after token creation — lowest prices on the bonding curve. Be early to secure a Bourgeoisie slot!' },
+                { icon: Wallet, color: 'text-[var(--accent-gold)]', title: 'Transfer or Sell After Launch', desc: 'After launch, transfer tokens to your main wallet or sell directly on pump.fun. You have full control.' },
+                { icon: Undo2, color: 'text-[var(--error)]', title: 'Withdraw Anytime', desc: 'Changed your mind? Withdraw before launch. Your SOL returns to your wallet (minus 2% fee).' },
+                { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Earn Trading Fees', desc: 'Genesis backers earn 90% of all trading fees proportional to contribution. Platform takes 10%.' },
               ].map((item, i) => {
                 const Icon = item.icon;
                 return (
@@ -240,9 +242,9 @@ export default function DocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { num: '1', title: 'Submit Your Meme (0.02 SOL)', desc: 'Create your meme with name, symbol, description, and image. Set your backing goal and duration.' },
-                { num: '2', title: 'Build Community', desc: 'Share your meme page, engage in the comrade chat, and rally backers to reach your goal before the deadline.' },
-                { num: '3', title: 'Launch on Pump.fun', desc: 'Once fully funded, click "Launch" to deploy your token on Pump.fun. Each backer\'s token wallet then buys tokens in order of backing time.' },
+                { num: '1', title: 'Submit Your Meme (0.02 SOL)', desc: 'Create your meme with name, symbol, description, and image. Set 2-8 backer slots and a minimum backing amount.' },
+                { num: '2', title: 'Fill the Slots', desc: 'Share your meme page, engage in the comrade chat, and rally backers to fill all slots within 3 days.' },
+                { num: '3', title: 'Launch on Pump.fun', desc: 'Once all slots are filled, click "Launch". Bourgeoisie slots (1-4) buy first at the best prices. Proletariat slots (5-8) follow immediately in a second wave.' },
               ].map((step) => (
                 <div key={step.num} className="flex items-start gap-4 p-4 bg-[var(--background)] border-l-4 border-[var(--accent-gold)]">
                   <div className="w-8 h-8 bg-[var(--accent-gold)] text-black flex items-center justify-center text-sm font-black flex-shrink-0">
@@ -280,7 +282,7 @@ export default function DocsPage() {
               <div className="space-y-3 pt-2">
                 {[
                   { label: 'Creation Fee', value: '0.02 SOL', color: 'border-[var(--accent)]', desc: 'One-time fee when submitting a meme. Covers token creation costs on Pump.fun.' },
-                  { label: 'Platform Fee (Backing)', value: '2% or 0.01 SOL min', color: 'border-[var(--success)]', desc: 'Added to each backing: 2% of your backing amount, or 0.01 SOL minimum (whichever is higher).' },
+                  { label: 'Platform Fee (Backing)', value: '2%', color: 'border-[var(--success)]', desc: 'Added to each backing: 2% of your backing amount.' },
                   { label: 'Withdrawal Fee', value: '2%', color: 'border-[var(--warning)]', desc: 'If you withdraw your backing before launch, 2% is deducted to discourage frivolous backing/withdrawing.' },
                   { label: 'Trading Fees', value: '10% platform cut', color: 'border-[var(--accent)]', desc: 'Platform takes 10% of Pump.fun creator fees for sustainability. The remaining 90% goes to all backers proportionally.' },
                 ].map((fee, i) => (
@@ -431,13 +433,14 @@ export default function DocsPage() {
             </div>
             <div className="space-y-3">
               {[
-                { q: 'What happens if the goal isn\'t reached?', a: 'If the backing deadline passes without reaching the goal, backers can claim a refund from their Portfolio page. Refunds return SOL from your token wallet back to your main wallet.' },
+                { q: 'What happens if slots don\'t fill?', a: 'If all slots aren\'t filled within 3 days, the meme expires. Backers can claim a refund from their Portfolio page. Refunds return SOL from your token wallet back to your main wallet.' },
                 { q: 'How do I get my tokens after launch?', a: 'Your tokens are in your token wallet after launch. You can transfer them from the meme page or from Portfolio. Click "Transfer" to move them to your main wallet, or "Export Key" to import the wallet into Phantom.' },
-                { q: 'Why do earlier backers get better prices?', a: 'Each token wallet buys tokens in order of when you backed. Pump.fun uses a bonding curve where price increases with each purchase. Being first = lower price!' },
+                { q: 'What\'s the difference between Bourgeoisie and Proletariat?', a: 'Bourgeoisie (slots 1-4) are first to buy right after token creation — they get the lowest prices on the bonding curve. Proletariat (slots 5-8) buy in the second wave immediately after. Both get great prices, but Bourgeoisie buys before the curve moves.' },
                 { q: 'Can I back multiple times?', a: 'Currently one backing per wallet per meme. Withdraw first if you want to change your backing amount.' },
-                { q: 'What\'s the minimum backing amount?', a: 'The minimum is 0.01 SOL. Maximum is 10% of the goal to ensure fair distribution.' },
+                { q: 'What\'s the minimum/maximum backing?', a: 'The creator sets a minimum backing amount (at least 0.05 SOL). There is NO maximum - back as much as you want! Your share of tokens and trading fees is proportional to your contribution.' },
                 { q: 'Where does my backed SOL go?', a: 'Your SOL goes to your own token wallet (unique keypair). On launch, that wallet executes a buy on Pump.fun. The tokens stay in the wallet until you transfer them.' },
                 { q: 'Can I access my token wallet before launch?', a: 'No. Token wallets are locked until the meme launches. You cannot add more SOL or spend from it. After launch, you get full access immediately - transfer tokens, export the key, or sell.' },
+                { q: 'How do I secure a Bourgeoisie slot?', a: 'First come, first served! The first 4 backers get Bourgeoisie slots and buy first at the best prices. Watch the slot grid on the meme page to see what\'s available.' },
               ].map((faq, i) => (
                 <div key={i} className="bg-[var(--background)] border-2 border-[var(--border)] p-4 hover:border-[var(--accent)] transition-colors">
                   <h3 className="font-bold mb-2 uppercase tracking-wide text-sm">{faq.q}</h3>

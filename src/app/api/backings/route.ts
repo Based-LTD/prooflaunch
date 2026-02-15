@@ -114,15 +114,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (amount_sol < 0.01) {
-      return NextResponse.json(
-        { error: 'Minimum backing is 0.01 SOL' },
-        { status: 400 }
-      );
-    }
-
-    const maxBackingPercent = 0.1; // 10% max per wallet
-
     // Check if meme exists and is in backing phase
     const { data: meme, error: memeError } = await supabase
       .from('memes')
@@ -149,8 +140,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check max backing per wallet (10% of goal)
-    const maxBackingPerWallet = Number(meme.backing_goal_sol) * maxBackingPercent;
+    // Validate minimum backing amount (set by creator)
+    const minBacking = Number(meme.min_backing_sol) || 0.05;
+    if (amount_sol < minBacking) {
+      return NextResponse.json(
+        { error: `Minimum backing is ${minBacking} SOL` },
+        { status: 400 }
+      );
+    }
 
     // Check if this wallet already has an active backing
     const { data: existingBacking } = await supabase
@@ -162,8 +159,6 @@ export async function POST(request: NextRequest) {
       .single();
 
     // Don't allow multiple backings from the same wallet
-    // Each backing creates a new burner wallet, so allowing multiple would be complex
-    // Users can withdraw and re-back if they want to change their amount
     if (existingBacking) {
       return NextResponse.json(
         {
@@ -173,15 +168,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if backing amount exceeds max per wallet
-    if (amount_sol > maxBackingPerWallet) {
+    // Count current confirmed backings to check slot availability
+    const { count: currentBackerCount } = await supabase
+      .from('backings')
+      .select('id', { count: 'exact', head: true })
+      .eq('meme_id', meme_id)
+      .neq('status', 'withdrawn');
+
+    const totalSlots = Number(meme.total_slots) || 8;
+    const filledSlots = currentBackerCount || 0;
+
+    if (filledSlots >= totalSlots) {
       return NextResponse.json(
-        {
-          error: `Maximum backing per wallet is ${maxBackingPerWallet.toFixed(2)} SOL (10% of goal).`,
-        },
+        { error: 'All backer slots are filled' },
         { status: 400 }
       );
     }
+
+    // Assign slot number (1-indexed)
+    const slotNumber = filledSlots + 1;
+    const slotTier = slotNumber <= 4 ? 'Bourgeoisie' : 'Proletariat';
 
     // Verify the deposit transaction on-chain (with fallback)
     // This ensures the user actually sent SOL to the escrow wallet
@@ -203,7 +209,7 @@ export async function POST(request: NextRequest) {
       .from('users')
       .upsert({ wallet_address: backer_wallet }, { onConflict: 'wallet_address' });
 
-    // Create new backing with burner wallet info
+    // Create new backing with burner wallet info and slot number
     const { data, error } = await supabase
       .from('backings')
       .insert({
@@ -214,44 +220,46 @@ export async function POST(request: NextRequest) {
         status: 'confirmed',
         burner_wallet,
         encrypted_private_key: storedPrivateKey,
+        slot_number: slotNumber,
       })
       .select()
       .single();
+
+    console.log(`Backing created: slot ${slotNumber} (${slotTier}) for ${amount_sol} SOL`);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Check if this backing pushed the meme over its goal
-    // If so, update status to funded (creator launches manually via /api/launch)
-    const { data: updatedMeme } = await supabase
-      .from('memes')
-      .select('*')
-      .eq('id', meme_id)
-      .single();
+    // Check if all slots are now filled - if so, update status to funded
+    const newFilledSlots = slotNumber; // We just filled this slot
+    const allSlotsFilled = newFilledSlots >= totalSlots;
 
-    if (updatedMeme) {
-      const currentBacking = Number(updatedMeme.current_backing_sol);
-      const goal = Number(updatedMeme.backing_goal_sol);
+    if (allSlotsFilled && meme.status === 'backing') {
+      console.log(`All ${totalSlots} slots filled for ${meme.name}! Updating to funded status.`);
 
-      if (currentBacking >= goal && updatedMeme.status === 'backing') {
-        console.log(`Goal reached for ${updatedMeme.name}! Updating to funded status.`);
+      // Update status to funded - creator will launch via the launch button
+      await supabase
+        .from('memes')
+        .update({ status: 'funded' })
+        .eq('id', meme_id);
 
-        // Update status to funded - creator will launch via the launch button
-        await supabase
-          .from('memes')
-          .update({ status: 'funded' })
-          .eq('id', meme_id);
-
-        return NextResponse.json({
-          backing: data,
-          goalReached: true,
-          message: 'Goal reached! Token is ready to launch.',
-        }, { status: 201 });
-      }
+      return NextResponse.json({
+        backing: data,
+        slotNumber,
+        slotTier,
+        allSlotsFilled: true,
+        message: `All slots filled! Token is ready to launch. You claimed slot ${slotNumber} (${slotTier}).`,
+      }, { status: 201 });
     }
 
-    return NextResponse.json({ backing: data }, { status: 201 });
+    return NextResponse.json({
+      backing: data,
+      slotNumber,
+      slotTier,
+      slotsRemaining: totalSlots - slotNumber,
+      message: `You claimed slot ${slotNumber} (${slotTier}). ${totalSlots - slotNumber} slots remaining.`,
+    }, { status: 201 });
   } catch (error) {
     console.error('Create backing error:', error);
     return NextResponse.json(

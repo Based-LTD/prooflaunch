@@ -31,6 +31,9 @@ SELECT
   m.dev_initial_buy_sol,
   m.auto_refund,
   m.trust_score,
+  m.total_slots,
+  m.min_backing_sol,
+  m.creator_twitter,
   (SELECT COUNT(*) FROM backings b WHERE b.meme_id = m.id AND b.status = 'confirmed') AS backer_count,
   (m.backing_goal_sol - m.current_backing_sol) AS remaining_sol,
   (m.current_backing_sol / m.backing_goal_sol * 100) AS progress_percent

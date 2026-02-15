@@ -78,7 +78,10 @@ export async function POST(request: NextRequest) {
       telegram,
       discord,
       website,
-      backing_goal_sol,
+      // New slot-based backing system
+      total_slots,         // 2-8 backer slots
+      min_backing_sol,     // Minimum SOL per backer
+      // Legacy field (unused, kept for old client compatibility)
       backing_days,
       // Legacy trust score parameters (no longer used in fee distribution)
       // All backers (including creator) now split 90% equally
@@ -121,9 +124,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!backing_goal_sol || backing_goal_sol < 0.5) {
+    // Validate slot-based backing system
+    if (!total_slots || total_slots < 2 || total_slots > 8) {
       return NextResponse.json(
-        { error: 'Backing goal must be at least 0.5 SOL' },
+        { error: 'Total slots must be between 2 and 8' },
+        { status: 400 }
+      );
+    }
+
+    if (!min_backing_sol || min_backing_sol < 0.05) {
+      return NextResponse.json(
+        { error: 'Minimum backing must be at least 0.05 SOL' },
         { status: 400 }
       );
     }
@@ -148,7 +159,7 @@ export async function POST(request: NextRequest) {
       console.error('User upsert error:', userError);
     }
 
-    // Create meme
+    // Create meme with slot-based backing system
     const { data, error } = await supabase
       .from('memes')
       .insert({
@@ -162,7 +173,10 @@ export async function POST(request: NextRequest) {
         telegram,
         discord,
         website,
-        backing_goal_sol,
+        // Slot-based backing system
+        total_slots,
+        min_backing_sol,
+        backing_goal_sol: min_backing_sol * total_slots, // Minimum possible raise (for compatibility)
         backing_deadline: deadline.toISOString(),
         status: 'backing', // Start in backing phase
         submission_fee_paid: true, // Fee paid via creation_fee_signature
