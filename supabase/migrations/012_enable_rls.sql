@@ -64,7 +64,7 @@ GRANT SELECT (
   status,
   created_at,
   tokens_received,
-  distribution_tx,
+
   refund_tx,
   claimable_fees_sol,
   total_claimed_sol,
@@ -86,7 +86,7 @@ GRANT SELECT (
   status,
   created_at,
   tokens_received,
-  distribution_tx,
+
   refund_tx,
   claimable_fees_sol,
   total_claimed_sol,
