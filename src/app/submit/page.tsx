@@ -219,6 +219,9 @@ export default function SubmitPage() {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
+      // Pre-simulate with sigVerify: false so Phantom sees a passing simulation
+      await connection.simulateTransaction(transaction, { sigVerify: false });
+
       // Use signTransaction (not signAndSendTransaction) to avoid
       // Phantom's "may be harmful" warning on unfamiliar addresses
       const signed = await signTransaction!(transaction);

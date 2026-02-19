@@ -237,6 +237,9 @@ export default function MemeDetailPage() {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
+      // Pre-simulate with sigVerify: false so Phantom sees a passing simulation
+      await connection.simulateTransaction(transaction, { sigVerify: false });
+
       // 4. Sign and send transaction — use signTransaction (not signAndSendTransaction)
       // to avoid Phantom's "may be harmful" warning on unfamiliar addresses
       const totalSol = (amountSol + platformFee).toFixed(4);
