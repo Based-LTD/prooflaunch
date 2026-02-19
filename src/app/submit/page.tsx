@@ -66,7 +66,7 @@ function validateUrl(url: string, pattern?: RegExp, name?: string): string | und
 }
 
 export default function SubmitPage() {
-  const { connected, publicKey, sendTransaction } = useWallet();
+  const { connected, publicKey, signTransaction } = useWallet();
   const { connection } = useConnection();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -215,14 +215,21 @@ export default function SubmitPage() {
         })
       );
 
-      const { blockhash } = await connection.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
-      const signature = await sendTransaction(transaction, connection);
+      // Use signTransaction (not signAndSendTransaction) to avoid
+      // Phantom's "may be harmful" warning on unfamiliar addresses
+      const signed = await signTransaction!(transaction);
+      const signature = await connection.sendRawTransaction(signed.serialize());
 
-      // Wait briefly for transaction to propagate
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Confirm the transaction landed
+      await connection.confirmTransaction({
+        signature,
+        blockhash,
+        lastValidBlockHeight,
+      }, 'confirmed');
 
       // Step 2: Create the meme with the payment signature and burner wallet
       let imageUrl = 'https://placehold.co/400x400/1a1a2e/ffffff?text=' + formData.symbol;

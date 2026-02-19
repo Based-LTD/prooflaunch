@@ -59,7 +59,7 @@ function getStatusConfig(status: string) {
 
 export default function MemeDetailPage() {
   const { id } = useParams();
-  const { connected, publicKey, sendTransaction, signMessage } = useWallet();
+  const { connected, publicKey, signTransaction, signMessage } = useWallet();
   const { connection } = useConnection();
   const [amount, setAmount] = useState('');
   const [tradeType, setTradeType] = useState<'back' | 'buy' | 'sell'>('back');
@@ -233,18 +233,24 @@ export default function MemeDetailPage() {
       }
 
       // Get recent blockhash
-      const { blockhash } = await connection.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
-      // 4. Send transaction via wallet
+      // 4. Sign and send transaction — use signTransaction (not signAndSendTransaction)
+      // to avoid Phantom's "may be harmful" warning on unfamiliar addresses
       const totalSol = (amountSol + platformFee).toFixed(4);
       setBackingStatus(`Approve transfer of ${totalSol} SOL...`);
-      const txSignature = await sendTransaction(transaction, connection);
+      const signed = await signTransaction!(transaction);
+      const txSignature = await connection.sendRawTransaction(signed.serialize());
 
-      // 5. Wait briefly for transaction to propagate
+      // 5. Confirm transaction landed
       setBackingStatus('Processing transaction...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await connection.confirmTransaction({
+        signature: txSignature,
+        blockhash,
+        lastValidBlockHeight,
+      }, 'confirmed');
 
       // 6. Register backing with API (private key sent securely over HTTPS)
       setBackingStatus('Registering backing...');
