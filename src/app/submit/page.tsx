@@ -786,6 +786,11 @@ export default function SubmitPage() {
                   A small fee covers token creation on Pump.fun.
                   To receive tokens at launch, you must also back your own meme separately.
                 </p>
+                <p className="text-[var(--muted)] mt-2 text-xs">
+                  Phantom may show a &quot;This transaction may be harmful&quot; warning — this is a false positive.
+                  Our escrow address is new and hasn&apos;t been allowlisted with Phantom&apos;s security provider yet.
+                  It is safe to proceed.
+                </p>
               </div>
             </div>
           </div>
