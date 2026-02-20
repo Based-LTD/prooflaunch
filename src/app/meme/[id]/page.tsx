@@ -186,6 +186,21 @@ export default function MemeDetailPage() {
       return;
     }
 
+    // Check wallet balance before attempting transaction
+    const totalNeeded = amountSol + (amountSol * PLATFORM_FEE_PERCENT) + 0.005; // backing + 2% fee + tx fees buffer
+    try {
+      const balance = await connection.getBalance(publicKey);
+      const balanceSol = balance / LAMPORTS_PER_SOL;
+      if (balanceSol < totalNeeded) {
+        setBackingStatus(
+          `Error: Insufficient balance. You have ${balanceSol.toFixed(4)} SOL but need ~${totalNeeded.toFixed(4)} SOL (${amountSol} backing + ${(amountSol * PLATFORM_FEE_PERCENT).toFixed(4)} fee + tx costs).`
+        );
+        return;
+      }
+    } catch {
+      // If balance check fails, proceed and let the transaction handle it
+    }
+
     setBacking(true);
     setBackingStatus('Creating token wallet...');
 
