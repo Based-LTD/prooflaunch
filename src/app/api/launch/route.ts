@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { launchWithBatchedBuys, LaunchConfig, BurnerBackerInfo } from '@/services/pumpfun';
+import { verifyWalletSignature } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 
 // POST /api/launch - Launch a funded meme token via batched RPC buys
@@ -11,12 +12,27 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
     const body = await request.json();
 
-    const { meme_id, caller_wallet } = body;
+    const { meme_id, caller_wallet, signature, message } = body;
 
     if (!meme_id) {
       return NextResponse.json(
         { error: 'Missing meme_id' },
         { status: 400 }
+      );
+    }
+
+    if (!caller_wallet || !signature || !message) {
+      return NextResponse.json(
+        { error: 'Missing required auth fields: caller_wallet, signature, message' },
+        { status: 400 }
+      );
+    }
+
+    // Verify the wallet signature
+    if (!verifyWalletSignature(message, signature, caller_wallet)) {
+      return NextResponse.json(
+        { error: 'Invalid wallet signature' },
+        { status: 401 }
       );
     }
 
@@ -40,8 +56,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
     }
 
-    // Verify caller is the creator (if caller_wallet provided)
-    if (caller_wallet && caller_wallet !== meme.creator_wallet) {
+    // Verify caller is the creator
+    if (caller_wallet !== meme.creator_wallet) {
       return NextResponse.json(
         { error: 'Only the creator can launch this token' },
         { status: 403 }

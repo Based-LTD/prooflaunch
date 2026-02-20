@@ -1354,13 +1354,12 @@ async function executeBurnerBuy(
   }
 }
 
-// Decrypt a burner wallet private key (server-side encrypted)
-// The key is stored as "enc:<base64-encoded-private-key>"
+// Decrypt a burner wallet private key and return as Keypair
+// Handles both legacy "enc:" and new "aes:" formats via shared crypto lib
 function decryptBurnerKey(encryptedKey: string): Keypair {
-  // Check for our encryption prefix
-  if (encryptedKey.startsWith('enc:')) {
-    const base64Key = encryptedKey.slice(4);
-    const privateKeyStr = Buffer.from(base64Key, 'base64').toString('utf-8');
+  if (encryptedKey.startsWith('enc:') || encryptedKey.startsWith('aes:')) {
+    const { decryptPrivateKey } = require('@/lib/crypto');
+    const privateKeyStr = decryptPrivateKey(encryptedKey);
     return Keypair.fromSecretKey(bs58.decode(privateKeyStr));
   }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { verifyDeposit, getEscrowAddress } from '@/services/pumpfun';
+import { encryptPrivateKey } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 
 // GET /api/backings - Get backings for a user or meme
@@ -90,13 +91,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Server-side encryption of the private key
-    // Uses a simple XOR with a server secret for now
-    // In production, use proper AES encryption
-    const serverSecret = process.env.BURNER_ENCRYPTION_KEY || 'prooflaunch-default-key-change-me';
-    const encryptedPrivateKey = Buffer.from(burner_private_key).toString('base64');
-    // Store with a prefix so we know it's encrypted
-    const storedPrivateKey = `enc:${encryptedPrivateKey}`;
+    // Encrypt the private key with AES-256-GCM before storing
+    const storedPrivateKey = encryptPrivateKey(burner_private_key);
 
     // Rate limiting - 5 backing requests per minute per wallet
     const rateLimitResult = rateLimiters.backing(backer_wallet);
@@ -189,8 +185,7 @@ export async function POST(request: NextRequest) {
     const slotNumber = filledSlots + 1;
     const slotTier = slotNumber <= 4 ? 'Bourgeoisie' : 'Proletariat';
 
-    // Verify the deposit transaction on-chain (with fallback)
-    // This ensures the user actually sent SOL to the escrow wallet
+    // Verify the deposit transaction on-chain
     let isValid = false;
     try {
       isValid = await verifyDeposit(deposit_tx, amount_sol, backer_wallet);
@@ -198,10 +193,11 @@ export async function POST(request: NextRequest) {
       console.error('Verification error:', verifyError);
     }
 
-    // If verification fails, log but proceed anyway (trust the client for now)
-    // The transaction signature is stored for later audit if needed
     if (!isValid) {
-      console.warn(`Could not verify deposit ${deposit_tx} for ${amount_sol} SOL from ${backer_wallet}. Proceeding anyway.`);
+      return NextResponse.json(
+        { error: 'Could not verify deposit on-chain. Please try again.' },
+        { status: 400 }
+      );
     }
 
     // Ensure user exists

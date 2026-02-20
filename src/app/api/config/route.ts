@@ -31,7 +31,7 @@ export async function GET() {
       platform_fee_bps: 200, // 2%
       min_backing_sol: 0.01,
       submission_fee_sol: 0.05,
-      rpc_url: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+      // rpc_url intentionally omitted — don't expose RPC API key to clients
     });
   } catch (error) {
     console.error('Config error:', error);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { verifyWalletSignature, decryptPrivateKey } from '@/lib/crypto';
 
 // POST /api/backings/export-key - Export burner wallet private key (only after launch)
 export async function POST(request: NextRequest) {
@@ -7,13 +8,28 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
     const body = await request.json();
 
-    const { meme_id, backer_wallet } = body;
+    const { meme_id, backer_wallet, signature, message } = body;
 
     // Validation
     if (!meme_id || !backer_wallet) {
       return NextResponse.json(
         { error: 'Missing required fields: meme_id, backer_wallet' },
         { status: 400 }
+      );
+    }
+
+    // Require wallet signature to prove ownership
+    if (!signature || !message) {
+      return NextResponse.json(
+        { error: 'Wallet signature required' },
+        { status: 401 }
+      );
+    }
+
+    if (!verifyWalletSignature(message, signature, backer_wallet)) {
+      return NextResponse.json(
+        { error: 'Invalid wallet signature' },
+        { status: 401 }
       );
     }
 
@@ -61,20 +77,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Decrypt the private key
-    // The key is stored as "enc:base64encodedkey"
-    const encryptedKey = backing.encrypted_private_key;
-
-    if (!encryptedKey.startsWith('enc:')) {
+    // Decrypt the private key (handles both legacy enc: and new aes: formats)
+    let privateKey: string;
+    try {
+      privateKey = decryptPrivateKey(backing.encrypted_private_key);
+    } catch {
       return NextResponse.json(
-        { error: 'Invalid key format' },
+        { error: 'Failed to decrypt key' },
         { status: 500 }
       );
     }
-
-    // Decode the base64 private key
-    const base64Key = encryptedKey.slice(4); // Remove "enc:" prefix
-    const privateKey = Buffer.from(base64Key, 'base64').toString();
 
     return NextResponse.json({
       success: true,

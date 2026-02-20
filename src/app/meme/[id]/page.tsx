@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Keypair } from '@solana/web3.js';
+import bs58 from 'bs58';
 import {
   ArrowLeft,
   Users,
@@ -364,15 +365,24 @@ export default function MemeDetailPage() {
     if (!meme || launching) return;
 
     setLaunching(true);
-    setLaunchStatus('Initiating launch...');
+    setLaunchStatus('Sign to authorize launch...');
 
     try {
+      // Sign a message to prove wallet ownership
+      const authMessage = `launch:${meme.id}:${publicKey!.toBase58()}`;
+      const msgBytes = new TextEncoder().encode(authMessage);
+      const sigBytes = await signMessage!(msgBytes);
+      const sigB58 = bs58.encode(sigBytes);
+
+      setLaunchStatus('Initiating launch...');
       const response = await fetch('/api/launch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meme_id: meme.id,
           caller_wallet: publicKey?.toBase58(),
+          signature: sigB58,
+          message: authMessage,
         }),
       });
 
@@ -401,15 +411,24 @@ export default function MemeDetailPage() {
     if (!meme || withdrawing) return;
 
     setWithdrawing(true);
-    setWithdrawStatus('Processing withdrawal...');
+    setWithdrawStatus('Sign to authorize withdrawal...');
 
     try {
+      // Sign a message to prove wallet ownership
+      const authMessage = `withdraw:${meme.id}:${backerWallet}`;
+      const msgBytes = new TextEncoder().encode(authMessage);
+      const sigBytes = await signMessage!(msgBytes);
+      const sigB58 = bs58.encode(sigBytes);
+
+      setWithdrawStatus('Processing withdrawal...');
       const response = await fetch('/api/backings/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meme_id: meme.id,
           backer_wallet: backerWallet,
+          signature: sigB58,
+          message: authMessage,
         }),
       });
 
@@ -479,12 +498,20 @@ export default function MemeDetailPage() {
     setExportedKey(null); // Reset
 
     try {
+      // Sign a message to prove wallet ownership
+      const authMessage = `export-key:${meme.id}:${publicKey.toBase58()}`;
+      const msgBytes = new TextEncoder().encode(authMessage);
+      const sigBytes = await signMessage!(msgBytes);
+      const sigB58 = bs58.encode(sigBytes);
+
       const response = await fetch('/api/backings/export-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meme_id: meme.id,
           backer_wallet: publicKey.toBase58(),
+          signature: sigB58,
+          message: authMessage,
         }),
       });
 

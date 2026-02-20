@@ -12,7 +12,7 @@ type SortOption = 'newest' | 'progress' | 'ending_soon';
 
 const ITEMS_PER_PAGE = 20;
 
-const PLATFORM_TOKEN_CA: string = 'TBD';
+const PLATFORM_TOKEN_CA: string = '';
 
 export default function Home() {
   const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('all');
@@ -123,22 +123,22 @@ export default function Home() {
 
           {/* CA and Social */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
-            <button
-              onClick={PLATFORM_TOKEN_CA !== 'TBD' ? handleCopyCA : undefined}
-              className={`flex items-center gap-2 px-4 py-2 bg-[var(--card)] border border-[var(--border)] transition-colors group ${PLATFORM_TOKEN_CA !== 'TBD' ? 'hover:border-[var(--accent)] cursor-pointer' : 'cursor-default'}`}
-            >
-              <span className="text-xs text-[var(--muted)]">$COMMIE:</span>
-              <code className="text-xs font-mono text-[var(--foreground)]">
-                {PLATFORM_TOKEN_CA === 'TBD' ? 'TBD' : `${PLATFORM_TOKEN_CA.slice(0, 8)}...${PLATFORM_TOKEN_CA.slice(-4)}`}
-              </code>
-              {PLATFORM_TOKEN_CA !== 'TBD' && (
-                caCopied ? (
+            {PLATFORM_TOKEN_CA && (
+              <button
+                onClick={handleCopyCA}
+                className="flex items-center gap-2 px-4 py-2 bg-[var(--card)] border border-[var(--border)] hover:border-[var(--accent)] cursor-pointer transition-colors group"
+              >
+                <span className="text-xs text-[var(--muted)]">$COMMIE:</span>
+                <code className="text-xs font-mono text-[var(--foreground)]">
+                  {`${PLATFORM_TOKEN_CA.slice(0, 8)}...${PLATFORM_TOKEN_CA.slice(-4)}`}
+                </code>
+                {caCopied ? (
                   <Check className="w-4 h-4 text-[var(--success)]" />
                 ) : (
                   <Copy className="w-4 h-4 text-[var(--muted)] group-hover:text-[var(--accent)]" />
-                )
-              )}
-            </button>
+                )}
+              </button>
+            )}
             <a
               href="https://x.com/CommieLaunch"
               target="_blank"

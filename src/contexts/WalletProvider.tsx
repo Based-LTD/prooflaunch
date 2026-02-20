@@ -15,7 +15,7 @@ interface Props {
 export const WalletProvider: FC<Props> = ({ children }) => {
   // Use devnet for development, mainnet-beta for production
   const endpoint = useMemo(() =>
-    process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl('devnet'),
+    process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl('mainnet-beta'),
     []
   );
 
