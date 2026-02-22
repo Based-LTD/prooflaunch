@@ -15,7 +15,7 @@ const ITEMS_PER_PAGE = 20;
 const PLATFORM_TOKEN_CA: string = '';
 
 export default function Home() {
-  const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('all');
+  const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('backing');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showFilters, setShowFilters] = useState(false);
