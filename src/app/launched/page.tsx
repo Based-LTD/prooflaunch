@@ -62,7 +62,7 @@ export default function LaunchedPage() {
           <span className="gradient-text">Hall of Victories</span>
         </h1>
         <p className="text-[var(--muted)] max-w-xl mx-auto uppercase tracking-wide text-sm">
-          Revolutions that succeeded • Now trading on Pump.fun • Visible on Axiom, Photon, and Birdeye
+          Revolutions that succeeded
         </p>
         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--success)] to-transparent" />
       </div>
