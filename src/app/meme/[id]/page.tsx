@@ -626,10 +626,10 @@ export default function MemeDetailPage() {
       {/* Back Button */}
       <Link href="/" className="inline-flex items-center gap-2 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors uppercase text-sm font-bold tracking-wide">
         <ArrowLeft className="w-4 h-4" />
-        Return to Revolution
+        Back to Proving Grounds
       </Link>
 
-      {/* Header - Propaganda Poster Style */}
+      {/* Header */}
       <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6">
         {/* Decorative corner accent */}
         <div className="absolute top-0 left-0 w-16 h-16 border-b-2 border-r-2 border-[var(--accent-gold)] opacity-50" />
@@ -724,11 +724,11 @@ export default function MemeDetailPage() {
           </div>
         </div>
 
-        {/* Creator Info - Comrade Section */}
+        {/* Creator Info */}
         <div className="mt-6 pt-4 border-t-2 border-[var(--border)]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-[var(--accent)] font-bold uppercase text-xs tracking-wider">Comrade Creator:</span>
+              <span className="text-[var(--accent)] font-bold uppercase text-xs tracking-wider">Creator:</span>
               <code className="bg-[var(--background)] border border-[var(--border)] px-3 py-1 text-xs font-mono">
                 {creator_wallet.slice(0, 8)}...{creator_wallet.slice(-8)}
               </code>
@@ -760,7 +760,7 @@ export default function MemeDetailPage() {
           <div className="mt-4 pt-4 border-t-2 border-[var(--border)]">
             <div className="flex items-center gap-2 text-sm mb-3">
               <Coins className="w-5 h-5 text-[var(--accent-gold)]" />
-              <span className="text-[var(--accent-gold)] font-bold uppercase tracking-wider">Victory Contract:</span>
+              <span className="text-[var(--accent-gold)] font-bold uppercase tracking-wider">Contract Address:</span>
             </div>
             <button
               onClick={() => handleCopy(meme.mint_address!)}
@@ -776,7 +776,7 @@ export default function MemeDetailPage() {
               )}
             </button>
             <p className="text-xs text-[var(--muted)] mt-2 uppercase tracking-wide">
-              Seize the means of trading on your favorite DEX
+              Trade on your favorite DEX
             </p>
           </div>
         )}
@@ -786,10 +786,10 @@ export default function MemeDetailPage() {
       {(isFunded || isLaunching) && (
         <div className="relative border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-4">
           <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
-            ★ Victory Achieved ★
+            Goal Reached
           </div>
           <h2 className="text-xl font-black uppercase tracking-tight pt-2">
-            {isLaunching ? 'Launching Revolution...' : 'The People Have Spoken!'}
+            {isLaunching ? 'Launching...' : 'Ready to Launch'}
           </h2>
           <div className="bg-[var(--success)]/10 border-2 border-[var(--success)]/30 p-4">
             <p className="text-[var(--success)] font-bold mb-2 uppercase tracking-wide">
@@ -808,15 +808,15 @@ export default function MemeDetailPage() {
               {launching || isLaunching ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Deploying Revolution...
+                  Deploying...
                 </span>
               ) : (
-                '★ Launch the Revolution ★'
+                'Launch Token'
               )}
             </button>
           ) : (
             <div className="text-center py-3 text-sm text-[var(--muted)] bg-[var(--background)] border-2 border-[var(--border)] uppercase tracking-wide">
-              {connected ? 'Awaiting comrade creator...' : 'Connect wallet to witness history'}
+              {connected ? 'Waiting for creator to launch...' : 'Connect wallet to view'}
             </div>
           )}
           {launchStatus && (
@@ -837,7 +837,7 @@ export default function MemeDetailPage() {
       <div className="relative bg-[var(--card)] border-2 border-[var(--accent)]" style={isProving ? { borderWidth: '3px' } : {}}>
         {isProving && (
           <div className="bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] w-full py-2.5 text-center text-white text-sm font-black uppercase tracking-widest">
-            ★ Back This Token ★
+            Back This Token
           </div>
         )}
 
@@ -865,11 +865,11 @@ export default function MemeDetailPage() {
                 </div>
                 {filledSlots < 4 ? (
                   <span className="ml-auto text-xs bg-[var(--accent-gold)]/20 text-[var(--accent-gold)] px-2 py-1 font-bold uppercase border border-[var(--accent-gold)]/30">
-                    Next: Bourgeoisie
+                    Next: Genesis
                   </span>
                 ) : (
                   <span className="ml-auto text-xs bg-[var(--accent)]/20 text-[var(--accent)] px-2 py-1 font-bold uppercase border border-[var(--accent)]/30">
-                    Next: Proletariat
+                    Next: Wave 2
                   </span>
                 )}
               </div>
@@ -878,13 +878,13 @@ export default function MemeDetailPage() {
               <div className="flex gap-1.5 mb-5">
                 {Array.from({ length: totalSlots }).map((_, i) => {
                   const isFilled = i < filledSlots;
-                  const isBourgeoisie = i < 4;
+                  const isGenesis = i < 4;
                   return (
                     <div
                       key={i}
                       className={`flex-1 h-2 transition-all ${
                         isFilled
-                          ? isBourgeoisie
+                          ? isGenesis
                             ? 'bg-[var(--accent-gold)]'
                             : 'bg-[var(--accent)]'
                           : 'bg-[var(--border)]'
@@ -899,7 +899,7 @@ export default function MemeDetailPage() {
           {!connected ? (
             <div className="text-center py-8 text-[var(--muted)] border-2 border-dashed border-[var(--accent)]/40 uppercase text-sm font-bold tracking-wide bg-[var(--accent)]/5">
               <div className="text-3xl mb-3">★</div>
-              Connect wallet to {isProving ? 'join the cause' : 'trade'}
+              Connect wallet to {isProving ? 'back this meme' : 'trade'}
             </div>
           ) : isLaunched ? (
             /* Trading options for launched tokens */
@@ -1073,14 +1073,14 @@ export default function MemeDetailPage() {
               <div className="flex gap-2">
                 {Array.from({ length: totalSlots }).map((_, i) => {
                   const isFilled = i < filledSlots;
-                  const isBourgeoisie = i < 4;
+                  const isGenesis = i < 4;
                   const slotBacking = backings[i];
                   return (
                     <div
                       key={i}
                       className={`flex-1 h-12 flex flex-col items-center justify-center text-xs font-bold border-2 transition-all ${
                         isFilled
-                          ? isBourgeoisie
+                          ? isGenesis
                             ? 'border-[var(--accent-gold)] bg-[var(--accent-gold)]/20 text-[var(--accent-gold)]'
                             : 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
                           : 'border-[var(--border)] bg-[var(--background)] text-[var(--muted)]'
@@ -1098,12 +1098,12 @@ export default function MemeDetailPage() {
               <div className="flex gap-4 text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-[var(--accent-gold)]/20 border border-[var(--accent-gold)]" />
-                  <span className="text-[var(--muted)]">Bourgeoisie (first to buy)</span>
+                  <span className="text-[var(--muted)]">Genesis (first to buy)</span>
                 </div>
                 {totalSlots > 4 && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-[var(--accent)]/20 border border-[var(--accent)]" />
-                    <span className="text-[var(--muted)]">Proletariat (fast follow)</span>
+                    <span className="text-[var(--muted)]">Wave 2 (fast follow)</span>
                   </div>
                 )}
               </div>
@@ -1124,7 +1124,7 @@ export default function MemeDetailPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-[var(--accent-gold)] font-bold">3.</span>
-                <span>Your wallet buys automatically — Bourgeoisie first, Proletariat follow</span>
+                <span>Your wallet buys automatically — Genesis first, Wave 2 follows</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-[var(--accent-gold)] font-bold">4.</span>
@@ -1139,9 +1139,9 @@ export default function MemeDetailPage() {
         </div>
       )}
 
-      {/* Comrades & Communications Section */}
+      {/* Backers & Chat Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        {/* Backers List - The Collective */}
+        {/* Backers List */}
         <BackersList
           backings={backings}
           totalBacking={Number(current_backing_sol)}
@@ -1152,7 +1152,7 @@ export default function MemeDetailPage() {
           withdrawStatus={withdrawStatus}
         />
 
-        {/* Comrade Communications */}
+        {/* Chat */}
         <MemeChat memeId={meme.id} />
       </div>
 
@@ -1161,9 +1161,9 @@ export default function MemeDetailPage() {
         isOpen={showBackConfirm}
         onClose={() => setShowBackConfirm(false)}
         onConfirm={confirmBack}
-        title="Confirm Your Allegiance"
-        message={`You are pledging ${amount} SOL to the ${name} revolution.\n\nA secure token wallet will be created for you. When the revolution launches, this wallet will automatically acquire tokens on your behalf - keeping your position organic and hidden.\n\nAfter launch, you'll be able to:\n• Liquidate tokens instantly for SOL\n• Transfer tokens to your main wallet\n• Export the private key for full control`}
-        confirmText={`Pledge ${amount} SOL`}
+        title="Confirm Backing"
+        message={`You are backing ${name} with ${amount} SOL.\n\nA secure token wallet will be created for you. When ${name} launches, this wallet will automatically acquire tokens on your behalf — keeping your position organic and hidden.\n\nAfter launch, you'll be able to:\n• Liquidate tokens instantly for SOL\n• Transfer tokens to your main wallet\n• Export the private key for full control`}
+        confirmText={`Back with ${amount} SOL`}
         variant="info"
         isLoading={backing}
       />
@@ -1177,18 +1177,18 @@ export default function MemeDetailPage() {
                 <span className="text-xl">★</span>
               </div>
               <div>
-                <h3 className="text-lg font-black uppercase tracking-tight">Welcome, Comrade!</h3>
+                <h3 className="text-lg font-black uppercase tracking-tight">You're In!</h3>
                 <p className="text-sm text-[var(--muted)]">Your position is secured</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="bg-[var(--accent)]/10 border-2 border-[var(--accent)]/30 p-4">
-                <p className="text-sm text-[var(--accent)] font-bold uppercase tracking-wide mb-2">The Revolution Awaits:</p>
+                <p className="text-sm text-[var(--accent)] font-bold uppercase tracking-wide mb-2">What Happens Next:</p>
                 <ul className="text-xs text-[var(--muted)] space-y-1">
                   <li>★ Your SOL is now in a secure token wallet</li>
-                  <li>★ When the revolution launches, it will automatically acquire tokens</li>
-                  <li>★ After launch, claim, transfer, or export your spoils</li>
+                  <li>★ When the token launches, it will automatically acquire tokens</li>
+                  <li>★ After launch, claim, transfer, or export your tokens</li>
                   <li>★ Your private key is encrypted and secured</li>
                 </ul>
               </div>
@@ -1196,17 +1196,17 @@ export default function MemeDetailPage() {
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4">
                 <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
                   <Key className="w-4 h-4" />
-                  <span className="font-bold uppercase tracking-wide">Details classified until launch</span>
+                  <span className="font-bold uppercase tracking-wide">Hidden until launch</span>
                 </div>
                 <p className="text-xs text-[var(--muted)] mt-2">
-                  For operational security, your token wallet address and private key remain hidden until launch. This prevents front-running and protects your position in the collective.
+                  For operational security, your token wallet address and private key remain hidden until launch. This prevents front-running and protects your position.
                 </p>
               </div>
 
               <div className="bg-[var(--warning)]/10 border-2 border-[var(--warning)]/30 p-4">
-                <p className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide mb-1">Second Thoughts?</p>
+                <p className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide mb-1">Changed your mind?</p>
                 <p className="text-xs text-[var(--muted)]">
-                  You may retreat anytime before launch for a 2% desertion fee. Visit your Portfolio or use the withdraw button.
+                  You may withdraw anytime before launch for a 2% withdrawal fee. Visit your Portfolio or use the withdraw button.
                 </p>
               </div>
 
@@ -1218,7 +1218,7 @@ export default function MemeDetailPage() {
                 }}
                 className="w-full py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 border-2 border-[var(--accent)]"
               >
-                For the Revolution!
+                Got it
               </button>
             </div>
           </div>
@@ -1234,14 +1234,14 @@ export default function MemeDetailPage() {
                 <Key className="w-6 h-6 text-[var(--warning)]" />
               </div>
               <div>
-                <h3 className="text-lg font-black uppercase tracking-tight">Classified Information</h3>
+                <h3 className="text-lg font-black uppercase tracking-tight">Sensitive Information</h3>
                 <p className="text-sm text-[var(--muted)]">Handle with extreme care</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="bg-[var(--warning)]/10 border-2 border-[var(--warning)]/30 p-4">
-                <p className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide mb-2">Security Protocol:</p>
+                <p className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide mb-2">Security Notes:</p>
                 <ul className="text-xs text-[var(--muted)] space-y-1">
                   <li>★ Never share your private key with anyone</li>
                   <li>★ Only import to trusted wallet apps (Phantom, Solflare)</li>
@@ -1272,7 +1272,7 @@ export default function MemeDetailPage() {
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
                   <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--accent)]" />
                   <p className="text-sm text-[var(--muted)]">
-                    Decrypting classified data...
+                    Decrypting...
                   </p>
                   <p className="text-xs text-[var(--muted)] mt-2">
                     Wallet: <code className="text-xs">{burnerInfo.burner_wallet.slice(0, 8)}...{burnerInfo.burner_wallet.slice(-8)}</code>
@@ -1303,9 +1303,9 @@ export default function MemeDetailPage() {
           setPendingWithdrawAmount(0);
         }}
         onConfirm={confirmWithdraw}
-        title="Confirm Retreat"
-        message={`Withdraw ${pendingWithdrawAmount.toFixed(4)} SOL from the cause?\n\nDesertion fee: ${(pendingWithdrawAmount * 0.02).toFixed(4)} SOL (2%)\n\nYou will receive: ${(pendingWithdrawAmount * 0.98).toFixed(4)} SOL`}
-        confirmText={`Retreat with ${(pendingWithdrawAmount * 0.98).toFixed(4)} SOL`}
+        title="Confirm Withdrawal"
+        message={`Withdraw ${pendingWithdrawAmount.toFixed(4)} SOL from this meme?\n\nWithdrawal fee: ${(pendingWithdrawAmount * 0.02).toFixed(4)} SOL (2%)\n\nYou will receive: ${(pendingWithdrawAmount * 0.98).toFixed(4)} SOL`}
+        confirmText={`Withdraw ${(pendingWithdrawAmount * 0.98).toFixed(4)} SOL`}
         variant="warning"
         isLoading={withdrawing}
       />
@@ -1314,9 +1314,9 @@ export default function MemeDetailPage() {
         isOpen={showLaunchConfirm}
         onClose={() => setShowLaunchConfirm(false)}
         onConfirm={confirmLaunch}
-        title="Launch the Revolution"
-        message={`You are about to deploy ${name} ($${symbol}) to pump.fun with ${Number(current_backing_sol).toFixed(2)} SOL of collective backing. This historic moment cannot be undone. Tokens will be distributed to all comrades proportionally.`}
-        confirmText="★ Launch Now ★"
+        title="Launch Token"
+        message={`You are about to deploy ${name} ($${symbol}) to pump.fun with ${Number(current_backing_sol).toFixed(2)} SOL of community backing. This action cannot be undone. Tokens will be distributed to all backers proportionally.`}
+        confirmText="Launch Now"
         variant="info"
         isLoading={launching}
       />

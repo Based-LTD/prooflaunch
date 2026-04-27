@@ -76,7 +76,7 @@ export default function SubmitPage() {
     description: '',
     totalSlots: 4,        // 2-8 backer slots
     minBackingSol: 0.1,   // Minimum SOL per backer
-    creatorTwitter: '', // Creator's personal X account (Commie Launch only)
+    creatorTwitter: '', // Creator's personal X account (Proof Launch only)
     twitter: '',
     website: '',
     telegram: '',
@@ -324,16 +324,16 @@ export default function SubmitPage() {
     return (
       <div className="max-w-2xl mx-auto">
         <div className="relative border-2 border-[var(--success)] bg-[var(--card)] p-8 text-center">
-          {/* Victory Banner */}
+          {/* Success Banner */}
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-6 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
-            ★ Victory ★
+            ★ Submitted ★
           </div>
           <div className="w-20 h-20 mx-auto bg-[var(--success)]/20 flex items-center justify-center border-2 border-[var(--success)] mb-4">
             <span className="text-4xl">★</span>
           </div>
-          <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Revolution Initiated!</h2>
+          <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Meme Submitted!</h2>
           <p className="text-[var(--muted)] mb-4 uppercase tracking-wide">
-            The people await. Redirecting to your movement...
+            Redirecting to your meme page...
           </p>
           <div className="w-8 h-8 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] animate-spin mx-auto" />
         </div>
@@ -346,14 +346,14 @@ export default function SubmitPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Propaganda-style Header */}
+      {/* Header */}
       <div className="relative text-center mb-8 py-6">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
         <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
-          <span className="gradient-text">Start a Revolution</span>
+          <span className="gradient-text">Submit a Meme</span>
         </h1>
         <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-          Submit your meme • Rally the comrades • Seize the market
+          Configure your token • Rally backers • Launch on Pump.fun
         </p>
         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
       </div>
@@ -363,9 +363,9 @@ export default function SubmitPage() {
           <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
             <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
           </div>
-          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Revolution Temporarily Paused</h2>
+          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Submissions Paused</h2>
           <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-            Submissions are temporarily disabled while we upgrade the launch system. Check back soon, comrade.
+            Submissions are temporarily disabled while we upgrade the launch system. Check back soon.
           </p>
         </div>
       ) : !connected ? (
@@ -373,9 +373,9 @@ export default function SubmitPage() {
           <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
             <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
           </div>
-          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Comrade Identification Required</h2>
+          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Wallet Required</h2>
           <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-            Connect your wallet to join the revolution
+            Connect your wallet to submit a meme
           </p>
         </div>
       ) : (
@@ -485,11 +485,11 @@ export default function SubmitPage() {
           {/* Image Upload */}
           <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
             <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ Propaganda
+              ★ Image
             </div>
             <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Image className="w-5 h-5 text-[var(--accent)]" />
-              Revolutionary Image
+              Token Image
             </h2>
 
             <div className="flex gap-4">
@@ -542,7 +542,7 @@ export default function SubmitPage() {
           {/* Creator Info */}
           <div className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-6 space-y-4">
             <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent-gold)] text-black text-xs font-bold uppercase tracking-wider">
-              ★ Comrade ID
+              ★ Creator
             </div>
             <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Link2 className="w-5 h-5 text-[var(--accent-gold)]" />
@@ -568,7 +568,7 @@ export default function SubmitPage() {
                 <span className="text-xs text-[var(--error)]">{fieldErrors.creatorTwitter}</span>
               )}
               <span className="text-xs text-[var(--muted)] mt-1 block">
-                Displayed on Commie Launch so users can identify you. Not included in token metadata.
+                Displayed on Proof Launch so users can identify you. Not included in token metadata.
               </span>
             </div>
           </div>
@@ -576,11 +576,11 @@ export default function SubmitPage() {
           {/* Social Links */}
           <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
             <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ Channels
+              ★ Socials
             </div>
             <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Link2 className="w-5 h-5 text-[var(--accent)]" />
-              Communication Channels
+              Social Links
               <span className="text-xs font-normal text-[var(--muted)]">(optional)</span>
             </h2>
 
@@ -667,7 +667,7 @@ export default function SubmitPage() {
           {/* Backer Slots */}
           <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
             <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ The Collective
+              ★ Backing
             </div>
             <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
               <Upload className="w-5 h-5 text-[var(--accent)]" />
@@ -683,13 +683,13 @@ export default function SubmitPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
                 >
-                  <option value={2}>2 slots (2 Bourgeoisie)</option>
-                  <option value={3}>3 slots (3 Bourgeoisie)</option>
-                  <option value={4}>4 slots (4 Bourgeoisie)</option>
-                  <option value={5}>5 slots (4 Bourgeoisie + 1 Proletariat)</option>
-                  <option value={6}>6 slots (4 Bourgeoisie + 2 Proletariat)</option>
-                  <option value={7}>7 slots (4 Bourgeoisie + 3 Proletariat)</option>
-                  <option value={8}>8 slots (4 Bourgeoisie + 4 Proletariat)</option>
+                  <option value={2}>2 slots (2 Genesis)</option>
+                  <option value={3}>3 slots (3 Genesis)</option>
+                  <option value={4}>4 slots (4 Genesis)</option>
+                  <option value={5}>5 slots (4 Genesis + 1 Wave 2)</option>
+                  <option value={6}>6 slots (4 Genesis + 2 Wave 2)</option>
+                  <option value={7}>7 slots (4 Genesis + 3 Wave 2)</option>
+                  <option value={8}>8 slots (4 Genesis + 4 Wave 2)</option>
                 </select>
                 <span className="text-xs text-[var(--muted)]">Token launches when all slots are filled</span>
               </div>
@@ -717,12 +717,12 @@ export default function SubmitPage() {
               <div className="text-sm font-bold uppercase tracking-wide mb-3">Launch Preview</div>
               <div className="flex gap-2 flex-wrap mb-3">
                 {Array.from({ length: formData.totalSlots }).map((_, i) => {
-                  const isBourgeoisie = i < 4;
+                  const isGenesis = i < 4;
                   return (
                     <div
                       key={i}
                       className={`w-10 h-10 flex items-center justify-center text-xs font-bold border-2 ${
-                        isBourgeoisie
+                        isGenesis
                           ? 'border-[var(--accent-gold)] bg-[var(--accent-gold)]/10 text-[var(--accent-gold)]'
                           : 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
                       }`}
@@ -735,12 +735,12 @@ export default function SubmitPage() {
               <div className="flex gap-4 text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-[var(--accent-gold)]/20 border border-[var(--accent-gold)]" />
-                  <span className="text-[var(--muted)]">Bourgeoisie (first to buy)</span>
+                  <span className="text-[var(--muted)]">Genesis (first to buy)</span>
                 </div>
                 {formData.totalSlots > 4 && (
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-[var(--accent)]/20 border border-[var(--accent)]" />
-                    <span className="text-[var(--muted)]">Proletariat (fast follow-up)</span>
+                    <span className="text-[var(--muted)]">Wave 2 (fast follow-up)</span>
                   </div>
                 )}
               </div>
@@ -756,7 +756,7 @@ export default function SubmitPage() {
             <div className="flex gap-3">
               <Coins className="w-6 h-6 text-[var(--warning)] flex-shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-bold text-[var(--warning)] mb-1 uppercase tracking-wide">Revolutionary Tax: {CREATION_FEE_SOL} SOL</p>
+                <p className="font-bold text-[var(--warning)] mb-1 uppercase tracking-wide">Creation Fee: {CREATION_FEE_SOL} SOL</p>
                 <p className="text-[var(--foreground)]/80">
                   A small fee covers token creation on Pump.fun.
                   To receive tokens at launch, you must also back your own meme separately.
@@ -775,11 +775,11 @@ export default function SubmitPage() {
             <div className="flex gap-3">
               <Info className="w-6 h-6 text-[var(--accent)] flex-shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-bold text-[var(--accent)] mb-1 uppercase tracking-wide">The Path to Victory</p>
+                <p className="font-bold text-[var(--accent)] mb-1 uppercase tracking-wide">How Launch Works</p>
                 <p className="text-[var(--foreground)]/80">
                   Once all backer slots are filled, the token launches on Pump.fun.
-                  <strong> Bourgeoisie</strong> backers (slots 1-4) buy first at the best prices on the bonding curve.
-                  <strong> Proletariat</strong> backers (slots 5-8) buy immediately after.
+                  <strong> Genesis</strong> backers (slots 1-4) buy first at the best prices on the bonding curve.
+                  <strong> Wave 2</strong> backers (slots 5-8) buy immediately after.
                   3-day deadline. If slots don&apos;t fill, backers get refunds.
                 </p>
               </div>
@@ -795,12 +795,12 @@ export default function SubmitPage() {
             {isSubmitting ? (
               <>
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white animate-spin" />
-                Processing Contribution...
+                Submitting...
               </>
             ) : (
               <>
                 <span className="text-xl">★</span>
-                Pay {CREATION_FEE_SOL} SOL & Start Revolution
+                Pay {CREATION_FEE_SOL} SOL & Submit
                 <span className="text-xl">★</span>
               </>
             )}

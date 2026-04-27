@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
 
     // Assign slot number (1-indexed)
     const slotNumber = filledSlots + 1;
-    const slotTier = slotNumber <= 4 ? 'Bourgeoisie' : 'Proletariat';
+    const slotTier = slotNumber <= 4 ? 'Genesis' : 'Wave 2';
 
     // Verify the deposit transaction on-chain
     let isValid = false;

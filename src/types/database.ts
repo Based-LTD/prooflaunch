@@ -73,10 +73,12 @@ export interface Backing {
 }
 
 // Slot tier types
-export type SlotTier = 'bourgeoisie' | 'proletariat';
+// Genesis (slots 1-4) buy first at the lowest prices on the curve.
+// Wave 2 (slots 5-8) buy immediately after in a second batch.
+export type SlotTier = 'genesis' | 'wave2';
 
 export function getSlotTier(slotNumber: number): SlotTier {
-  return slotNumber <= 4 ? 'bourgeoisie' : 'proletariat';
+  return slotNumber <= 4 ? 'genesis' : 'wave2';
 }
 
 export interface User {

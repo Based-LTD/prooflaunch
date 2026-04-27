@@ -50,7 +50,7 @@ export default function LaunchedPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header - Victory Banner Style */}
+      {/* Header */}
       <div className="relative text-center py-8">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--success)] to-transparent" />
         <div className="inline-block mb-4">
@@ -59,10 +59,10 @@ export default function LaunchedPage() {
           </div>
         </div>
         <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
-          <span className="gradient-text">Hall of Victories</span>
+          <span className="gradient-text">Launched Tokens</span>
         </h1>
         <p className="text-[var(--muted)] max-w-xl mx-auto uppercase tracking-wide text-sm">
-          Revolutions that succeeded
+          Memes that hit their goal and went live
         </p>
         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--success)] to-transparent" />
       </div>
@@ -97,7 +97,7 @@ export default function LaunchedPage() {
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <div className="w-1 h-8 bg-gradient-to-b from-[var(--success)] to-[var(--accent-gold)]" />
-            <h2 className="text-2xl font-black uppercase tracking-tight">Victorious Tokens</h2>
+            <h2 className="text-2xl font-black uppercase tracking-tight">Live Tokens</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {memes.map((meme) => (
@@ -112,8 +112,8 @@ export default function LaunchedPage() {
           <div className="w-16 h-16 mx-auto bg-[var(--background)] flex items-center justify-center border-2 border-[var(--border)] mb-4">
             <BarChart3 className="w-8 h-8 text-[var(--muted)]" />
           </div>
-          <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Victories Yet</h3>
-          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">The first revolution awaits</p>
+          <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Launches Yet</h3>
+          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">Be the first to launch</p>
         </div>
       )}
     </div>

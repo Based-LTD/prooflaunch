@@ -1,21 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
+  --background: #0a0a0f;
   --foreground: #fafafa;
-  --card: #141414;
-  --card-hover: #1a1a1a;
-  --border: #2a2a2a;
-  --muted: #737373;
-  --accent: #DC2626;
-  --accent-hover: #EF4444;
-  --accent-gold: #F59E0B;
-  --accent-gold-hover: #FBBF24;
-  --success: #22C55E;
-  --warning: #F59E0B;
-  --error: #DC2626;
-  --gradient-start: #DC2626;
-  --gradient-end: #991B1B;
+  --card: #12121a;
+  --card-hover: #1a1a25;
+  --border: #2a2a3a;
+  --muted: #6b7280;
+  --accent: #8b5cf6;
+  --accent-hover: #a78bfa;
+  --accent-gold: #06b6d4;
+  --accent-gold-hover: #22d3ee;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --gradient-start: #8b5cf6;
+  --gradient-end: #06b6d4;
 }
 
 @theme inline {
@@ -36,71 +36,6 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* Parallax Background Container */
-.parallax-wrapper {
-  position: relative;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-.parallax-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: -1;
-  background-image: url('/images/Sunburst Background.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: 0.08;
-  filter: brightness(1.2) saturate(0.5) blur(2px);
-  transform: translateZ(0) scale(1.15);
-  will-change: transform;
-}
-
-@keyframes subtle-pulse {
-  0%, 100% {
-    transform: translateZ(0) scale(1.15);
-    opacity: 0.3;
-  }
-  50% {
-    transform: translateZ(0) scale(1.18);
-    opacity: 0.4;
-  }
-}
-
-/* Minimal vignette - just fades the very edges */
-.parallax-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: -1;
-  background: radial-gradient(ellipse at center, transparent 0%, transparent 70%, rgba(10, 10, 10, 0.3) 100%);
-  pointer-events: none;
-}
-
-/* Content layer stays on top */
-.content-layer {
-  position: relative;
-  z-index: 1;
-}
-
-/* Vertical text for side ticker */
-.writing-vertical {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-}
-
-/* Soviet-style font */
-.font-soviet {
-  font-family: var(--font-soviet), 'Impact', 'Haettenschweiler', sans-serif;
-  letter-spacing: 0.05em;
-}
-
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
@@ -112,35 +47,35 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 0;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+  background: var(--muted);
 }
 
-/* Gradient text - Soviet red */
+/* Gradient text */
 .gradient-text {
-  background: linear-gradient(135deg, var(--gradient-start), var(--accent-gold));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Gradient border - sharp edges */
+/* Gradient border */
 .gradient-border {
   position: relative;
   background: var(--card);
-  border-radius: 0;
+  border-radius: 12px;
 }
 
 .gradient-border::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 0;
+  border-radius: 12px;
   padding: 1px;
-  background: linear-gradient(135deg, var(--gradient-start), var(--accent-gold));
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -151,20 +86,20 @@ body {
   mask-composite: exclude;
 }
 
-/* Glow effect - red */
+/* Glow effect */
 .glow {
-  box-shadow: 0 0 20px rgba(220, 38, 38, 0.3);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
 }
 
 .glow-hover:hover {
-  box-shadow: 0 0 30px rgba(220, 38, 38, 0.5);
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.4);
 }
 
-/* Card styles - square corners */
+/* Card styles */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: 12px;
   transition: all 0.2s ease;
 }
 
@@ -173,20 +108,18 @@ body {
   border-color: var(--accent);
 }
 
-/* Button styles - square, bold */
+/* Button styles */
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
   color: white;
-  font-weight: 700;
+  font-weight: 600;
   padding: 12px 24px;
-  border-radius: 0;
+  border-radius: 8px;
   transition: all 0.2s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover);
+  opacity: 0.9;
   transform: translateY(-1px);
 }
 
@@ -198,41 +131,39 @@ body {
 
 .btn-secondary {
   background: var(--card);
-  border: 2px solid var(--accent);
+  border: 1px solid var(--border);
   color: var(--foreground);
-  font-weight: 600;
+  font-weight: 500;
   padding: 12px 24px;
-  border-radius: 0;
+  border-radius: 8px;
   transition: all 0.2s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .btn-secondary:hover {
-  border-color: var(--accent-hover);
+  border-color: var(--accent);
   background: var(--card-hover);
 }
 
-/* Progress bar - square */
+/* Progress bar */
 .progress-bar {
   background: var(--border);
-  border-radius: 0;
+  border-radius: 9999px;
   overflow: hidden;
 }
 
 .progress-fill {
-  background: linear-gradient(90deg, var(--gradient-start), var(--accent-gold));
+  background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
   height: 100%;
   transition: width 0.3s ease;
 }
 
-/* Pulse animation - red glow */
+/* Pulse animation */
 @keyframes pulse-glow {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(220, 38, 38, 0.3);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
   }
   50% {
-    box-shadow: 0 0 40px rgba(220, 38, 38, 0.6);
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.5);
   }
 }
 
@@ -240,79 +171,42 @@ body {
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
-/* Wallet adapter overrides - square, red */
+/* Wallet adapter overrides */
 .wallet-adapter-button {
-  background: var(--accent) !important;
-  border-radius: 0 !important;
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)) !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
 }
 
 .wallet-adapter-modal-wrapper {
   background: var(--card) !important;
-  border-radius: 0 !important;
 }
 
 .wallet-adapter-modal-title {
   color: var(--foreground) !important;
 }
 
-/* Status badges - square */
+/* Status badges */
 .badge-proving {
-  background: rgba(220, 38, 38, 0.2);
-  color: #EF4444;
-  border: 1px solid rgba(220, 38, 38, 0.4);
-  border-radius: 0;
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .badge-launched {
-  background: rgba(34, 197, 94, 0.2);
-  color: #4ADE80;
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  border-radius: 0;
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .badge-failed {
-  background: rgba(127, 29, 29, 0.3);
-  color: #FCA5A5;
-  border: 1px solid rgba(127, 29, 29, 0.5);
-  border-radius: 0;
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .badge-migrated {
-  background: rgba(245, 158, 11, 0.2);
-  color: #FBBF24;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 0;
-}
-
-/* Soviet propaganda poster style accents */
-.soviet-border {
-  border: 3px solid var(--accent);
-  position: relative;
-}
-
-.soviet-border::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border: 1px solid var(--accent-gold);
-  pointer-events: none;
-}
-
-/* Bold headings */
-h1, h2, h3 {
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-/* Input styles - square */
-input, textarea, select {
-  border-radius: 0 !important;
-}
-
-/* All rounded corners override */
-* {
-  border-radius: 0 !important;
+  background: rgba(6, 182, 212, 0.2);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.3);
 }

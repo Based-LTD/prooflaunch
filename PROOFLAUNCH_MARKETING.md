@@ -1,15 +1,15 @@
-# Commie Launch Marketing
+# Proof Launch Marketing
 
 ## X Bio / Description
 
 **Short (160 chars):**
 ```
-The proving grounds for meme coins. Back before launch, get genesis tokens when goals are met. No more blind launches. commielaunch.fun
+The proving grounds for meme coins. Back before launch, get genesis tokens when goals are met. No more blind launches. prooflaunch.fun
 ```
 
 **Medium (280 chars):**
 ```
-The proving grounds for meme coins. Communities form BEFORE tokens launch. Back memes you believe in with SOL, get genesis tokens when they hit their goal and launch on pump.fun. No more blind launches. commielaunch.fun
+The proving grounds for meme coins. Communities form BEFORE tokens launch. Back memes you believe in with SOL, get genesis tokens when they hit their goal and launch on pump.fun. No more blind launches. prooflaunch.fun
 ```
 
 ---
@@ -18,7 +18,7 @@ The proving grounds for meme coins. Communities form BEFORE tokens launch. Back 
 
 ### Launch Announcement
 ```
-Introducing Commie Launch - the proving grounds for meme coins
+Introducing Proof Launch — the proving grounds for meme coins
 
 No more buying into tokens with zero community
 
@@ -30,14 +30,14 @@ Here's how it works:
 
 Demand is proven BEFORE launch
 
-commielaunch.fun
+prooflaunch.fun
 ```
 
 ### How It Works Thread
 ```
-How to use Commie Launch (thread)
+How to use Proof Launch (thread)
 
-1/ Find a meme you believe in at commielaunch.fun
+1/ Find a meme you believe in at prooflaunch.fun
 
 Each meme shows:
 - Funding goal
@@ -47,7 +47,7 @@ Each meme shows:
 2/ Connect your wallet and back with SOL
 
 Your SOL goes to your own token wallet
-Max 10% of goal per wallet to prevent whales
+No max per wallet — back as much as you want
 
 3/ Watch the community grow
 
@@ -59,7 +59,7 @@ Withdraw anytime (2% fee) if you change your mind
 
 Token automatically deploys on pump.fun
 Your token wallet buys tokens for you
-Earlier backers get better prices!
+Genesis backers (slots 1-4) buy first at the best prices!
 
 5/ If goal isn't reached?
 
@@ -68,7 +68,7 @@ No rug. No loss.
 
 This is how meme coins should launch.
 
-commielaunch.fun
+prooflaunch.fun
 ```
 
 ### For Creators
@@ -77,7 +77,7 @@ Launching a meme coin?
 
 Don't launch to crickets.
 
-Commie Launch lets you:
+Proof Launch lets you:
 - Prove demand before deploying
 - Build community during funding
 - Launch with guaranteed liquidity
@@ -85,7 +85,7 @@ Commie Launch lets you:
 
 Submit your meme. Set your goal. Let the community decide.
 
-commielaunch.fun/submit
+prooflaunch.fun/submit
 ```
 
 ### FOMO Post
@@ -96,7 +96,7 @@ Buying random pump.fun launches = gambling
 
 Backing proven communities = investing
 
-Commie Launch memes have:
+Proof Launch memes have:
 - Real backers before launch
 - Automatic refunds if goals fail
 - Genesis holder benefits
@@ -104,12 +104,12 @@ Commie Launch memes have:
 
 Smart money backs before launch.
 
-commielaunch.fun
+prooflaunch.fun
 ```
 
 ---
 
 ## Public Addresses
 
-- Website: https://commielaunch.fun
+- Website: https://prooflaunch.fun
 - Escrow: `CEGgJZF6AXGkj3BBTmmhagudwU9FKscMB25RJM5iwFYY`

@@ -1,6 +1,6 @@
 'use client';
 
-import { Star } from 'lucide-react';
+import { Flame } from 'lucide-react';
 
 export default function BannerPage() {
   return (
@@ -19,16 +19,16 @@ export default function BannerPage() {
           style={{
             width: '750px',
             height: '250px',
-            background: '#0a0a0a',
+            background: '#0a0a0f',
           }}
         >
-          {/* Red gradient glow */}
+          {/* Purple/cyan gradient glow */}
           <div
             className="absolute blur-[80px] opacity-40"
             style={{
               width: '400px',
               height: '400px',
-              background: '#DC2626',
+              background: '#8b5cf6',
               top: '-100px',
               left: '-100px',
             }}
@@ -38,7 +38,7 @@ export default function BannerPage() {
             style={{
               width: '300px',
               height: '300px',
-              background: '#F59E0B',
+              background: '#06b6d4',
               bottom: '-100px',
               right: '100px',
             }}
@@ -48,31 +48,31 @@ export default function BannerPage() {
           <div className="relative z-10 h-full flex items-center justify-center gap-6">
             {/* Logo */}
             <div
-              className="flex items-center justify-center"
+              className="flex items-center justify-center rounded-2xl"
               style={{
                 width: '80px',
                 height: '80px',
-                background: '#DC2626',
+                background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
               }}
             >
-              <Star className="w-12 h-12 text-[#F59E0B]" fill="currentColor" />
+              <Flame className="w-12 h-12 text-white" />
             </div>
 
             {/* Text */}
             <div className="flex flex-col">
               <span
-                className="text-5xl font-bold uppercase tracking-wider"
+                className="text-5xl font-bold tracking-tight"
                 style={{
-                  background: 'linear-gradient(135deg, #DC2626, #F59E0B)',
+                  background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
                 }}
               >
-                Commie Launch
+                Proof Launch
               </span>
-              <span className="text-lg text-[#737373] mt-1 uppercase tracking-wide">
-                Seize the Memes of Production
+              <span className="text-lg text-[#737373] mt-1">
+                Community-Curated Meme Coin Launchpad
               </span>
             </div>
           </div>
@@ -95,16 +95,16 @@ export default function BannerPage() {
             style={{
               width: '1500px',
               height: '500px',
-              background: '#0a0a0a',
+              background: '#0a0a0f',
             }}
           >
-            {/* Red gradient glow */}
+            {/* Purple/cyan gradient glow */}
             <div
               className="absolute blur-[160px] opacity-40"
               style={{
                 width: '800px',
                 height: '800px',
-                background: '#DC2626',
+                background: '#8b5cf6',
                 top: '-200px',
                 left: '-200px',
               }}
@@ -114,7 +114,7 @@ export default function BannerPage() {
               style={{
                 width: '600px',
                 height: '600px',
-                background: '#F59E0B',
+                background: '#06b6d4',
                 bottom: '-200px',
                 right: '200px',
               }}
@@ -124,40 +124,40 @@ export default function BannerPage() {
             <div className="relative z-10 h-full flex items-center justify-center gap-12">
               {/* Logo */}
               <div
-                className="flex items-center justify-center shadow-2xl"
+                className="flex items-center justify-center shadow-2xl rounded-3xl"
                 style={{
                   width: '160px',
                   height: '160px',
-                  background: '#DC2626',
-                  boxShadow: '0 0 60px rgba(220, 38, 38, 0.5)',
+                  background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
+                  boxShadow: '0 0 60px rgba(139, 92, 246, 0.5)',
                 }}
               >
-                <Star className="w-24 h-24 text-[#F59E0B]" fill="currentColor" />
+                <Flame className="w-24 h-24 text-white" />
               </div>
 
               {/* Text */}
               <div className="flex flex-col">
                 <span
-                  className="font-bold uppercase tracking-wider"
+                  className="font-bold tracking-tight"
                   style={{
                     fontSize: '96px',
                     lineHeight: '1',
-                    background: 'linear-gradient(135deg, #DC2626, #F59E0B)',
+                    background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     backgroundClip: 'text',
                   }}
                 >
-                  Commie Launch
+                  Proof Launch
                 </span>
                 <span
-                  className="mt-2 uppercase tracking-widest"
+                  className="mt-2 tracking-wide"
                   style={{
                     fontSize: '32px',
                     color: '#737373',
                   }}
                 >
-                  Seize the Memes of Production
+                  Community-Curated Meme Coin Launchpad
                 </span>
               </div>
             </div>
@@ -174,16 +174,16 @@ export default function BannerPage() {
             style={{
               width: '1500px',
               height: '500px',
-              background: '#0a0a0a',
+              background: '#0a0a0f',
             }}
           >
-            {/* Single centered red glow */}
+            {/* Single centered purple glow */}
             <div
               className="absolute blur-[200px] opacity-50"
               style={{
                 width: '600px',
                 height: '600px',
-                background: '#DC2626',
+                background: '#8b5cf6',
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
@@ -193,27 +193,27 @@ export default function BannerPage() {
             {/* Content */}
             <div className="relative z-10 flex items-center gap-8">
               <div
-                className="flex items-center justify-center"
+                className="flex items-center justify-center rounded-3xl"
                 style={{
                   width: '120px',
                   height: '120px',
-                  background: '#DC2626',
-                  boxShadow: '0 0 40px rgba(220, 38, 38, 0.6)',
+                  background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
+                  boxShadow: '0 0 40px rgba(139, 92, 246, 0.6)',
                 }}
               >
-                <Star className="w-16 h-16 text-[#F59E0B]" fill="currentColor" />
+                <Flame className="w-16 h-16 text-white" />
               </div>
               <span
-                className="font-bold uppercase tracking-wider"
+                className="font-bold tracking-tight"
                 style={{
                   fontSize: '72px',
-                  background: 'linear-gradient(135deg, #DC2626, #F59E0B)',
+                  background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
                 }}
               >
-                Commie Launch
+                Proof Launch
               </span>
             </div>
           </div>

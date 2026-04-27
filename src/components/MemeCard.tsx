@@ -143,7 +143,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
             <div className="flex items-center gap-1 text-sm text-[var(--muted)]">
               <Users className="w-4 h-4 text-[var(--accent)]" />
               <span className="font-bold">{backer_count}</span>
-              <span className="uppercase text-xs">comrades</span>
+              <span className="uppercase text-xs">backers</span>
             </div>
           </div>
         )}
@@ -154,7 +154,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1 text-sm">
                 <TrendingUp className="w-4 h-4 text-[var(--success)]" />
-                <span className="text-[var(--success)] font-bold uppercase text-xs tracking-wide">Victory Achieved</span>
+                <span className="text-[var(--success)] font-bold uppercase text-xs tracking-wide">Live</span>
               </div>
               {pump_fun_url && (
                 <span
@@ -208,7 +208,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
           )}
 
           <span className="text-xs text-[var(--muted)] ml-auto uppercase tracking-wide">
-            Comrade {creator_wallet.slice(0, 4)}...{creator_wallet.slice(-4)}
+            By {creator_wallet.slice(0, 4)}...{creator_wallet.slice(-4)}
           </span>
         </div>
       </div>

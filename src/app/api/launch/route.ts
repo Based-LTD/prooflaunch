@@ -6,7 +6,7 @@ import { rateLimiters } from '@/lib/rateLimit';
 
 // POST /api/launch - Launch a funded meme token via batched RPC buys
 // Creates token on pump.fun, then executes buys from each backer's burner wallet
-// Bourgeoisie (slots 1-4) buy first at best prices, Proletariat (slots 5-8) follow in second wave
+// Genesis (slots 1-4) buy first at best prices, Wave 2 (slots 5-8) follow in second wave
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient();
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     console.log(`Launching ${config.name} with ${burnerBackers.length} burner wallets...`);
     console.log('Burner wallets will buy in order of backing time (earliest first = best price)');
 
-    // Launch with batched RPC buys (Bourgeoisie batch 1, Proletariat batch 2)
+    // Launch with batched RPC buys (Genesis batch 1, Wave 2 batch 2)
     const result = await launchWithBatchedBuys(config, burnerBackers);
 
     if (!result.success || !result.mintAddress) {

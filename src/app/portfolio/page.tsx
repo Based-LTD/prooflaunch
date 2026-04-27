@@ -260,9 +260,9 @@ export default function PortfolioPage() {
           <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
             <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
           </div>
-          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Comrade Identification Required</h2>
+          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Wallet Required</h2>
           <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-            Connect your wallet to access the collective dashboard
+            Connect your wallet to view your portfolio
           </p>
         </div>
       </div>
@@ -279,16 +279,16 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header - Propaganda Style */}
+      {/* Header */}
       <div className="relative py-6">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
-              <span className="gradient-text">Comrade Dashboard</span>
+              <span className="gradient-text">Portfolio</span>
             </h1>
             <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-              Your contributions to the revolution
+              Your backings and launched tokens
             </p>
           </div>
           <button
@@ -302,7 +302,7 @@ export default function PortfolioPage() {
         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
       </div>
 
-      {/* Stats - Medal Style */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-4 text-center">
           <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-[var(--accent)] text-xs font-bold uppercase">Contributed</div>
@@ -337,7 +337,7 @@ export default function PortfolioPage() {
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-1 h-8 bg-gradient-to-b from-[var(--accent)] to-[var(--accent-gold)]" />
-          <h2 className="text-2xl font-black uppercase tracking-tight">Your Allegiances</h2>
+          <h2 className="text-2xl font-black uppercase tracking-tight">Your Backings</h2>
         </div>
 
         {visibleBackings.length === 0 ? (
@@ -345,12 +345,12 @@ export default function PortfolioPage() {
             <div className="w-16 h-16 mx-auto bg-[var(--background)] flex items-center justify-center border-2 border-[var(--border)] mb-4">
               <Coins className="w-8 h-8 text-[var(--muted)] opacity-50" />
             </div>
-            <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Allegiances Yet</h3>
+            <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Backings Yet</h3>
             <p className="text-[var(--muted)] mb-4 uppercase tracking-wide text-sm">
-              Join the revolution in the Proving Grounds
+              Find a meme to back in the Proving Grounds
             </p>
             <Link href="/" className="inline-block px-6 py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 transition-opacity border-2 border-[var(--accent)]">
-              Browse Revolutions
+              Browse Memes
             </Link>
           </div>
         ) : (
@@ -570,7 +570,7 @@ export default function PortfolioPage() {
           <div className="w-1 h-8 bg-gradient-to-b from-[var(--accent-gold)] to-[var(--accent)]" />
           <h2 className="text-2xl font-black uppercase tracking-tight flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-[var(--accent-gold)]" />
-            Your Movements
+            Your Memes
           </h2>
         </div>
 
@@ -579,12 +579,12 @@ export default function PortfolioPage() {
             <div className="w-16 h-16 mx-auto bg-[var(--background)] flex items-center justify-center border-2 border-[var(--border)] mb-4">
               <Sparkles className="w-8 h-8 text-[var(--muted)] opacity-50" />
             </div>
-            <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Movements Started</h3>
+            <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Memes Submitted</h3>
             <p className="text-[var(--muted)] mb-4 uppercase tracking-wide text-sm">
-              Start your first revolution
+              Submit your first meme
             </p>
             <Link href="/submit" className="inline-block px-6 py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 transition-opacity border-2 border-[var(--accent)]">
-              Start Revolution
+              Submit a Meme
             </Link>
           </div>
         ) : (

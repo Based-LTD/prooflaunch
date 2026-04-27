@@ -1553,11 +1553,11 @@ async function executeAllBuysStandard(
 }
 
 // Launch with batched RPC buys - reads actual on-chain curve state for reliable execution
-// Bourgeoisie (slots 1-4) buy first, Proletariat (slots 5-8) buy in second wave
+// Genesis (slots 1-4) buy first, Wave 2 (slots 5-8) buy in second wave
 // Pre-builds ALL buy transactions using predicted curve state, then:
 //   1. Send create tx via RPC
-//   2. Blast batch 1 (Bourgeoisie, slots 1-4) immediately after create confirms
-//   3. Wait for batch 1, blast batch 2 (Proletariat, slots 5-8)
+//   2. Blast batch 1 (Genesis, slots 1-4) immediately after create confirms
+//   3. Wait for batch 1, blast batch 2 (Wave 2, slots 5-8)
 // Snipe window: ~200ms (time between create confirm and batch 1 sends)
 export async function launchWithBatchedBuys(
   config: LaunchConfig,
@@ -1570,7 +1570,7 @@ export async function launchWithBatchedBuys(
   buyResults: BurnerBuyResult[];
   error?: string;
 }> {
-  const BATCH_SIZE = 4; // Bourgeoisie = first 4, Proletariat = rest
+  const BATCH_SIZE = 4; // Genesis = first 4, Wave 2 = rest
 
   try {
     console.log(`=== BATCHED RPC LAUNCH START ===`);
@@ -1584,9 +1584,9 @@ export async function launchWithBatchedBuys(
     );
 
     // Split into batches
-    const batch1 = sortedBackers.slice(0, BATCH_SIZE); // Bourgeoisie
-    const batch2 = sortedBackers.slice(BATCH_SIZE);     // Proletariat
-    console.log(`Bourgeoisie (batch 1): ${batch1.length} | Proletariat (batch 2): ${batch2.length}`);
+    const batch1 = sortedBackers.slice(0, BATCH_SIZE); // Genesis
+    const batch2 = sortedBackers.slice(BATCH_SIZE);     // Wave 2
+    console.log(`Genesis (batch 1): ${batch1.length} | Wave 2 (batch 2): ${batch2.length}`);
 
     // === PHASE 1: Pre-compute everything in parallel ===
     console.log('Phase 1: Pre-computing metadata + curve constants + balances...');
@@ -1801,7 +1801,7 @@ export async function launchWithBatchedBuys(
       console.log(`${batchLabel}: ${batchSuccesses}/${infos.length} confirmed`);
     }
 
-    // Batch 1: Bourgeoisie — read actual curve, build, blast
+    // Batch 1: Genesis — read actual curve, build, blast
     if (batch1.length > 0) {
       const { blockhash: b1Blockhash } = await connection.getLatestBlockhash('confirmed');
       const { txs: batch1Txs, infos: batch1Infos } = await buildBatchBuyTxs(
@@ -1811,10 +1811,10 @@ export async function launchWithBatchedBuys(
         balances.slice(0, BATCH_SIZE) as number[],
         b1Blockhash,
       );
-      await sendAndCollectBatch('Bourgeoisie', batch1Txs, batch1Infos);
+      await sendAndCollectBatch('Genesis', batch1Txs, batch1Infos);
     }
 
-    // Batch 2: Proletariat — read curve AGAIN (reflects batch 1 + any snipers), build, blast
+    // Batch 2: Wave 2 — read curve AGAIN (reflects batch 1 + any snipers), build, blast
     if (batch2.length > 0) {
       const { blockhash: b2Blockhash } = await connection.getLatestBlockhash('confirmed');
       const { txs: batch2Txs, infos: batch2Infos } = await buildBatchBuyTxs(
@@ -1824,7 +1824,7 @@ export async function launchWithBatchedBuys(
         balances.slice(BATCH_SIZE) as number[],
         b2Blockhash,
       );
-      await sendAndCollectBatch('Proletariat', batch2Txs, batch2Infos);
+      await sendAndCollectBatch('Wave 2', batch2Txs, batch2Infos);
     }
 
     // === PHASE 5: Retry any failed buys via standard executeBurnerBuy ===
@@ -1892,7 +1892,7 @@ export async function launchWithJitoBundle(
 }> {
   const JITO_TIP_LAMPORTS = 7_000_000; // 0.007 SOL tip (embedded in create tx)
   // With tip embedded in create tx: 1 create (with tip) + 4 buys = 5 max
-  const MAX_BUNDLED_BUYS = 4; // Bourgeoisie tier - same-block buys
+  const MAX_BUNDLED_BUYS = 4; // Genesis tier - same-block buys
 
   try {
     console.log(`=== JITO BUNDLE LAUNCH START ===`);
@@ -1905,10 +1905,10 @@ export async function launchWithJitoBundle(
       (a, b) => new Date(a.backedAt).getTime() - new Date(b.backedAt).getTime()
     );
 
-    // Split into Bourgeoisie (first 4, bundled) and Proletariat (rest, overflow)
-    const bourgeoisieBackers = sortedBackers.slice(0, MAX_BUNDLED_BUYS);
-    const proletariatBackers = sortedBackers.slice(MAX_BUNDLED_BUYS);
-    console.log(`Bourgeoisie (bundled): ${bourgeoisieBackers.length} | Proletariat (overflow): ${proletariatBackers.length}`);
+    // Split into Genesis (first 4, bundled) and Wave 2 (rest, overflow)
+    const genesisBackers = sortedBackers.slice(0, MAX_BUNDLED_BUYS);
+    const waveTwoBackers = sortedBackers.slice(MAX_BUNDLED_BUYS);
+    console.log(`Genesis (bundled): ${genesisBackers.length} | Wave 2 (overflow): ${waveTwoBackers.length}`);
 
     // 1. Upload metadata to IPFS
     console.log('Step 1: Uploading metadata to IPFS...');
@@ -1926,10 +1926,10 @@ export async function launchWithJitoBundle(
     const initialCurveState = await fetchInitialCurveConstants(sdk);
     console.log(`Initial curve: vTokens=${initialCurveState.virtualTokenReserves}, vSol=${initialCurveState.virtualSolReserves}`);
 
-    // 4. Fetch all Bourgeoisie burner wallet balances in parallel
-    console.log('Step 3: Checking Bourgeoisie wallet balances...');
+    // 4. Fetch all Genesis burner wallet balances in parallel
+    console.log('Step 3: Checking Genesis wallet balances...');
     const balances = await Promise.all(
-      bourgeoisieBackers.map(b => connection.getBalance(new PublicKey(b.burnerWallet)))
+      genesisBackers.map(b => connection.getBalance(new PublicKey(b.burnerWallet)))
     );
 
     // 5. Get a fresh blockhash (shared by all txs in bundle)
@@ -1946,12 +1946,12 @@ export async function launchWithJitoBundle(
     );
     transactions.push(createTx);
 
-    // Transactions 2-5: Bourgeoisie backer buys (simulate curve sequentially)
+    // Transactions 2-5: Genesis backer buys (simulate curve sequentially)
     let curveState = { ...initialCurveState };
     const bundledBuyInfo: { backer: BurnerBackerInfo; predictedTokens: bigint; buyAmount: bigint }[] = [];
 
-    for (let i = 0; i < bourgeoisieBackers.length; i++) {
-      const backer = bourgeoisieBackers[i];
+    for (let i = 0; i < genesisBackers.length; i++) {
+      const backer = genesisBackers[i];
       const buyAmount = calculateBundledBuyAmount(balances[i]);
 
       if (buyAmount <= BigInt(0)) {
@@ -2016,7 +2016,7 @@ export async function launchWithJitoBundle(
       return { ...fallbackResult, bundleUsed: false, bundleId };
     }
 
-    console.log(`Genesis bundle landed! ${bundledBuyInfo.length} Bourgeoisie buys included.`);
+    console.log(`Genesis bundle landed! ${bundledBuyInfo.length} Genesis buys included.`);
 
     // 9. Build results for bundled buys - verify actual token balances
     const buyResults: BurnerBuyResult[] = [];
@@ -2049,11 +2049,11 @@ export async function launchWithJitoBundle(
       });
     }
 
-    // 10. Execute Proletariat buys (backers 5+) via fast overflow flow
-    if (proletariatBackers.length > 0) {
-      console.log(`Step 7: Executing ${proletariatBackers.length} Proletariat buys...`);
-      const proletariatResults = await executeAllBuysStandard(sdk, connection, mintKeypair.publicKey, proletariatBackers);
-      buyResults.push(...proletariatResults);
+    // 10. Execute Wave 2 buys (backers 5+) via fast overflow flow
+    if (waveTwoBackers.length > 0) {
+      console.log(`Step 7: Executing ${waveTwoBackers.length} Wave 2 buys...`);
+      const waveTwoResults = await executeAllBuysStandard(sdk, connection, mintKeypair.publicKey, waveTwoBackers);
+      buyResults.push(...waveTwoResults);
     }
 
     const successfulBuys = buyResults.filter(r => r.buySignature || r.tokensReceived > 0);
