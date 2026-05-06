@@ -112,4 +112,4 @@ prooflaunch.fun
 ## Public Addresses
 
 - Website: https://prooflaunch.fun
-- Escrow: `CEGgJZF6AXGkj3BBTmmhagudwU9FKscMB25RJM5iwFYY`
+- Escrow: `83u1MraLPeq3ZqGo4GKqeg5FLk6YpSR7H7GcgZc2s9Ko`
