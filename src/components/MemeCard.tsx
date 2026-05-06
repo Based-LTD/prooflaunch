@@ -51,7 +51,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
     symbol,
     description,
     status,
-    backing_goal_sol,
+    total_slots = 8,
     current_backing_sol,
     backing_deadline,
     creator_wallet,
@@ -71,7 +71,9 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
     }
   };
 
-  const progress = (Number(current_backing_sol) / Number(backing_goal_sol)) * 100;
+  const totalSlots = Number(total_slots) || 8;
+  const filledSlots = Number(backer_count) || 0;
+  const progress = totalSlots > 0 ? (filledSlots / totalSlots) * 100 : 0;
   const timeRemaining = getTimeRemaining(backing_deadline);
   const { label: statusLabel, class: statusClass } = getStatusConfig(status);
 
@@ -123,10 +125,10 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
             <div>
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-[var(--muted)] flex items-center gap-1 uppercase text-xs font-bold tracking-wide">
-                  <Target className="w-3 h-3" /> Goal
+                  <Target className="w-3 h-3" /> Slots
                 </span>
                 <span className="font-black">
-                  {Number(current_backing_sol).toFixed(2)} / {Number(backing_goal_sol)} SOL
+                  {filledSlots} / {totalSlots}
                 </span>
               </div>
               <div className="relative h-3 bg-[var(--background)] border border-[var(--border)]">
@@ -140,10 +142,16 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
               </div>
             </div>
 
-            <div className="flex items-center gap-1 text-sm text-[var(--muted)]">
-              <Users className="w-4 h-4 text-[var(--accent)]" />
-              <span className="font-bold">{backer_count}</span>
-              <span className="uppercase text-xs">backers</span>
+            <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
+              <div className="flex items-center gap-1">
+                <Users className="w-4 h-4 text-[var(--accent)]" />
+                <span className="font-bold">{filledSlots}</span>
+                <span className="uppercase text-xs">backers</span>
+              </div>
+              <span className="text-[var(--muted)]">•</span>
+              <span className="uppercase text-xs">
+                <span className="font-bold text-[var(--foreground)]">{Number(current_backing_sol).toFixed(2)}</span> SOL pledged
+              </span>
             </div>
           </div>
         )}

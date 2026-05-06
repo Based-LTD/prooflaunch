@@ -41,8 +41,10 @@ export default function Home() {
     result.sort((a, b) => {
       switch (sortBy) {
         case 'progress':
-          const progressA = Number(a.current_backing_sol) / Number(a.backing_goal_sol);
-          const progressB = Number(b.current_backing_sol) / Number(b.backing_goal_sol);
+          const aSlots = Number(a.total_slots) || 8;
+          const bSlots = Number(b.total_slots) || 8;
+          const progressA = aSlots > 0 ? (Number((a as any).backer_count) || 0) / aSlots : 0;
+          const progressB = bSlots > 0 ? (Number((b as any).backer_count) || 0) / bSlots : 0;
           return progressB - progressA;
         case 'ending_soon':
           return new Date(a.backing_deadline).getTime() - new Date(b.backing_deadline).getTime();

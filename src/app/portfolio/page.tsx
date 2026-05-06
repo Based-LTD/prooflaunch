@@ -22,12 +22,14 @@ interface BackingWithMeme {
     symbol: string;
     image_url: string;
     status: string;
+    total_slots: number;
     backing_goal_sol: number;
     current_backing_sol: number;
     backing_deadline: string;
     mint_address?: string;
     pump_fun_url?: string;
     trust_score?: number;
+    backer_count?: number;
   };
 }
 
@@ -37,6 +39,7 @@ interface CreatedMeme {
   symbol: string;
   image_url: string;
   status: string;
+  total_slots: number;
   backing_goal_sol: number;
   current_backing_sol: number;
   backing_deadline: string;
@@ -463,26 +466,27 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Progress bar for proving memes */}
-                {isProving && (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)]">
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-[var(--muted)]">Progress</span>
-                      <span>
-                        {(Number(meme.current_backing_sol) || 0).toFixed(2)} / {Number(meme.backing_goal_sol) || 0} SOL
-                      </span>
+                {isProving && (() => {
+                  const totalSlots = Number(meme.total_slots) || 8;
+                  const filledSlots = Number(meme.backer_count) || 0;
+                  const slotProgress = totalSlots > 0 ? Math.min((filledSlots / totalSlots) * 100, 100) : 0;
+                  return (
+                    <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-[var(--muted)]">Slots</span>
+                        <span>
+                          {filledSlots} / {totalSlots}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-[var(--background)] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[var(--accent)] rounded-full transition-all"
+                          style={{ width: `${slotProgress}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 bg-[var(--background)] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[var(--accent)] rounded-full transition-all"
-                        style={{
-                          width: `${Number(meme.backing_goal_sol) > 0
-                            ? Math.min((Number(meme.current_backing_sol) / Number(meme.backing_goal_sol)) * 100, 100)
-                            : 0}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Fee qualification note */}
                 {backing.amount_sol >= 0.5 && (isProving || isLive) && (
@@ -593,9 +597,9 @@ export default function PortfolioPage() {
             const isProving = meme.status === 'backing';
             const isFunded = meme.status === 'funded';
             const isLive = meme.status === 'live';
-            const progress = Number(meme.backing_goal_sol) > 0
-              ? (Number(meme.current_backing_sol) / Number(meme.backing_goal_sol)) * 100
-              : 0;
+            const totalSlots = Number(meme.total_slots) || 8;
+            const filledSlots = Number(meme.backer_count) || 0;
+            const progress = totalSlots > 0 ? (filledSlots / totalSlots) * 100 : 0;
 
             return (
               <div key={meme.id} className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-5 hover:border-[var(--accent)] transition-colors">
@@ -628,11 +632,11 @@ export default function PortfolioPage() {
                   </Link>
 
                   <div className="flex items-center gap-6">
-                    {/* Backing stats */}
+                    {/* Slot stats */}
                     <div className="text-right">
-                      <div className="text-sm text-[var(--muted)]">Backing</div>
+                      <div className="text-sm text-[var(--muted)]">Slots</div>
                       <div className="font-semibold">
-                        {Number(meme.current_backing_sol).toFixed(2)} / {Number(meme.backing_goal_sol)} SOL
+                        {filledSlots} / {totalSlots}
                       </div>
                     </div>
 

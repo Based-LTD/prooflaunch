@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('backings')
-      .select('*, memes(id, name, symbol, image_url, status, backing_goal_sol, current_backing_sol, backing_deadline, mint_address, pump_fun_url, trust_score)')
+      .select('*, memes(id, name, symbol, image_url, status, total_slots, backing_goal_sol, current_backing_sol, backing_deadline, mint_address, pump_fun_url, trust_score)')
       .order('created_at', { ascending: false });
 
     if (memeId) {
