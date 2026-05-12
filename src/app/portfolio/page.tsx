@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import bs58 from 'bs58';
 import Link from 'next/link';
 import { Coins, TrendingUp, Clock, Gift, AlertCircle, Loader2, ExternalLink, RefreshCw, Key, Copy, Check, Eye, EyeOff, Sparkles, Users } from 'lucide-react';
 import { PortfolioRewards } from '@/components/PortfolioRewards';
@@ -83,7 +84,7 @@ function getStatusBadge(status: string) {
 }
 
 export default function PortfolioPage() {
-  const { connected, publicKey } = useWallet();
+  const { connected, publicKey, signMessage } = useWallet();
   const [backings, setBackings] = useState<BackingWithMeme[]>([]);
   const [createdMemes, setCreatedMemes] = useState<CreatedMeme[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +181,7 @@ export default function PortfolioPage() {
   }, [connected, publicKey, fetchPortfolio]);
 
   const handleWithdraw = async (backing: BackingWithMeme) => {
-    if (!publicKey) return;
+    if (!publicKey || !signMessage) return;
 
     // Confirm withdrawal with fee warning
     const feeAmount = (backing.amount_sol * 0.02).toFixed(4);
@@ -196,12 +197,21 @@ export default function PortfolioPage() {
 
     setRequesting(backing.id);
     try {
+      // Sign a message to prove wallet ownership (server requires this)
+      const backerWallet = publicKey.toBase58();
+      const authMessage = `withdraw:${backing.meme_id}:${backerWallet}`;
+      const msgBytes = new TextEncoder().encode(authMessage);
+      const sigBytes = await signMessage(msgBytes);
+      const sigB58 = bs58.encode(sigBytes);
+
       const response = await fetch('/api/backings/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meme_id: backing.meme_id,
-          backer_wallet: publicKey.toBase58(),
+          backer_wallet: backerWallet,
+          signature: sigB58,
+          message: authMessage,
         }),
       });
 
