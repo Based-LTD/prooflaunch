@@ -1,130 +1,150 @@
 import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
-export const alt = 'Proof Launch — Community-Curated Meme Coin Launchpad';
+export const alt = 'Proof Launch — The Proving Grounds for Meme Coins';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
-export default function OpenGraphImage() {
+const AMBER = '#ff9d00';
+const BG = '#0a0a0a';
+const MUTED = '#5a5a52';
+const FG = '#e8e6df';
+
+export default async function OpenGraphImage() {
+  const fontData = await fetch(
+    new URL('./IBMPlexMono-SemiBold.woff', import.meta.url)
+  ).then((r) => r.arrayBuffer());
+
   return new ImageResponse(
     (
       <div
         style={{
           width: '100%',
           height: '100%',
-          background: '#0a0a0f',
+          background: BG,
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
+          fontFamily: 'Plex',
+          color: FG,
           position: 'relative',
         }}
       >
-        {/* Glow accents */}
-        <div
-          style={{
-            position: 'absolute',
-            top: -250,
-            left: -250,
-            width: 700,
-            height: 700,
-            background: '#8b5cf6',
-            opacity: 0.35,
-            borderRadius: '50%',
-            filter: 'blur(160px)',
-            display: 'flex',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: -250,
-            right: -250,
-            width: 700,
-            height: 700,
-            background: '#06b6d4',
-            opacity: 0.3,
-            borderRadius: '50%',
-            filter: 'blur(160px)',
-            display: 'flex',
-          }}
-        />
-
-        {/* Logo + wordmark row */}
+        {/* Status bar */}
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            gap: 32,
-            marginBottom: 24,
+            padding: '20px 40px',
+            borderBottom: `1px solid ${MUTED}`,
+            fontSize: 18,
+            color: MUTED,
+            letterSpacing: '0.15em',
           }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ width: 12, height: 12, background: '#00d97e', display: 'flex' }} />
+            <span>MAINNET · LIVE</span>
+          </div>
+          <span style={{ color: AMBER }}>// PROOF_LAUNCH.SYS</span>
+        </div>
+
+        {/* Main body */}
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 80px',
+            gap: 64,
+          }}
+        >
+          {/* P/L mark */}
           <div
             style={{
-              width: 140,
-              height: 140,
-              background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
-              borderRadius: 28,
+              width: 240,
+              height: 240,
+              border: `8px solid ${AMBER}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}
           >
-            <svg
-              width="92"
-              height="92"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="white"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <div
+              style={{
+                fontSize: 130,
+                color: AMBER,
+                letterSpacing: '-0.04em',
+                lineHeight: 1,
+                display: 'flex',
+              }}
             >
-              <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-            </svg>
+              P<span style={{ opacity: 0.55, margin: '0 4px' }}>/</span>L
+            </div>
           </div>
-          <div
-            style={{
-              fontSize: 120,
-              fontWeight: 800,
-              backgroundImage: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
-              backgroundClip: 'text',
-              color: 'transparent',
-              letterSpacing: -3,
-              display: 'flex',
-            }}
-          >
-            Proof Launch
+
+          {/* Wordmark + tagline */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div
+              style={{
+                fontSize: 22,
+                color: MUTED,
+                letterSpacing: '0.25em',
+                textTransform: 'uppercase',
+                display: 'flex',
+              }}
+            >
+              &gt; SYSTEM
+            </div>
+            <div
+              style={{
+                fontSize: 96,
+                color: FG,
+                letterSpacing: '-0.02em',
+                lineHeight: 1,
+                textTransform: 'uppercase',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <span>Proof<span style={{ color: AMBER }}>/</span>Launch</span>
+            </div>
+            <div
+              style={{
+                fontSize: 28,
+                color: MUTED,
+                lineHeight: 1.4,
+                marginTop: 8,
+                display: 'flex',
+              }}
+            >
+              The proving grounds for meme coins
+            </div>
           </div>
         </div>
 
-        {/* Subhead */}
+        {/* Bottom bar */}
         <div
           style={{
-            fontSize: 36,
-            color: '#a3a3a3',
             display: 'flex',
-            marginTop: 16,
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '20px 40px',
+            borderTop: `1px solid ${MUTED}`,
+            fontSize: 20,
+            color: MUTED,
+            letterSpacing: '0.15em',
           }}
         >
-          The proving grounds for meme coins
-        </div>
-
-        {/* Bottom URL */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 40,
-            fontSize: 24,
-            color: '#737373',
-            letterSpacing: 1,
-            display: 'flex',
-          }}
-        >
-          prooflaunch.fun
+          <span>SLOTS · BACKERS · LAUNCH</span>
+          <span style={{ color: AMBER }}>prooflaunch.fun</span>
         </div>
       </div>
     ),
-    { ...size }
+    {
+      ...size,
+      fonts: [{ name: 'Plex', data: fontData, weight: 600, style: 'normal' }],
+    }
   );
 }

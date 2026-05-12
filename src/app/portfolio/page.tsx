@@ -259,14 +259,18 @@ export default function PortfolioPage() {
   if (!connected) {
     return (
       <div className="max-w-2xl mx-auto">
-        <div className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-8 text-center">
-          <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
-            <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
+        <div className="border border-[var(--warning)] bg-[var(--card)]">
+          <div className="border-b border-[var(--warning)] px-4 py-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
+              [!] WALLET_REQUIRED
+            </span>
           </div>
-          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Wallet Required</h2>
-          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-            Connect your wallet to view your portfolio
-          </p>
+          <div className="p-6">
+            <h2 className="text-base font-mono font-semibold uppercase tracking-tight mb-2">Wallet required</h2>
+            <p className="text-xs font-mono text-[var(--muted)]">
+              &gt; Connect your wallet to view your portfolio
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -281,55 +285,59 @@ export default function PortfolioPage() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="relative py-6">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
-              <span className="gradient-text">Portfolio</span>
-            </h1>
-            <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-              Your backings and launched tokens
-            </p>
-          </div>
+    <div className="space-y-6">
+      {/* Header — terminal block */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // PROOF_LAUNCH.SYS // PORTFOLIO
+          </span>
           <button
             onClick={fetchPortfolio}
-            className="p-3 border-2 border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] transition-colors"
+            className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)] flex items-center gap-1"
             title="Refresh"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className="w-3 h-3" />
+            REFRESH
           </button>
         </div>
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
+        <div className="p-6">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+            &gt; USER
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-mono font-semibold uppercase tracking-tight">
+            Portfolio
+          </h1>
+          <p className="text-xs font-mono text-[var(--muted)] mt-2">
+            Your backings and launched tokens
+          </p>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-4 text-center">
-          <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-[var(--accent)] text-xs font-bold uppercase">Contributed</div>
-          <Coins className="w-8 h-8 mx-auto mb-2 mt-2 text-[var(--accent)]" />
-          <div className="text-3xl font-black">{totalBacked.toFixed(2)}</div>
-          <div className="text-xs text-[var(--muted)] uppercase tracking-wide">SOL Pledged</div>
+      {/* Stats — terminal readout */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // METRICS
+          </span>
         </div>
-        <div className="relative border-2 border-blue-500 bg-[var(--card)] p-4 text-center">
-          <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-blue-400 text-xs font-bold uppercase">Active</div>
-          <Clock className="w-8 h-8 mx-auto mb-2 mt-2 text-blue-400" />
-          <div className="text-3xl font-black">{activeBackings}</div>
-          <div className="text-xs text-[var(--muted)] uppercase tracking-wide">In Progress</div>
-        </div>
-        <div className="relative border-2 border-green-500 bg-[var(--card)] p-4 text-center">
-          <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-green-400 text-xs font-bold uppercase">Victories</div>
-          <TrendingUp className="w-8 h-8 mx-auto mb-2 mt-2 text-green-400" />
-          <div className="text-3xl font-black">{launchedBackings}</div>
-          <div className="text-xs text-[var(--muted)] uppercase tracking-wide">Launched</div>
-        </div>
-        <div className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-4 text-center">
-          <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] text-[var(--accent-gold)] text-xs font-bold uppercase">Reclaimed</div>
-          <Gift className="w-8 h-8 mx-auto mb-2 mt-2 text-[var(--accent-gold)]" />
-          <div className="text-3xl font-black">{refundedAmount.toFixed(2)}</div>
-          <div className="text-xs text-[var(--muted)] uppercase tracking-wide">SOL Refunded</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-[var(--border)]">
+          <div className="p-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">SOL Pledged</div>
+            <div className="text-2xl font-mono font-semibold text-[var(--accent)]">{totalBacked.toFixed(2)}</div>
+          </div>
+          <div className="p-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">Active</div>
+            <div className="text-2xl font-mono font-semibold text-[var(--accent)]">{activeBackings}</div>
+          </div>
+          <div className="p-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">Launched</div>
+            <div className="text-2xl font-mono font-semibold text-[var(--success)]">{launchedBackings}</div>
+          </div>
+          <div className="p-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">Refunded</div>
+            <div className="text-2xl font-mono font-semibold text-[var(--accent-gold)]">{refundedAmount.toFixed(2)}</div>
+          </div>
         </div>
       </div>
 
@@ -338,9 +346,13 @@ export default function PortfolioPage() {
 
       {/* Backings List */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-1 h-8 bg-gradient-to-b from-[var(--accent)] to-[var(--accent-gold)]" />
-          <h2 className="text-2xl font-black uppercase tracking-tight">Your Backings</h2>
+        <div className="border-l-2 border-[var(--accent)] pl-3">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // SECTION
+          </div>
+          <h2 className="text-xl font-mono font-semibold uppercase tracking-tight">
+            Your Backings
+          </h2>
         </div>
 
         {visibleBackings.length === 0 ? (
@@ -570,10 +582,11 @@ export default function PortfolioPage() {
 
       {/* Your Creations Section */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-1 h-8 bg-gradient-to-b from-[var(--accent-gold)] to-[var(--accent)]" />
-          <h2 className="text-2xl font-black uppercase tracking-tight flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-[var(--accent-gold)]" />
+        <div className="border-l-2 border-[var(--accent-gold)] pl-3">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // SECTION
+          </div>
+          <h2 className="text-xl font-mono font-semibold uppercase tracking-tight">
             Your Memes
           </h2>
         </div>

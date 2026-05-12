@@ -1,21 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0f;
-  --foreground: #fafafa;
-  --card: #12121a;
-  --card-hover: #1a1a25;
-  --border: #2a2a3a;
-  --muted: #6b7280;
-  --accent: #8b5cf6;
-  --accent-hover: #a78bfa;
-  --accent-gold: #06b6d4;
-  --accent-gold-hover: #22d3ee;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --gradient-start: #8b5cf6;
-  --gradient-end: #06b6d4;
+  --background: #0a0a0a;
+  --background-elevated: #131313;
+  --foreground: #e8e6df;
+  --muted: #8a8a82;
+  --muted-soft: #5a5a52;
+  --card: #0e0e0e;
+  --card-hover: #161616;
+  --border: #2a2a2a;
+  --border-strong: #3a3a3a;
+
+  /* Terminal palette — Bloomberg amber primary, status colors for data */
+  --accent: #ff9d00;
+  --accent-hover: #ffb000;
+  --accent-dim: #b86d00;
+  --accent-gold: #ffd400;
+  --accent-gold-hover: #ffe240;
+
+  --status-up: #00d97e;
+  --status-down: #ff3b56;
+  --success: #00d97e;
+  --warning: #ffd400;
+  --error: #ff3b56;
+
+  --gradient-start: #ff9d00;
+  --gradient-end: #ffd400;
 }
 
 @theme inline {
@@ -33,180 +43,292 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-mono), 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-feature-settings: 'zero', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: 0.01em;
 }
 
-/* Custom scrollbar */
+/* No rounded corners anywhere — terminal hard edges */
+*, *::before, *::after {
+  border-radius: 0 !important;
+}
+
+/* Display type: ALL CAPS, monospaced, tight tracking */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-mono), monospace;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Faint terminal grid backdrop — dot pattern, very subtle */
+.terminal-grid {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(rgba(255, 157, 0, 0.08) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+  /* CRT-style fade at top */
+  mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+}
+
+/* Scrollbar — square, amber */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
+  height: 10px;
 }
-
 ::-webkit-scrollbar-track {
   background: var(--background);
+  border-left: 1px solid var(--border);
 }
-
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+  background: var(--border-strong);
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
+  background: var(--accent-dim);
 }
 
-/* Gradient text */
+/* ====== Gradient text — amber glow ====== */
 .gradient-text {
-  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--accent);
+  text-shadow: 0 0 24px rgba(255, 157, 0, 0.25);
 }
 
-/* Gradient border */
-.gradient-border {
-  position: relative;
-  background: var(--card);
-  border-radius: 12px;
-}
-
-.gradient-border::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  padding: 1px;
-  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
-/* Glow effect */
-.glow {
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
-}
-
-.glow-hover:hover {
-  box-shadow: 0 0 30px rgba(139, 92, 246, 0.4);
-}
-
-/* Card styles */
+/* ====== Cards: hard amber-bordered panels ====== */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  position: relative;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 1px;
+  background: var(--accent);
+}
+.card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  height: 1px;
+  background: var(--accent);
 }
 
 .card:hover {
-  background: var(--card-hover);
   border-color: var(--accent);
+  background: var(--card-hover);
 }
 
-/* Button styles */
+[class*="bg-\\[var\\(--card\\)\\]"] {
+  border-color: var(--border) !important;
+}
+
+/* ====== Buttons ====== */
 .btn-primary {
-  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-  color: white;
+  background: var(--accent);
+  color: #0a0a0a;
+  font-family: var(--font-mono), monospace;
   font-weight: 600;
-  padding: 12px 24px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  font-size: 0.8125rem;
+  padding: 12px 22px;
+  border: 1px solid var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
 .btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  background: var(--accent-hover);
+  color: #0a0a0a;
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
 }
 
 .btn-secondary {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 1px solid var(--border-strong);
   color: var(--foreground);
+  font-family: var(--font-mono), monospace;
   font-weight: 500;
-  padding: 12px 24px;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  font-size: 0.8125rem;
+  padding: 12px 22px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 
 .btn-secondary:hover {
   border-color: var(--accent);
-  background: var(--card-hover);
+  color: var(--accent);
+  background: rgba(255, 157, 0, 0.05);
 }
 
-/* Progress bar */
+/* ====== Progress: segmented block fill ====== */
 .progress-bar {
-  background: var(--border);
-  border-radius: 9999px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  height: 18px;
+  position: relative;
   overflow: hidden;
 }
 
 .progress-fill {
-  background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
+  background: var(--accent);
   height: 100%;
-  transition: width 0.3s ease;
+  transition: width 0.25s linear;
+  position: relative;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--accent) 0,
+    var(--accent) 8px,
+    rgba(0, 0, 0, 0.18) 8px,
+    rgba(0, 0, 0, 0.18) 10px
+  );
 }
 
-/* Pulse animation */
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(139, 92, 246, 0.5);
-  }
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
 }
 
-.pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+.cursor-blink::after {
+  content: '_';
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent);
+  animation: blink 1s steps(1) infinite;
 }
 
-/* Wallet adapter overrides */
+/* ====== Wallet adapter — terminal style, compact ====== */
 .wallet-adapter-button {
-  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)) !important;
-  border-radius: 8px !important;
+  background: var(--accent) !important;
+  color: #0a0a0a !important;
+  font-family: var(--font-mono), monospace !important;
   font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  font-size: 0.6875rem !important;
+  line-height: 1 !important;
+  height: 32px !important;
+  padding: 0 14px !important;
+  border: 1px solid var(--accent) !important;
+}
+
+.wallet-adapter-button-trigger img,
+.wallet-adapter-button .wallet-adapter-button-start-icon,
+.wallet-adapter-button .wallet-adapter-button-end-icon {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.wallet-adapter-button:hover {
+  background: var(--accent-hover) !important;
 }
 
 .wallet-adapter-modal-wrapper {
   background: var(--card) !important;
+  border: 1px solid var(--accent) !important;
 }
 
 .wallet-adapter-modal-title {
   color: var(--foreground) !important;
+  font-family: var(--font-mono), monospace !important;
+  text-transform: uppercase !important;
 }
 
-/* Status badges */
+/* ====== Status badges — terminal indicators ====== */
 .badge-proving {
-  background: rgba(139, 92, 246, 0.2);
-  color: #a78bfa;
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
 }
 
 .badge-launched {
-  background: rgba(16, 185, 129, 0.2);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: transparent;
+  color: var(--status-up);
+  border: 1px solid var(--status-up);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
 }
 
 .badge-failed {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: transparent;
+  color: var(--status-down);
+  border: 1px solid var(--status-down);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
 }
 
 .badge-migrated {
-  background: rgba(6, 182, 212, 0.2);
-  color: #22d3ee;
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  background: transparent;
+  color: var(--accent-gold);
+  border: 1px solid var(--accent-gold);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+}
+
+/* ====== Inputs: terminal field ====== */
+input, textarea, select {
+  font-family: var(--font-mono), monospace !important;
+  background: var(--background) !important;
+  border: 1px solid var(--border) !important;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent) !important;
+  outline: none !important;
+}
+
+/* ====== Pulse for live/active indicators ====== */
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pulse-glow {
+  animation: pulse-amber 1.4s ease-in-out infinite;
+}
+
+/* ====== Ticker animation ====== */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.ticker {
+  display: flex;
+  gap: 40px;
+  white-space: nowrap;
+  animation: ticker-scroll 60s linear infinite;
+  width: max-content;
 }

@@ -42,49 +42,57 @@ export default function DocsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
-      {/* Back Button */}
+      {/* Back link */}
       <Link
         href="/"
-        className="inline-flex items-center gap-2 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors uppercase text-sm font-bold tracking-wide"
+        className="inline-flex items-center gap-2 text-[var(--muted)] hover:text-[var(--accent)] transition-colors text-xs font-mono uppercase tracking-widest"
       >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Proving Grounds
+        <ArrowLeft className="w-3 h-3" />
+        [&lt;] Back to Proving Grounds
       </Link>
 
-      {/* Header */}
-      <div className="relative text-center py-8">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
-        <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
-          <span className="gradient-text">Documentation</span>
-        </h1>
-        <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-          Everything you need to know about Proof Launch
-        </p>
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
+      {/* Header — terminal block */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // PROOF_LAUNCH.SYS // DOCS
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+            v0.2.0
+          </span>
+        </div>
+        <div className="p-6">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+            &gt; MANUAL
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-mono font-semibold uppercase tracking-tight">
+            Documentation
+          </h1>
+          <p className="text-xs font-mono text-[var(--muted)] mt-2">
+            Everything you need to know about Proof Launch
+          </p>
+        </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="border-2 border-[var(--border)] bg-[var(--card)] p-2">
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center gap-1 px-3 py-3 text-xs font-bold uppercase tracking-wide transition-all ${
-                  isActive
-                    ? 'bg-[var(--accent)] text-white'
-                    : 'bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--background)]/80'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="hidden sm:block">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Tab Navigation — terminal tab bar */}
+      <div className="border border-[var(--border)] bg-[var(--card)] flex overflow-x-auto">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 px-3 py-3 text-[11px] font-mono uppercase tracking-widest border-l border-[var(--border)] first:border-l-0 transition-colors whitespace-nowrap ${
+                isActive
+                  ? 'bg-[var(--accent)] text-[#0a0a0a]'
+                  : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+              }`}
+            >
+              {isActive && '> '}
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Content */}
@@ -95,7 +103,7 @@ export default function DocsPage() {
             {/* What is Proof Launch */}
             <section className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
               <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-                ★ Overview
+                // OVERVIEW
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <Rocket className="w-6 h-6 text-[var(--accent)]" />
@@ -129,7 +137,7 @@ export default function DocsPage() {
             {/* How Backing Works - Burner Wallets */}
             <section className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-6 space-y-4">
               <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--warning)] text-black text-xs font-bold uppercase tracking-wider">
-                ★ Key Innovation
+                // KEY_INNOVATION
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <Key className="w-6 h-6 text-[var(--warning)]" />
@@ -160,10 +168,10 @@ export default function DocsPage() {
               <div className="bg-[var(--accent-gold)]/10 border-2 border-[var(--accent-gold)]/30 p-4 mt-4">
                 <h3 className="font-bold text-[var(--accent-gold)] mb-2 uppercase tracking-wide">The Two Tiers</h3>
                 <ul className="text-sm text-[var(--muted)] space-y-1">
-                  <li>★ <strong className="text-[var(--accent-gold)]">Genesis (slots 1-4):</strong> First to buy right after token creation — best prices on the curve</li>
-                  <li>★ <strong className="text-[var(--accent)]">Wave 2 (slots 5-8):</strong> Second wave buys immediately after Genesis</li>
-                  <li>★ <strong>First come, first served:</strong> Earlier backers get the protected slots</li>
-                  <li>★ <strong>No max per wallet:</strong> Back as much as you want (just meet the minimum)</li>
+                  <li>· <strong className="text-[var(--accent-gold)]">Genesis (slots 1-4):</strong> First to buy right after token creation — best prices on the curve</li>
+                  <li>· <strong className="text-[var(--accent)]">Wave 2 (slots 5-8):</strong> Second wave buys immediately after Genesis</li>
+                  <li>· <strong>First come, first served:</strong> Earlier backers get the protected slots</li>
+                  <li>· <strong>No max per wallet:</strong> Back as much as you want (just meet the minimum)</li>
                 </ul>
               </div>
             </section>
@@ -200,7 +208,7 @@ export default function DocsPage() {
         {activeTab === 'backers' && (
           <section className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
             <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ For Backers
+              // FOR_BACKERS
             </div>
             <div className="flex items-center gap-3 pt-2">
               <Users className="w-6 h-6 text-[var(--accent)]" />
@@ -234,7 +242,7 @@ export default function DocsPage() {
         {activeTab === 'creators' && (
           <section className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-6 space-y-4">
             <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent-gold)] text-black text-xs font-bold uppercase tracking-wider">
-              ★ For Creators
+              // FOR_CREATORS
             </div>
             <div className="flex items-center gap-3 pt-2">
               <Rocket className="w-6 h-6 text-[var(--accent-gold)]" />
@@ -300,7 +308,7 @@ export default function DocsPage() {
             {/* Trading Fee Distribution */}
             <section className="relative border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-4">
               <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
-                ★ Trading Fees
+                // TRADING_FEES
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <TrendingUp className="w-6 h-6 text-[var(--success)]" />
@@ -346,7 +354,7 @@ export default function DocsPage() {
           <>
             <section className="relative border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-4">
               <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
-                ★ Transparency
+                // TRANSPARENCY
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <Shield className="w-6 h-6 text-[var(--success)]" />
@@ -379,9 +387,9 @@ export default function DocsPage() {
                   is encrypted and stored server-side until launch. After launch, you can:
                 </p>
                 <ul className="text-sm text-[var(--muted)] space-y-1">
-                  <li>★ Export the private key and import into Phantom</li>
-                  <li>★ Transfer tokens directly from Portfolio</li>
-                  <li>★ Sell tokens directly from Portfolio</li>
+                  <li>· Export the private key and import into Phantom</li>
+                  <li>· Transfer tokens directly from Portfolio</li>
+                  <li>· Sell tokens directly from Portfolio</li>
                 </ul>
               </div>
 
@@ -390,7 +398,7 @@ export default function DocsPage() {
             {/* Safety & Risks */}
             <section className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-6 space-y-4">
               <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--warning)] text-black text-xs font-bold uppercase tracking-wider">
-                ★ Warning
+                // WARNING
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <AlertTriangle className="w-6 h-6 text-[var(--warning)]" />

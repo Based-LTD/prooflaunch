@@ -12,7 +12,7 @@ type SortOption = 'newest' | 'progress' | 'ending_soon';
 const ITEMS_PER_PAGE = 20;
 
 export default function Home() {
-  const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('backing');
+  const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showFilters, setShowFilters] = useState(false);
@@ -85,105 +85,131 @@ export default function Home() {
   ];
 
   return (
-    <div className="space-y-8">
-      {/* Hero Section */}
-      <div className="text-center space-y-4 py-8">
-        <h1 className="text-4xl md:text-5xl font-bold">
-          <span className="gradient-text">The Proving Grounds</span>
-        </h1>
-        <p className="text-lg text-[var(--muted)] max-w-2xl mx-auto">
-          Communities form BEFORE tokens launch. Back memes you believe in,
-          get in early when they go live on Pump.fun.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center pt-2">
-          <Link
-            href="/submit"
-            className="btn-primary flex items-center justify-center gap-2"
-          >
-            <Rocket className="w-5 h-5" />
-            Submit a Meme
-          </Link>
-          <Link
-            href="/docs"
-            className="btn-secondary flex items-center justify-center gap-2"
-          >
-            How It Works
-          </Link>
+    <div className="space-y-6">
+      {/* Hero — terminal block */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // PROOF_LAUNCH.SYS // PROVING_GROUNDS
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+            [ACTIVE]
+          </span>
+        </div>
+
+        <div className="p-6 sm:p-10 space-y-6">
+          <div className="space-y-3">
+            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-[var(--muted)]">
+              &gt; SYSTEM
+            </div>
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-mono font-semibold uppercase leading-[1.05] tracking-tight">
+              The Proving<br />
+              <span className="text-[var(--accent)]">Grounds<span className="cursor-blink" /></span>
+            </h1>
+            <p className="text-sm sm:text-base text-[var(--muted)] max-w-2xl font-mono leading-relaxed pt-3">
+              Communities form BEFORE tokens launch. Back memes you believe in,
+              get in early when they go live on Pump.fun.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Link href="/submit" className="btn-primary inline-flex items-center justify-center gap-2">
+              [&gt;] Submit Meme
+            </Link>
+            <Link href="/docs" className="btn-secondary inline-flex items-center justify-center gap-2">
+              [?] Read Docs
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-3 gap-4">
-        {statsDisplay.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.label} className="card p-4 text-center">
-              <Icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <div className="text-sm text-[var(--muted)]">{stat.label}</div>
+      {/* Stats — terminal readout */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // LIVE_METRICS
+          </span>
+        </div>
+        <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
+          {statsDisplay.map((stat) => (
+            <div key={stat.label} className="p-5">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">
+                {stat.label}
+              </div>
+              <div className="text-2xl sm:text-3xl font-mono font-semibold text-[var(--accent)]">
+                {stat.value}
+              </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
-      {/* Search and Filter */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--muted)]" />
+      {/* Search and Filter — terminal command row */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // QUERY
+          </span>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)]"
+          >
+            {showFilters ? '[−] HIDE_FILTERS' : '[+] FILTERS'}
+          </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row">
+          {/* Search input */}
+          <div className="flex items-center gap-2 flex-1 px-3 py-2 border-b sm:border-b-0 sm:border-r border-[var(--border)]">
+            <span className="text-[var(--accent)] font-mono">&gt;</span>
             <input
               type="text"
-              placeholder="Search memes..."
+              placeholder="search memes..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 rounded-lg bg-[var(--card)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none transition-colors"
+              className="flex-1 bg-transparent border-0 outline-none text-sm font-mono placeholder:text-[var(--muted)] focus:ring-0"
+              style={{ border: 'none', background: 'transparent' }}
             />
           </div>
-          <div className="flex gap-2">
+
+          {/* Filter buttons */}
+          <div className="flex">
             {([
-              { key: 'all', label: 'All', icon: null },
-              { key: 'backing', label: 'Proving', icon: Zap },
-              { key: 'live', label: 'Live', icon: TrendingUp },
+              { key: 'all', label: 'ALL' },
+              { key: 'backing', label: 'PROVING' },
+              { key: 'live', label: 'LIVE' },
             ] as const).map((f) => (
               <button
                 key={f.key}
                 onClick={() => handleFilterChange(f.key)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                className={`px-4 py-2 text-[11px] font-mono uppercase tracking-widest border-l border-[var(--border)] first:border-l-0 sm:first:border-l transition-colors ${
                   filter === f.key
-                    ? 'bg-[var(--accent)] text-white'
-                    : 'bg-[var(--card)] text-[var(--muted)] hover:text-[var(--foreground)]'
+                    ? 'bg-[var(--accent)] text-[#0a0a0a]'
+                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
                 }`}
               >
-                {f.icon && <f.icon className="w-4 h-4" />}
+                {filter === f.key && '> '}
                 {f.label}
               </button>
             ))}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                showFilters
-                  ? 'bg-[var(--accent)] text-white'
-                  : 'bg-[var(--card)] text-[var(--muted)] hover:text-[var(--foreground)]'
-              }`}
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
+        {/* Advanced filters drawer */}
         {showFilters && (
-          <div className="card p-4 flex flex-col sm:flex-row gap-6 items-start sm:items-center">
+          <div className="border-t border-[var(--border)] px-4 py-3 flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-3">
-              <ArrowUpDown className="w-4 h-4 text-[var(--muted)]" />
-              <span className="text-sm text-[var(--muted)]">Sort by:</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                SORT_BY:
+              </span>
               <select
                 value={sortBy}
                 onChange={(e) => handleSortChange(e.target.value as SortOption)}
-                className="px-3 py-2 rounded-lg bg-[var(--background)] border border-[var(--border)] text-sm focus:border-[var(--accent)] focus:outline-none"
+                className="px-2 py-1 bg-[var(--background)] border border-[var(--border)] text-xs font-mono uppercase focus:border-[var(--accent)] focus:outline-none"
               >
-                <option value="newest">Newest</option>
-                <option value="progress">Most Progress</option>
-                <option value="ending_soon">Ending Soon</option>
+                <option value="newest">NEWEST</option>
+                <option value="progress">PROGRESS</option>
+                <option value="ending_soon">ENDING_SOON</option>
               </select>
             </div>
 
@@ -193,9 +219,9 @@ export default function Home() {
                   setSortBy('newest');
                   setCurrentPage(1);
                 }}
-                className="text-sm text-[var(--accent)] hover:underline"
+                className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:underline"
               >
-                Reset
+                [×] RESET
               </button>
             )}
           </div>
@@ -211,19 +237,19 @@ export default function Home() {
 
       {/* Results Count */}
       {!loading && filteredMemes.length > 0 && (
-        <div className="flex justify-between items-center text-sm text-[var(--muted)]">
+        <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
           <span>
-            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredMemes.length)} of {filteredMemes.length}
+            [{((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredMemes.length)}] OF {filteredMemes.length}
           </span>
           {totalPages > 1 && (
-            <span>Page {currentPage} of {totalPages}</span>
+            <span>PAGE {currentPage}/{totalPages}</span>
           )}
         </div>
       )}
 
       {/* Meme Grid */}
       {!loading && paginatedMemes.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {paginatedMemes.map((meme) => (
             <MemeCard key={meme.id} meme={meme as any} />
           ))}
@@ -232,85 +258,87 @@ export default function Home() {
 
       {/* Pagination */}
       {!loading && totalPages > 1 && (
-        <div className="flex justify-center items-center gap-2">
+        <div className="flex justify-center items-center gap-1 font-mono text-xs">
           <button
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            className="p-2 rounded-lg bg-[var(--card)] border border-[var(--border)] disabled:opacity-50 disabled:cursor-not-allowed hover:border-[var(--accent)] transition-colors"
+            className="px-3 h-9 bg-[var(--card)] border border-[var(--border)] disabled:opacity-30 disabled:cursor-not-allowed hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest text-[10px]"
           >
-            <ChevronLeft className="w-5 h-5" />
+            &lt; PREV
           </button>
 
-          <div className="flex gap-1">
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(page => {
-                if (page === 1 || page === totalPages) return true;
-                if (Math.abs(page - currentPage) <= 2) return true;
-                return false;
-              })
-              .map((page, index, array) => {
-                const showEllipsisBefore = index > 0 && page - array[index - 1] > 1;
-                return (
-                  <div key={page} className="flex items-center gap-1">
-                    {showEllipsisBefore && (
-                      <span className="px-2 text-[var(--muted)]">...</span>
-                    )}
-                    <button
-                      onClick={() => setCurrentPage(page)}
-                      className={`min-w-[40px] h-10 rounded-lg font-medium transition-colors ${
-                        currentPage === page
-                          ? 'bg-[var(--accent)] text-white'
-                          : 'bg-[var(--card)] border border-[var(--border)] hover:border-[var(--accent)]'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  </div>
-                );
-              })}
-          </div>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
+            .map((page, index, array) => {
+              const showEllipsisBefore = index > 0 && page - array[index - 1] > 1;
+              return (
+                <span key={page} className="flex items-center gap-1">
+                  {showEllipsisBefore && (
+                    <span className="px-1 text-[var(--muted)]">…</span>
+                  )}
+                  <button
+                    onClick={() => setCurrentPage(page)}
+                    className={`min-w-[36px] h-9 font-mono text-xs transition-colors ${
+                      currentPage === page
+                        ? 'bg-[var(--accent)] text-[#0a0a0a]'
+                        : 'bg-[var(--card)] border border-[var(--border)] hover:border-[var(--accent)]'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                </span>
+              );
+            })}
 
           <button
             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
-            className="p-2 rounded-lg bg-[var(--card)] border border-[var(--border)] disabled:opacity-50 disabled:cursor-not-allowed hover:border-[var(--accent)] transition-colors"
+            className="px-3 h-9 bg-[var(--card)] border border-[var(--border)] disabled:opacity-30 disabled:cursor-not-allowed hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest text-[10px]"
           >
-            <ChevronRight className="w-5 h-5" />
+            NEXT &gt;
           </button>
         </div>
       )}
 
       {/* Empty State */}
       {!loading && filteredMemes.length === 0 && (
-        <div className="text-center py-12">
-          <Flame className="w-12 h-12 mx-auto text-[var(--muted)] mb-4" />
-          <h3 className="text-lg font-medium mb-2">No memes found</h3>
-          <p className="text-[var(--muted)] mb-6">
-            {search ? 'Try a different search term' : 'Be the first to submit a meme!'}
+        <div className="border border-[var(--border)] bg-[var(--card)] p-12 text-center">
+          <div className="text-[var(--accent)] font-mono text-xs uppercase tracking-widest mb-3">
+            [!] NO_RESULTS
+          </div>
+          <h3 className="font-mono uppercase tracking-tight text-base mb-2">No memes found</h3>
+          <p className="text-xs font-mono text-[var(--muted)] mb-6">
+            {search ? '> try a different search term' : '> be the first to submit a meme'}
           </p>
           <Link href="/submit" className="btn-primary inline-flex items-center gap-2">
-            <Rocket className="w-4 h-4" />
-            Submit a Meme
+            [&gt;] Submit Meme
           </Link>
         </div>
       )}
 
-      {/* How It Works Section */}
-      <div className="mt-16 py-12 border-t border-[var(--border)]">
-        <h2 className="text-2xl font-bold text-center mb-8">How It Works</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* How It Works — terminal sequence */}
+      <div className="border border-[var(--border)] bg-[var(--card)] mt-8">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // SEQUENCE.HOW_IT_WORKS
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+            4 STEPS
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-[var(--border)]">
           {[
-            { step: '1', title: 'Submit', desc: 'Creator submits a meme to the Proving Grounds' },
-            { step: '2', title: 'Back', desc: 'Community backs with SOL to prove demand' },
-            { step: '3', title: 'Launch', desc: 'Hit the goal = token launches on Pump.fun' },
-            { step: '4', title: 'Trade', desc: 'Token goes live with instant visibility' },
+            { step: '01', title: 'SUBMIT', desc: 'Creator submits a meme to the Proving Grounds' },
+            { step: '02', title: 'BACK', desc: 'Community backs with SOL to prove demand' },
+            { step: '03', title: 'LAUNCH', desc: 'All slots filled = token launches on Pump.fun' },
+            { step: '04', title: 'TRADE', desc: 'Token goes live with instant visibility' },
           ].map((item) => (
-            <div key={item.step} className="text-center">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center text-lg font-bold mx-auto mb-3">
-                {item.step}
+            <div key={item.step} className="p-5">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-3">
+                STEP {item.step}
               </div>
-              <h3 className="font-semibold mb-1">{item.title}</h3>
-              <p className="text-sm text-[var(--muted)]">{item.desc}</p>
+              <h3 className="font-mono font-semibold uppercase text-base mb-2">{item.title}</h3>
+              <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>

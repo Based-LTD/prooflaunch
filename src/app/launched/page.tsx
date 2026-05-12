@@ -2,16 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { MemeCard } from '@/components/MemeCard';
-import { BarChart3, TrendingUp, DollarSign, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import type { Meme } from '@/types/database';
 
 export default function LaunchedPage() {
   const [memes, setMemes] = useState<Meme[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    launchedCount: 0,
-    totalBacked: 0,
-  });
+  const [stats, setStats] = useState({ launchedCount: 0, totalBacked: 0 });
 
   const fetchMemes = useCallback(async () => {
     setLoading(true);
@@ -43,63 +40,71 @@ export default function LaunchedPage() {
   }, [fetchMemes]);
 
   const statsDisplay = [
-    { label: 'Launched Tokens', value: stats.launchedCount.toString(), icon: BarChart3, color: 'text-[var(--success)]' },
-    { label: 'Total Raised', value: `${stats.totalBacked.toFixed(1)} SOL`, icon: TrendingUp, color: 'text-[var(--accent)]' },
-    { label: 'Trading on Pump.fun', value: stats.launchedCount.toString(), icon: DollarSign, color: 'text-[var(--warning)]' },
+    { label: 'Launched Tokens', value: stats.launchedCount.toString() },
+    { label: 'Total Raised', value: `${stats.totalBacked.toFixed(1)} SOL` },
+    { label: 'Trading on Pump.fun', value: stats.launchedCount.toString() },
   ];
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="relative text-center py-8">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--success)] to-transparent" />
-        <div className="inline-block mb-4">
-          <div className="w-20 h-20 mx-auto bg-[var(--success)]/20 flex items-center justify-center border-2 border-[var(--success)]">
-            <span className="text-4xl">★</span>
-          </div>
+    <div className="space-y-6">
+      {/* Header — terminal block */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // PROOF_LAUNCH.SYS // LAUNCHED
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
+            [LIVE]
+          </span>
         </div>
-        <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
-          <span className="gradient-text">Launched Tokens</span>
-        </h1>
-        <p className="text-[var(--muted)] max-w-xl mx-auto uppercase tracking-wide text-sm">
-          Memes that hit their goal and went live
-        </p>
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--success)] to-transparent" />
+        <div className="p-6">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+            &gt; HALL_OF_LAUNCHES
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-mono font-semibold uppercase tracking-tight">
+            Launched Tokens
+          </h1>
+          <p className="text-xs font-mono text-[var(--muted)] mt-2">
+            Memes that hit all slots and went live on Pump.fun
+          </p>
+        </div>
       </div>
 
-      {/* Stats - Medal Style */}
-      <div className="grid grid-cols-3 gap-4">
-        {statsDisplay.map((stat, index) => {
-          const Icon = stat.icon;
-          const borderColors = ['border-[var(--success)]', 'border-[var(--accent)]', 'border-[var(--accent-gold)]'];
-          return (
-            <div key={stat.label} className={`relative border-2 ${borderColors[index]} bg-[var(--card)] p-4 text-center`}>
-              <div className={`absolute -top-2 left-1/2 -translate-x-1/2 px-2 bg-[var(--card)] ${stat.color} text-xs font-bold uppercase`}>
-                {stat.label.split(' ')[0]}
+      {/* Stats — terminal readout */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // METRICS
+          </span>
+        </div>
+        <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
+          {statsDisplay.map((stat) => (
+            <div key={stat.label} className="p-5">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">
+                {stat.label}
               </div>
-              <Icon className={`w-8 h-8 mx-auto mb-2 mt-2 ${stat.color}`} />
-              <div className="text-3xl font-black">{stat.value}</div>
-              <div className="text-xs text-[var(--muted)] uppercase tracking-wide">{stat.label}</div>
+              <div className="text-2xl sm:text-3xl font-mono font-semibold text-[var(--accent)]">
+                {stat.value}
+              </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
       {/* Loading State */}
       {loading && (
         <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
+          <Loader2 className="w-6 h-6 animate-spin text-[var(--accent)]" />
         </div>
       )}
 
       {/* Token Grid */}
       {!loading && memes.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-1 h-8 bg-gradient-to-b from-[var(--success)] to-[var(--accent-gold)]" />
-            <h2 className="text-2xl font-black uppercase tracking-tight">Live Tokens</h2>
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-3 px-1">
+            // LIVE_TOKENS [{memes.length}]
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {memes.map((meme) => (
               <MemeCard key={meme.id} meme={meme as any} />
             ))}
@@ -108,12 +113,14 @@ export default function LaunchedPage() {
       )}
 
       {!loading && memes.length === 0 && (
-        <div className="relative border-2 border-dashed border-[var(--border)] bg-[var(--card)] text-center py-12">
-          <div className="w-16 h-16 mx-auto bg-[var(--background)] flex items-center justify-center border-2 border-[var(--border)] mb-4">
-            <BarChart3 className="w-8 h-8 text-[var(--muted)]" />
+        <div className="border border-[var(--border)] bg-[var(--card)] p-12 text-center">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-3">
+            [!] NO_LAUNCHES
           </div>
-          <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Launches Yet</h3>
-          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">Be the first to launch</p>
+          <h3 className="font-mono uppercase tracking-tight text-base mb-2">No launches yet</h3>
+          <p className="text-xs font-mono text-[var(--muted)]">
+            &gt; Be the first to launch a meme
+          </p>
         </div>
       )}
     </div>

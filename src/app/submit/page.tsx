@@ -323,19 +323,27 @@ export default function SubmitPage() {
   if (success) {
     return (
       <div className="max-w-2xl mx-auto">
-        <div className="relative border-2 border-[var(--success)] bg-[var(--card)] p-8 text-center">
-          {/* Success Banner */}
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-6 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
-            ★ Submitted ★
+        <div className="border border-[var(--success)] bg-[var(--card)]">
+          <div className="border-b border-[var(--success)] px-4 py-2 flex items-center justify-between">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
+              // STATE: SUBMITTED
+            </span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)] pulse-glow">
+              [OK]
+            </span>
           </div>
-          <div className="w-20 h-20 mx-auto bg-[var(--success)]/20 flex items-center justify-center border-2 border-[var(--success)] mb-4">
-            <span className="text-4xl">★</span>
+          <div className="p-8 text-center space-y-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+              &gt; OUTPUT
+            </div>
+            <h2 className="text-2xl font-mono font-semibold uppercase tracking-tight">
+              Meme Submitted<span className="cursor-blink" />
+            </h2>
+            <p className="text-xs font-mono text-[var(--muted)] uppercase tracking-widest">
+              Redirecting to meme page…
+            </p>
+            <div className="w-6 h-6 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] animate-spin mx-auto" />
           </div>
-          <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Meme Submitted!</h2>
-          <p className="text-[var(--muted)] mb-4 uppercase tracking-wide">
-            Redirecting to your meme page...
-          </p>
-          <div className="w-8 h-8 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] animate-spin mx-auto" />
         </div>
       </div>
     );
@@ -346,37 +354,56 @@ export default function SubmitPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="relative text-center mb-8 py-6">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
-        <h1 className="text-4xl font-black uppercase tracking-tight mb-2">
-          <span className="gradient-text">Submit a Meme</span>
-        </h1>
-        <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-          Configure your token • Rally backers • Launch on Pump.fun
-        </p>
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent" />
+      {/* Header — terminal block */}
+      <div className="border border-[var(--border)] bg-[var(--card)] mb-6">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // PROOF_LAUNCH.SYS // SUBMIT
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+            [INPUT]
+          </span>
+        </div>
+        <div className="p-6">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+            &gt; NEW_MEME
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-mono font-semibold uppercase tracking-tight">
+            Submit a Meme<span className="cursor-blink" />
+          </h1>
+          <p className="text-xs font-mono text-[var(--muted)] mt-2">
+            Configure token · Rally backers · Launch on Pump.fun
+          </p>
+        </div>
       </div>
 
       {SUBMISSIONS_PAUSED ? (
-        <div className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-8 text-center">
-          <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
-            <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
+        <div className="border border-[var(--warning)] bg-[var(--card)]">
+          <div className="border-b border-[var(--warning)] px-4 py-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
+              [!] SUBMISSIONS_PAUSED
+            </span>
           </div>
-          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Submissions Paused</h2>
-          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-            Submissions are temporarily disabled while we upgrade the launch system. Check back soon.
-          </p>
+          <div className="p-6">
+            <h2 className="text-base font-mono font-semibold uppercase tracking-tight mb-2">Submissions paused</h2>
+            <p className="text-xs font-mono text-[var(--muted)]">
+              &gt; Temporarily disabled while we upgrade the launch system. Check back soon.
+            </p>
+          </div>
         </div>
       ) : !connected ? (
-        <div className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-8 text-center">
-          <div className="w-16 h-16 mx-auto bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)] mb-4">
-            <AlertCircle className="w-8 h-8 text-[var(--warning)]" />
+        <div className="border border-[var(--warning)] bg-[var(--card)]">
+          <div className="border-b border-[var(--warning)] px-4 py-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
+              [!] WALLET_REQUIRED
+            </span>
           </div>
-          <h2 className="text-xl font-black uppercase tracking-tight mb-2">Wallet Required</h2>
-          <p className="text-[var(--muted)] uppercase tracking-wide text-sm">
-            Connect your wallet to submit a meme
-          </p>
+          <div className="p-6">
+            <h2 className="text-base font-mono font-semibold uppercase tracking-tight mb-2">Wallet required</h2>
+            <p className="text-xs font-mono text-[var(--muted)]">
+              &gt; Connect your wallet to submit a meme
+            </p>
+          </div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -391,14 +418,16 @@ export default function SubmitPage() {
           )}
 
           {/* Basic Info */}
-          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
-            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ Identity
+          <div className="border border-[var(--border)] bg-[var(--card)]">
+            <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                // IDENTITY
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                01
+              </span>
             </div>
-            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
-              <Rocket className="w-5 h-5 text-[var(--accent)]" />
-              Meme Identity
-            </h2>
+            <div className="p-6 space-y-4">
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -480,17 +509,20 @@ export default function SubmitPage() {
                 <span className="text-xs text-[var(--muted)]">{formData.description.length}/500</span>
               </div>
             </div>
+            </div>
           </div>
 
           {/* Image Upload */}
-          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
-            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ Image
+          <div className="border border-[var(--border)] bg-[var(--card)]">
+            <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                // IMAGE
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                02
+              </span>
             </div>
-            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
-              <Image className="w-5 h-5 text-[var(--accent)]" />
-              Token Image
-            </h2>
+            <div className="p-6 space-y-4">
 
             <div className="flex gap-4">
               <div className="relative">
@@ -533,21 +565,24 @@ export default function SubmitPage() {
                 <ul className="space-y-1 text-xs">
                   <li>★ PNG, JPG, GIF, or WebP</li>
                   <li>★ Max 5MB</li>
-                  <li>★ Square images work best (1:1 ratio)</li>
+                  <li>· Square images work best (1:1 ratio)</li>
                 </ul>
               </div>
+            </div>
             </div>
           </div>
 
           {/* Creator Info */}
-          <div className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-6 space-y-4">
-            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent-gold)] text-black text-xs font-bold uppercase tracking-wider">
-              ★ Creator
+          <div className="border border-[var(--border)] bg-[var(--card)]">
+            <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+                // CREATOR
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                03
+              </span>
             </div>
-            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
-              <Link2 className="w-5 h-5 text-[var(--accent-gold)]" />
-              Creator Identity
-            </h2>
+            <div className="p-6 space-y-4">
 
             <div>
               <label className="block text-sm font-bold uppercase tracking-wide mb-2">X Profile or Community</label>
@@ -571,18 +606,20 @@ export default function SubmitPage() {
                 Displayed on Proof Launch so users can identify you. Not included in token metadata.
               </span>
             </div>
+            </div>
           </div>
 
           {/* Social Links */}
-          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
-            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ Socials
+          <div className="border border-[var(--border)] bg-[var(--card)]">
+            <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                // SOCIALS · OPTIONAL
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                04
+              </span>
             </div>
-            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
-              <Link2 className="w-5 h-5 text-[var(--accent)]" />
-              Social Links
-              <span className="text-xs font-normal text-[var(--muted)]">(optional)</span>
-            </h2>
+            <div className="p-6 space-y-4">
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -662,17 +699,20 @@ export default function SubmitPage() {
                 )}
               </div>
             </div>
+            </div>
           </div>
 
           {/* Backer Slots */}
-          <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
-            <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-              ★ Backing
+          <div className="border border-[var(--border)] bg-[var(--card)]">
+            <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                // BACKING_CONFIG
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                05
+              </span>
             </div>
-            <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2 pt-2">
-              <Upload className="w-5 h-5 text-[var(--accent)]" />
-              Backer Slots
-            </h2>
+            <div className="p-6 space-y-4">
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -749,39 +789,37 @@ export default function SubmitPage() {
                 <span className="text-xs ml-2">(if everyone backs minimum)</span>
               </div>
             </div>
+            </div>
           </div>
 
           {/* Creation Fee Info */}
-          <div className="border-2 border-[var(--warning)]/30 p-4">
-            <div className="flex gap-3">
-              <Coins className="w-6 h-6 text-[var(--warning)] flex-shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-bold text-[var(--warning)] mb-1 uppercase tracking-wide">Creation Fee: {CREATION_FEE_SOL} SOL</p>
-                <p className="text-[var(--foreground)]/80">
-                  A small fee covers token creation on Pump.fun.
-                  To receive tokens at launch, you must also back your own meme separately.
-                </p>
-                <p className="text-[var(--muted)] mt-2 text-xs">
-                  Phantom may show a &quot;This transaction may be harmful&quot; warning — this is a false positive.
-                  Our escrow address is new and hasn&apos;t been allowlisted with Phantom&apos;s security provider yet.
-                  It is safe to proceed.
-                </p>
-              </div>
+          <div className="border border-[var(--warning)] bg-[var(--card)]">
+            <div className="border-b border-[var(--warning)] px-4 py-2">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
+                // CREATION_FEE · {CREATION_FEE_SOL} SOL
+              </span>
+            </div>
+            <div className="p-4 space-y-2 text-xs font-mono text-[var(--muted)] leading-relaxed">
+              <p>&gt; A small fee covers token creation on Pump.fun. To receive tokens at launch, you must also back your own meme separately.</p>
+              <p className="opacity-70">
+                &gt; Phantom may show a &quot;This transaction may be harmful&quot; warning — this is a false positive. The escrow address is new and hasn&apos;t been allowlisted yet. It is safe to proceed.
+              </p>
             </div>
           </div>
 
           {/* Info Box */}
-          <div className="border-2 border-[var(--accent)]/30 p-4">
-            <div className="flex gap-3">
-              <Info className="w-6 h-6 text-[var(--accent)] flex-shrink-0 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-bold text-[var(--accent)] mb-1 uppercase tracking-wide">How Launch Works</p>
-                <p className="text-[var(--foreground)]/80">
-                  Once all backer slots are filled, the token launches on Pump.fun.
-                  <strong> Genesis</strong> backers (slots 1-4) buy first at the best prices on the bonding curve.
-                  <strong> Wave 2</strong> backers (slots 5-8) buy immediately after.
-                  3-day deadline. If slots don&apos;t fill, backers get refunds.
-                </p>
+          <div className="border border-[var(--accent)] bg-[var(--card)]">
+            <div className="border-b border-[var(--accent)] px-4 py-2">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                // HOW_LAUNCH_WORKS
+              </span>
+            </div>
+            <div className="p-4">
+              <div className="text-xs font-mono text-[var(--muted)] leading-relaxed space-y-2">
+                <p>&gt; Once all backer slots are filled, the token launches on Pump.fun.</p>
+                <p>&gt; <strong className="text-[var(--accent-gold)]">GENESIS</strong> backers (slots 1-4) buy first at the best prices on the bonding curve.</p>
+                <p>&gt; <strong className="text-[var(--accent)]">WAVE 2</strong> backers (slots 5-8) buy immediately after.</p>
+                <p>&gt; 3-day deadline. If slots don&apos;t fill, backers get refunds.</p>
               </div>
             </div>
           </div>
@@ -790,19 +828,15 @@ export default function SubmitPage() {
           <button
             type="submit"
             disabled={isSubmitting || !formData.name || !formData.symbol || Object.keys(fieldErrors).some(k => fieldErrors[k as keyof ValidationErrors])}
-            className="w-full py-4 font-black uppercase tracking-wide text-lg bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] text-white border-2 border-[var(--accent)] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+            className="btn-primary w-full text-base py-4"
           >
             {isSubmitting ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white animate-spin" />
-                Submitting...
-              </>
+              <span className="flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-[#0a0a0a]/30 border-t-[#0a0a0a] animate-spin" />
+                Submitting…
+              </span>
             ) : (
-              <>
-                <span className="text-xl">★</span>
-                Pay {CREATION_FEE_SOL} SOL & Submit
-                <span className="text-xl">★</span>
-              </>
+              <>[▶] Pay {CREATION_FEE_SOL} SOL & Submit</>
             )}
           </button>
         </form>

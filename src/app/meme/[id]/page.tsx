@@ -623,44 +623,44 @@ export default function MemeDetailPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Back Button */}
-      <Link href="/" className="inline-flex items-center gap-2 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors uppercase text-sm font-bold tracking-wide">
-        <ArrowLeft className="w-4 h-4" />
-        Back to Proving Grounds
+      {/* Back link */}
+      <Link href="/" className="inline-flex items-center gap-2 text-[var(--muted)] hover:text-[var(--accent)] transition-colors text-xs font-mono uppercase tracking-widest">
+        <ArrowLeft className="w-3 h-3" />
+        [&lt;] Back to Proving Grounds
       </Link>
 
-      {/* Header */}
-      <div className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6">
-        {/* Decorative corner accent */}
-        <div className="absolute top-0 left-0 w-16 h-16 border-b-2 border-r-2 border-[var(--accent-gold)] opacity-50" />
-        <div className="absolute bottom-0 right-0 w-16 h-16 border-t-2 border-l-2 border-[var(--accent-gold)] opacity-50" />
+      {/* Header — terminal block */}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            // MEME.DETAIL // {symbol}
+          </span>
+          <span className={statusClass}>{statusLabel}</span>
+        </div>
 
-        <div className="flex items-start gap-6">
+        <div className="p-6 flex items-start gap-6">
           {image_url ? (
-            <div className="relative">
-              <img
-                src={image_url}
-                alt={name}
-                className="w-24 h-24 object-cover border-2 border-[var(--accent)]"
-              />
-              <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-[var(--accent)] flex items-center justify-center">
-                <span className="text-white text-xs font-bold">★</span>
-              </div>
-            </div>
+            <img
+              src={image_url}
+              alt={name}
+              className="w-24 h-24 object-cover border border-[var(--border)] flex-shrink-0"
+            />
           ) : (
-            <div className="w-24 h-24 bg-gradient-to-br from-[var(--gradient-start)] to-[var(--gradient-end)] flex items-center justify-center text-4xl font-bold border-2 border-[var(--accent)]">
-              {symbol.charAt(0)}
-            </div>
-          )}
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-black uppercase tracking-tight">{name}</h1>
-              <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider ${statusClass}`}>
-                {statusLabel}
+            <div className="w-24 h-24 border border-[var(--accent)] bg-[var(--background)] flex items-center justify-center flex-shrink-0">
+              <span className="font-mono font-semibold text-[var(--accent)] text-3xl">
+                {symbol.charAt(0)}
               </span>
             </div>
-            <div className="text-xl text-[var(--accent-gold)] font-bold mb-3">${symbol}</div>
-            <p className="text-[var(--muted)] leading-relaxed">{description}</p>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+              &gt; TOKEN
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-mono font-semibold uppercase tracking-tight">
+              {name}
+            </h1>
+            <div className="text-base font-mono text-[var(--accent)] mt-1">${symbol}</div>
+            <p className="text-sm font-mono text-[var(--muted)] leading-relaxed mt-3">{description}</p>
 
             {/* Social Links */}
             {(twitter || telegram || discord || website) && (
@@ -670,7 +670,7 @@ export default function MemeDetailPage() {
                     href={twitter}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--background)] hover:bg-[var(--border)] rounded-lg text-sm transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[var(--background)] hover:border-[var(--accent)] hover:text-[var(--accent)] border border-[var(--border)] text-[10px] font-mono uppercase tracking-widest transition-colors"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -683,7 +683,7 @@ export default function MemeDetailPage() {
                     href={telegram}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--background)] hover:bg-[var(--border)] rounded-lg text-sm transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[var(--background)] hover:border-[var(--accent)] hover:text-[var(--accent)] border border-[var(--border)] text-[10px] font-mono uppercase tracking-widest transition-colors"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
@@ -696,7 +696,7 @@ export default function MemeDetailPage() {
                     href={discord}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--background)] hover:bg-[var(--border)] rounded-lg text-sm transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[var(--background)] hover:border-[var(--accent)] hover:text-[var(--accent)] border border-[var(--border)] text-[10px] font-mono uppercase tracking-widest transition-colors"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/>
@@ -709,7 +709,7 @@ export default function MemeDetailPage() {
                     href={website}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[var(--background)] hover:bg-[var(--border)] rounded-lg text-sm transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[var(--background)] hover:border-[var(--accent)] hover:text-[var(--accent)] border border-[var(--border)] text-[10px] font-mono uppercase tracking-widest transition-colors"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10"/>
@@ -724,182 +724,182 @@ export default function MemeDetailPage() {
           </div>
         </div>
 
-        {/* Creator Info */}
-        <div className="mt-6 pt-4 border-t-2 border-[var(--border)]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-[var(--accent)] font-bold uppercase text-xs tracking-wider">Creator:</span>
-              <code className="bg-[var(--background)] border border-[var(--border)] px-3 py-1 text-xs font-mono">
-                {creator_wallet.slice(0, 8)}...{creator_wallet.slice(-8)}
-              </code>
-              <button
-                onClick={() => handleCopy(creator_wallet)}
-                className="text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
-              >
-                {copied ? <Check className="w-4 h-4 text-[var(--success)]" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
+        {/* Creator + meta strip */}
+        <div className="border-t border-[var(--border)] px-6 py-3 flex items-center gap-3 flex-wrap">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Creator:</span>
+          <code className="bg-[var(--background)] border border-[var(--border)] px-2 py-1 text-[10px] font-mono">
+            {creator_wallet.slice(0, 8)}…{creator_wallet.slice(-8)}
+          </code>
+          <button
+            onClick={() => handleCopy(creator_wallet)}
+            className="text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
+            aria-label="Copy creator address"
+          >
+            {copied ? <Check className="w-3 h-3 text-[var(--success)]" /> : <Copy className="w-3 h-3" />}
+          </button>
           {creator_twitter && (
             <a
               href={creator_twitter}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-[var(--background)] hover:bg-[var(--accent)]/10 border-2 border-[var(--border)] hover:border-[var(--accent)] text-sm font-bold uppercase tracking-wide transition-all"
+              className="inline-flex items-center gap-1.5 px-2 py-1 border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] text-[10px] font-mono uppercase tracking-widest transition-colors"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
               </svg>
-              <span>@{creator_twitter.split('/').pop()}</span>
+              @{creator_twitter.split('/').pop()}
             </a>
           )}
         </div>
 
-        {/* Contract Address - shown for live tokens */}
+        {/* Contract Address — shown for live tokens */}
         {isLaunched && meme.mint_address && (
-          <div className="mt-4 pt-4 border-t-2 border-[var(--border)]">
-            <div className="flex items-center gap-2 text-sm mb-3">
-              <Coins className="w-5 h-5 text-[var(--accent-gold)]" />
-              <span className="text-[var(--accent-gold)] font-bold uppercase tracking-wider">Contract Address:</span>
+          <div className="border-t border-[var(--border)]">
+            <div className="px-4 py-2 border-b border-[var(--border)] flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                // CONTRACT_ADDRESS
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                Trade on any DEX
+              </span>
             </div>
             <button
               onClick={() => handleCopy(meme.mint_address!)}
-              className="w-full flex items-center gap-3 px-4 py-4 bg-[var(--background)] hover:bg-[var(--accent)]/10 border-2 border-[var(--border)] hover:border-[var(--accent)] transition-all group"
+              className="w-full flex items-center gap-3 px-4 py-3 bg-[var(--background)] hover:bg-[var(--card-hover)] transition-colors group"
             >
-              <code className="flex-1 text-sm font-mono text-left break-all text-[var(--foreground)]">
-                {meme.mint_address}
-              </code>
+              <code className="flex-1 text-xs font-mono text-left break-all">{meme.mint_address}</code>
               {copied ? (
-                <Check className="w-5 h-5 text-[var(--success)] flex-shrink-0" />
+                <Check className="w-4 h-4 text-[var(--success)] flex-shrink-0" />
               ) : (
-                <Copy className="w-5 h-5 text-[var(--muted)] group-hover:text-[var(--accent)] flex-shrink-0" />
+                <Copy className="w-4 h-4 text-[var(--muted)] group-hover:text-[var(--accent)] flex-shrink-0" />
               )}
             </button>
-            <p className="text-xs text-[var(--muted)] mt-2 uppercase tracking-wide">
-              Trade on your favorite DEX
-            </p>
           </div>
         )}
       </div>
 
-      {/* Launch Section - shown when funded */}
+      {/* Launch Section — terminal alert */}
       {(isFunded || isLaunching) && (
-        <div className="relative border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-4">
-          <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider">
-            Goal Reached
+        <div className="border border-[var(--success)] bg-[var(--card)]">
+          <div className="border-b border-[var(--success)] px-4 py-2 flex items-center justify-between">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
+              // STATE: GOAL_REACHED
+            </span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)] pulse-glow">
+              [!] READY
+            </span>
           </div>
-          <h2 className="text-xl font-black uppercase tracking-tight pt-2">
-            {isLaunching ? 'Launching...' : 'Ready to Launch'}
-          </h2>
-          <div className="bg-[var(--success)]/10 border-2 border-[var(--success)]/30 p-4">
-            <p className="text-[var(--success)] font-bold mb-2 uppercase tracking-wide">
-              All {totalSlots} Slots Filled - {Number(current_backing_sol).toFixed(2)} SOL Raised
-            </p>
-            <p className="text-sm text-[var(--muted)]">
-              This meme has all backer slots filled and is ready to launch on pump.fun
-            </p>
-          </div>
-          {isCreator ? (
-            <button
-              onClick={requestLaunch}
-              disabled={launching || isLaunching}
-              className="w-full py-4 font-black text-lg uppercase tracking-wide bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed border-2 border-[var(--accent)]"
-            >
-              {launching || isLaunching ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Deploying...
-                </span>
-              ) : (
-                'Launch Token'
-              )}
-            </button>
-          ) : (
-            <div className="text-center py-3 text-sm text-[var(--muted)] bg-[var(--background)] border-2 border-[var(--border)] uppercase tracking-wide">
-              {connected ? 'Waiting for creator to launch...' : 'Connect wallet to view'}
+
+          <div className="p-6 space-y-4">
+            <h2 className="text-xl font-mono font-semibold uppercase tracking-tight">
+              {isLaunching ? '> Launching…' : '> Ready to Launch'}
+            </h2>
+            <div className="border border-[var(--success)] bg-[var(--background)] p-4">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)] mb-2">
+                ALL {totalSlots} SLOTS FILLED · {Number(current_backing_sol).toFixed(2)} SOL RAISED
+              </div>
+              <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">
+                All backer slots are filled. The token is ready to launch on pump.fun.
+              </p>
+            </div>
+            {isCreator ? (
+              <button
+                onClick={requestLaunch}
+                disabled={launching || isLaunching}
+                className="btn-primary w-full"
+              >
+                {launching || isLaunching ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deploying…
+                  </span>
+                ) : (
+                  '[▶] Launch Token'
+                )}
+              </button>
+            ) : (
+              <div className="text-center py-3 text-[10px] font-mono text-[var(--muted)] border border-[var(--border)] uppercase tracking-widest">
+                {connected ? '> Waiting for creator to launch…' : '> Connect wallet to view'}
             </div>
           )}
-          {launchStatus && (
-            <div className={`p-3 text-sm text-center font-bold uppercase tracking-wide ${
-              launchStatus.includes('Error')
-                ? 'bg-[var(--error)]/20 text-[var(--error)] border-2 border-[var(--error)]/30'
-                : launchStatus.includes('successfully')
-                ? 'bg-[var(--success)]/20 text-[var(--success)] border-2 border-[var(--success)]/30'
-                : 'bg-[var(--accent)]/20 text-[var(--accent)] border-2 border-[var(--accent)]/30'
-            }`}>
-              {launchStatus}
-            </div>
-          )}
+            {launchStatus && (
+              <div className={`p-3 text-xs font-mono uppercase tracking-widest text-center border ${
+                launchStatus.includes('Error')
+                  ? 'text-[var(--error)] border-[var(--error)]'
+                  : launchStatus.includes('successfully')
+                  ? 'text-[var(--success)] border-[var(--success)]'
+                  : 'text-[var(--accent)] border-[var(--accent)]'
+              }`}>
+                &gt; {launchStatus}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Backing / Trade Panel - full width, right below header */}
-      <div className="relative bg-[var(--card)] border-2 border-[var(--accent)]" style={isProving ? { borderWidth: '3px' } : {}}>
+      {/* Backing / Trade Panel — terminal block */}
+      <div className="border border-[var(--accent)] bg-[var(--card)]">
         {isProving && (
-          <div className="bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] w-full py-2.5 text-center text-white text-sm font-black uppercase tracking-widest">
-            Back This Token
+          <div className="bg-[var(--accent)] w-full py-2 text-center text-[#0a0a0a] text-[11px] font-mono font-semibold uppercase tracking-widest">
+            [▶] Back This Token
           </div>
         )}
 
         <div className="p-6">
           {isProving && (
             <>
-              {/* Compact info bar */}
-              <div className="flex items-center gap-4 mb-5 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-[var(--accent)]" />
-                  <span className="font-black">{slotsRemaining}</span>
-                  <span className="text-xs text-[var(--muted)] uppercase">slots open</span>
+              {/* Metric strip */}
+              <div className="border border-[var(--border)] bg-[var(--background)] grid grid-cols-3 divide-x divide-[var(--border)] mb-5">
+                <div className="px-3 py-3">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Slots Open</div>
+                  <div className="text-xl font-mono font-semibold text-[var(--accent)] mt-1">{slotsRemaining}</div>
                 </div>
-                <div className="w-px h-5 bg-[var(--border)]" />
-                <div className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-[var(--accent-gold)]" />
-                  <span className="font-black">{Number(current_backing_sol).toFixed(2)} SOL</span>
-                  <span className="text-xs text-[var(--muted)] uppercase">raised</span>
+                <div className="px-3 py-3">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Raised</div>
+                  <div className="text-xl font-mono font-semibold text-[var(--accent)] mt-1">{Number(current_backing_sol).toFixed(2)}</div>
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">SOL</div>
                 </div>
-                <div className="w-px h-5 bg-[var(--border)]" />
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-[var(--warning)]" />
-                  <span className="font-black text-[var(--warning)]">{timeRemaining}</span>
-                  <span className="text-xs text-[var(--muted)] uppercase">left</span>
+                <div className="px-3 py-3">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Time Left</div>
+                  <div className="text-xl font-mono font-semibold text-[var(--warning)] mt-1">{timeRemaining}</div>
                 </div>
-                {filledSlots < 4 ? (
-                  <span className="ml-auto text-xs bg-[var(--accent-gold)]/20 text-[var(--accent-gold)] px-2 py-1 font-bold uppercase border border-[var(--accent-gold)]/30">
-                    Next: Genesis
-                  </span>
-                ) : (
-                  <span className="ml-auto text-xs bg-[var(--accent)]/20 text-[var(--accent)] px-2 py-1 font-bold uppercase border border-[var(--accent)]/30">
-                    Next: Wave 2
-                  </span>
-                )}
               </div>
 
-              {/* Visual Slot Grid - compact */}
-              <div className="flex gap-1.5 mb-5">
-                {Array.from({ length: totalSlots }).map((_, i) => {
-                  const isFilled = i < filledSlots;
-                  const isGenesis = i < 4;
-                  return (
-                    <div
-                      key={i}
-                      className={`flex-1 h-2 transition-all ${
-                        isFilled
-                          ? isGenesis
-                            ? 'bg-[var(--accent-gold)]'
-                            : 'bg-[var(--accent)]'
-                          : 'bg-[var(--border)]'
-                      }`}
-                    />
-                  );
-                })}
+              {/* Tier indicator + slot grid */}
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                    SLOTS [{filledSlots}/{totalSlots}]
+                  </span>
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                    NEXT: {filledSlots < 4 ? 'GENESIS' : 'WAVE 2'}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  {Array.from({ length: totalSlots }).map((_, i) => {
+                    const isFilled = i < filledSlots;
+                    return (
+                      <div
+                        key={i}
+                        className={`flex-1 h-4 transition-colors ${
+                          isFilled ? 'bg-[var(--accent)]' : 'border border-[var(--accent)]'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             </>
           )}
 
           {!connected ? (
-            <div className="text-center py-8 text-[var(--muted)] border-2 border-dashed border-[var(--accent)]/40 uppercase text-sm font-bold tracking-wide bg-[var(--accent)]/5">
-              <div className="text-3xl mb-3">★</div>
-              Connect wallet to {isProving ? 'back this meme' : 'trade'}
+            <div className="border border-[var(--border)] bg-[var(--background)] p-6 text-center">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">
+                [!] NO_WALLET
+              </div>
+              <div className="text-xs font-mono uppercase tracking-widest text-[var(--muted)]">
+                &gt; Connect wallet to {isProving ? 'back this meme' : 'trade'}
+              </div>
             </div>
           ) : isLaunched ? (
             /* Trading options for launched tokens */
