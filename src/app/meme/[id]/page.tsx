@@ -638,29 +638,29 @@ export default function MemeDetailPage() {
           <span className={statusClass}>{statusLabel}</span>
         </div>
 
-        <div className="p-6 flex items-start gap-6">
+        <div className="p-4 sm:p-6 flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
           {image_url ? (
             <img
               src={image_url}
               alt={name}
-              className="w-24 h-24 object-cover border border-[var(--border)] flex-shrink-0"
+              className="w-20 h-20 sm:w-24 sm:h-24 object-cover border border-[var(--border)] flex-shrink-0"
             />
           ) : (
-            <div className="w-24 h-24 border border-[var(--accent)] bg-[var(--background)] flex items-center justify-center flex-shrink-0">
-              <span className="font-mono font-semibold text-[var(--accent)] text-3xl">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 border border-[var(--accent)] bg-[var(--background)] flex items-center justify-center flex-shrink-0">
+              <span className="font-mono font-semibold text-[var(--accent)] text-2xl sm:text-3xl">
                 {symbol.charAt(0)}
               </span>
             </div>
           )}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 w-full">
             <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
               &gt; TOKEN
             </div>
-            <h1 className="text-2xl sm:text-3xl font-mono font-semibold uppercase tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-mono font-semibold uppercase tracking-tight break-words">
               {name}
             </h1>
             <div className="text-base font-mono text-[var(--accent)] mt-1">${symbol}</div>
-            <p className="text-sm font-mono text-[var(--muted)] leading-relaxed mt-3">{description}</p>
+            <p className="text-xs sm:text-sm font-mono text-[var(--muted)] leading-relaxed mt-3">{description}</p>
 
             {/* Social Links */}
             {(twitter || telegram || discord || website) && (
@@ -848,20 +848,21 @@ export default function MemeDetailPage() {
         <div className="p-6">
           {isProving && (
             <>
-              {/* Metric strip */}
-              <div className="border border-[var(--border)] bg-[var(--background)] grid grid-cols-3 divide-x divide-[var(--border)] mb-5">
-                <div className="px-3 py-3">
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Slots Open</div>
-                  <div className="text-xl font-mono font-semibold text-[var(--accent)] mt-1">{slotsRemaining}</div>
+              {/* Metric strip — mobile-friendly */}
+              <div className="border border-[var(--border)] bg-[var(--background)] grid grid-cols-3 divide-x divide-[var(--border)] mb-4 sm:mb-5">
+                <div className="px-2 sm:px-3 py-2.5 sm:py-3">
+                  <div className="text-[9px] sm:text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Slots Open</div>
+                  <div className="text-lg sm:text-xl font-mono font-semibold text-[var(--accent)] mt-0.5 sm:mt-1">{slotsRemaining}</div>
                 </div>
-                <div className="px-3 py-3">
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Raised</div>
-                  <div className="text-xl font-mono font-semibold text-[var(--accent)] mt-1">{Number(current_backing_sol).toFixed(2)}</div>
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">SOL</div>
+                <div className="px-2 sm:px-3 py-2.5 sm:py-3">
+                  <div className="text-[9px] sm:text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Raised</div>
+                  <div className="text-lg sm:text-xl font-mono font-semibold text-[var(--accent)] mt-0.5 sm:mt-1">
+                    {Number(current_backing_sol).toFixed(2)}<span className="text-xs sm:text-sm text-[var(--muted)] ml-1">SOL</span>
+                  </div>
                 </div>
-                <div className="px-3 py-3">
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Time Left</div>
-                  <div className="text-xl font-mono font-semibold text-[var(--warning)] mt-1">{timeRemaining}</div>
+                <div className="px-2 sm:px-3 py-2.5 sm:py-3">
+                  <div className="text-[9px] sm:text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Time Left</div>
+                  <div className="text-lg sm:text-xl font-mono font-semibold text-[var(--warning)] mt-0.5 sm:mt-1">{timeRemaining}</div>
                 </div>
               </div>
 
@@ -972,70 +973,90 @@ export default function MemeDetailPage() {
               )}
             </div>
           ) : (
-            /* Backing panel */
-            <div className="space-y-4">
-              <div className="flex gap-4 items-end">
-                <div className="flex-1">
-                  <label className="block text-sm font-bold text-[var(--foreground)] mb-2 uppercase tracking-wide">
-                    Your Pledge (SOL)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder={minBacking.toString()}
-                      min={minBacking}
-                      step="0.1"
-                      className="w-full px-5 py-4 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-2xl font-bold"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-2">
-                      <button
-                        onClick={() => setAmount(String(minBacking))}
-                        className="text-xs bg-[var(--card)] border border-[var(--border)] px-3 py-1.5 hover:bg-[var(--border)] font-bold uppercase"
-                      >
-                        Min
-                      </button>
-                      <button
-                        onClick={() => setAmount(String(minBacking * 2))}
-                        className="text-xs bg-[var(--card)] border border-[var(--border)] px-3 py-1.5 hover:bg-[var(--border)] font-bold uppercase"
-                      >
-                        2x
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            /* Backing panel — mobile-first */
+            <div className="space-y-3">
+              {/* Label + min hint */}
+              <div className="flex items-baseline justify-between">
+                <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  &gt; Your Pledge (SOL)
+                </label>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  Min: <span className="text-[var(--foreground)]">{minBacking}</span>
+                </span>
+              </div>
+
+              {/* Amount input — full width on its own row */}
+              <input
+                type="number"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={minBacking.toString()}
+                min={minBacking}
+                step="0.1"
+                className="w-full px-4 py-4 bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-2xl font-mono font-semibold"
+              />
+
+              {/* Preset buttons — full-width row, easy tap targets */}
+              <div className="grid grid-cols-3 gap-2">
                 <button
-                  onClick={handleTrade}
-                  disabled={!amount || Number(amount) <= 0 || backing || backingPaused || slotsRemaining <= 0}
-                  className="px-8 py-4 text-lg font-black uppercase tracking-wide transition-all border-2 bg-gradient-to-r from-[var(--gradient-start)] to-[var(--gradient-end)] text-white border-[var(--accent)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  onClick={() => setAmount(String(minBacking))}
+                  className="py-2.5 text-[11px] font-mono uppercase tracking-widest border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
                 >
-                  {backing ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    '★ Pledge ★'
-                  )}
+                  [&gt;] Min
+                </button>
+                <button
+                  onClick={() => setAmount(String(minBacking * 2))}
+                  className="py-2.5 text-[11px] font-mono uppercase tracking-widest border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                >
+                  [&gt;] 2x
+                </button>
+                <button
+                  onClick={() => setAmount(String(minBacking * 5))}
+                  className="py-2.5 text-[11px] font-mono uppercase tracking-widest border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                >
+                  [&gt;] 5x
                 </button>
               </div>
 
-              {/* Fee + share summary - inline */}
+              {/* Pledge button — full-width, terminal style */}
+              <button
+                onClick={handleTrade}
+                disabled={!amount || Number(amount) <= 0 || backing || backingPaused || slotsRemaining <= 0}
+                className="btn-primary w-full py-4 text-base"
+              >
+                {backing ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Pledging…
+                  </span>
+                ) : (
+                  <>[▶] Pledge {amount || ''} SOL</>
+                )}
+              </button>
+
+              {/* Fee + share summary — stacks on mobile, inline on sm+ */}
               {amount && Number(amount) > 0 && (
-                <div className="flex items-center gap-4 text-sm text-[var(--muted)] flex-wrap">
-                  <span>Total: <span className="text-[var(--foreground)] font-bold">{(Number(amount) * 1.02).toFixed(4)} SOL</span> (inc. 2% fee)</span>
-                  <span>Share: <span className="text-[var(--success)] font-bold">~{getProjectedPercent(Number(amount)).toFixed(1)}%</span></span>
-                  <span className="ml-auto text-xs">Min: {minBacking} SOL</span>
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] bg-[var(--background)] p-3">
+                  <span className="text-[var(--muted)]">
+                    Total: <span className="text-[var(--foreground)]">{(Number(amount) * 1.02).toFixed(4)} SOL</span>
+                    <span className="text-[var(--muted)]/70 ml-1">(inc 2%)</span>
+                  </span>
+                  <span className="text-[var(--muted)] sm:ml-auto">
+                    Share: <span className="text-[var(--success)]">~{getProjectedPercent(Number(amount)).toFixed(1)}%</span>
+                  </span>
                 </div>
               )}
 
               {backingStatus && (
-                <div className={`p-3 text-sm text-center font-bold uppercase tracking-wide ${
+                <div className={`p-3 text-[11px] font-mono text-center uppercase tracking-widest border ${
                   backingStatus.includes('Error')
-                    ? 'bg-[var(--error)]/20 text-[var(--error)] border-2 border-[var(--error)]/30'
+                    ? 'text-[var(--error)] border-[var(--error)]'
                     : backingStatus.includes('successful')
-                    ? 'bg-[var(--success)]/20 text-[var(--success)] border-2 border-[var(--success)]/30'
-                    : 'bg-[var(--accent)]/20 text-[var(--accent)] border-2 border-[var(--accent)]/30'
+                    ? 'text-[var(--success)] border-[var(--success)]'
+                    : 'text-[var(--accent)] border-[var(--accent)]'
                 }`}>
-                  {backingStatus}
+                  &gt; {backingStatus}
                 </div>
               )}
             </div>
