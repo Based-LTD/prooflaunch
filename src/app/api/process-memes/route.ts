@@ -5,18 +5,10 @@ import { launchToken, refundBacker } from '@/services/pumpfun';
 // This endpoint should be called by a cron job or manually to process memes
 // It handles both launching funded memes and refunding failed ones
 
-// POST /api/process-memes - Process all memes that need action
-export async function POST(request: NextRequest) {
-  try {
-    // Optional: Add auth check for cron secret
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const supabase = createServerClient();
-    const results = {
+// Shared processor — runs the launch/refund logic for all backing memes
+async function runProcessor() {
+  const supabase = createServerClient();
+  const results = {
       launched: [] as string[],
       refunded: [] as string[],
       errors: [] as { memeId: string; error: string }[],
@@ -179,24 +171,45 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    return {
       success: true,
       processed: backingMemes?.length || 0,
       launched: results.launched.length,
       refunded: results.refunded.length,
       errors: results.errors,
-    });
+    };
+}
+
+// POST /api/process-memes - Manual trigger with auth
+export async function POST(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    const result = await runProcessor();
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Process memes error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// GET /api/process-memes - Check status of memes needing action
-export async function GET() {
+// GET /api/process-memes - Vercel cron trigger OR status check
+export async function GET(request: NextRequest) {
+  // Vercel cron jobs send x-vercel-cron: 1 — run the processor
+  if (request.headers.get('x-vercel-cron') === '1') {
+    try {
+      const result = await runProcessor();
+      return NextResponse.json(result);
+    } catch (error) {
+      console.error('Cron process memes error:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+  }
+
+  // Otherwise: return status of memes that need action
   try {
     const supabase = createServerClient();
 

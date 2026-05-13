@@ -3,6 +3,10 @@
     {
       "path": "/api/fees/process",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/process-memes",
+      "schedule": "0 * * * *"
     }
   ]
 }
