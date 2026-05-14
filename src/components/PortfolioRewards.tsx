@@ -2,6 +2,7 @@
 
 import { FC, useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import bs58 from 'bs58';
 import { Coins, Loader2, Check, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 
@@ -30,7 +31,7 @@ interface RewardsData {
 }
 
 export const PortfolioRewards: FC = () => {
-  const { connected, publicKey } = useWallet();
+  const { connected, publicKey, signMessage } = useWallet();
   const [rewards, setRewards] = useState<RewardsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
@@ -73,18 +74,25 @@ export const PortfolioRewards: FC = () => {
   }, [fetchRewards]);
 
   const handleClaimAll = async () => {
-    if (!connected || !publicKey || !rewards?.total_claimable) return;
+    if (!connected || !publicKey || !signMessage || !rewards?.total_claimable) return;
 
     setClaiming(true);
     setClaimResult(null);
 
     try {
+      const wallet = publicKey.toBase58();
+      const authMessage = `claim:all:${wallet}`;
+      const msgBytes = new TextEncoder().encode(authMessage);
+      const sigBytes = await signMessage(msgBytes);
+      const sigB58 = bs58.encode(sigBytes);
+
       const response = await fetch('/api/fees/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          wallet_address: publicKey.toBase58(),
-          // No meme_id = claim all
+          wallet_address: wallet,
+          signature: sigB58,
+          message: authMessage,
         }),
       });
 

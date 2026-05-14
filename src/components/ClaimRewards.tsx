@@ -2,6 +2,7 @@
 
 import { FC, useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import bs58 from 'bs58';
 import { Coins, Loader2, Check, ExternalLink } from 'lucide-react';
 
 interface RewardsData {
@@ -24,7 +25,7 @@ interface ClaimRewardsProps {
 }
 
 export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacker }) => {
-  const { connected, publicKey } = useWallet();
+  const { connected, publicKey, signMessage } = useWallet();
   const [rewards, setRewards] = useState<RewardsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
@@ -66,18 +67,26 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
   }, [fetchRewards]);
 
   const handleClaim = async () => {
-    if (!connected || !publicKey || !rewards?.total_claimable) return;
+    if (!connected || !publicKey || !signMessage || !rewards?.total_claimable) return;
 
     setClaiming(true);
     setClaimResult(null);
 
     try {
+      const wallet = publicKey.toBase58();
+      const authMessage = `claim:${memeId}:${wallet}`;
+      const msgBytes = new TextEncoder().encode(authMessage);
+      const sigBytes = await signMessage(msgBytes);
+      const sigB58 = bs58.encode(sigBytes);
+
       const response = await fetch('/api/fees/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          wallet_address: publicKey.toBase58(),
+          wallet_address: wallet,
           meme_id: memeId,
+          signature: sigB58,
+          message: authMessage,
         }),
       });
 

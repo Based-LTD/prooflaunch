@@ -469,19 +469,29 @@ export default function MemeDetailPage() {
   };
 
   const handleSweep = async (action: 'sell' | 'transfer') => {
-    if (!meme || !publicKey || sweeping) return;
+    if (!meme || !publicKey || !signMessage || sweeping) return;
 
     setSweeping(true);
-    setSweepStatus(action === 'sell' ? 'Selling tokens...' : 'Transferring tokens...');
+    setSweepStatus('Sign to authorize…');
 
     try {
+      // Sign auth message bound to this sweep
+      const backerWallet = publicKey.toBase58();
+      const authMessage = `sweep:${meme.id}:${backerWallet}:${action}`;
+      const msgBytes = new TextEncoder().encode(authMessage);
+      const sigBytes = await signMessage(msgBytes);
+      const sigB58 = bs58.encode(sigBytes);
+
+      setSweepStatus(action === 'sell' ? 'Selling tokens...' : 'Transferring tokens...');
       const response = await fetch('/api/sweep', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meme_id: meme.id,
-          backer_wallet: publicKey.toBase58(),
+          backer_wallet: backerWallet,
           action,
+          signature: sigB58,
+          message: authMessage,
         }),
       });
 

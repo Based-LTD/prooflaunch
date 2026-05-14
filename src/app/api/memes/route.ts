@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { verifyDeposit } from '@/services/pumpfun';
 
 // GET /api/memes - List all memes with optional filters
 export async function GET(request: NextRequest) {
@@ -120,6 +121,29 @@ export async function POST(request: NextRequest) {
     if (!creation_fee_sol || creation_fee_sol < CREATION_FEE_SOL) {
       return NextResponse.json(
         { error: `Creation fee must be at least ${CREATION_FEE_SOL} SOL` },
+        { status: 400 }
+      );
+    }
+
+    // Prevent replay — ensure this tx signature hasn't already been used for another meme
+    const { data: existingMemeWithTx } = await supabase
+      .from('memes')
+      .select('id')
+      .eq('creation_fee_signature', creation_fee_signature)
+      .maybeSingle();
+    if (existingMemeWithTx) {
+      return NextResponse.json(
+        { error: 'This creation fee transaction has already been used' },
+        { status: 400 }
+      );
+    }
+
+    // Verify the creation fee tx on-chain: creator_wallet spent >= CREATION_FEE_SOL
+    // and the escrow received the fee
+    const feeValid = await verifyDeposit(creation_fee_signature, CREATION_FEE_SOL, creator_wallet);
+    if (!feeValid) {
+      return NextResponse.json(
+        { error: 'Creation fee transaction could not be verified on-chain' },
         { status: 400 }
       );
     }

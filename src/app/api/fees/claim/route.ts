@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { verifyWalletSignature } from '@/lib/crypto';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const ESCROW_PRIVATE_KEY = process.env.ESCROW_WALLET_PRIVATE_KEY!;
@@ -15,10 +16,24 @@ function getEscrowWallet(): Keypair {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { wallet_address, meme_id } = body;
+    const { wallet_address, meme_id, signature, message } = body;
 
     if (!wallet_address) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
+    }
+
+    // Require wallet signature to prove ownership
+    if (!signature || !message) {
+      return NextResponse.json({ error: 'Wallet signature required' }, { status: 401 });
+    }
+    const expectedMessage = meme_id
+      ? `claim:${meme_id}:${wallet_address}`
+      : `claim:all:${wallet_address}`;
+    if (message !== expectedMessage) {
+      return NextResponse.json({ error: 'Invalid signature message' }, { status: 401 });
+    }
+    if (!verifyWalletSignature(message, signature, wallet_address)) {
+      return NextResponse.json({ error: 'Invalid wallet signature' }, { status: 401 });
     }
 
     const supabase = createServerClient();
@@ -123,13 +138,13 @@ export async function POST(request: NextRequest) {
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = escrowWallet.publicKey;
 
-    const signature = await connection.sendTransaction(transaction, [escrowWallet]);
+    const txSignature = await connection.sendTransaction(transaction, [escrowWallet]);
 
     // Update claim record with signature
     await supabase
       .from('fee_claims')
       .update({
-        claim_tx: signature,
+        claim_tx: txSignature,
         status: 'completed',
         completed_at: new Date().toISOString(),
       })
@@ -172,7 +187,7 @@ export async function POST(request: NextRequest) {
       success: true,
       amount_claimed: totalClaimable,
       amount_sent: amountToSend,
-      tx_signature: signature,
+      tx_signature: txSignature,
       claim_id: claim.id,
     });
   } catch (error) {

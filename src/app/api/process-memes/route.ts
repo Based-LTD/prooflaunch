@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { launchToken, refundBacker } from '@/services/pumpfun';
+import { launchToken, refundFromBurnerWallet } from '@/services/pumpfun';
 
 // This endpoint should be called by a cron job or manually to process memes
 // It handles both launching funded memes and refunding failed ones
@@ -120,7 +120,25 @@ async function runProcessor() {
 
         for (const backing of backings || []) {
           try {
-            const refundResult = await refundBacker(backing.backer_wallet, backing.amount_sol);
+            // Auto-refund pulls from the backer's burner wallet (where their SOL actually
+            // sits) — not from escrow. 0% fee on failed-meme refunds (only manual
+            // pre-deadline withdrawals incur the 2% fee).
+            if (!backing.encrypted_private_key || !backing.burner_wallet) {
+              allRefundsSuccessful = false;
+              results.errors.push({
+                memeId: meme.id,
+                error: `No burner wallet on backing ${backing.id}`,
+              });
+              continue;
+            }
+
+            const refundResult = await refundFromBurnerWallet(
+              backing.encrypted_private_key,
+              backing.burner_wallet,
+              backing.backer_wallet,
+              Number(backing.amount_sol),
+              0 // no fee on auto-refund (meme failed through no fault of the backer)
+            );
 
             if (refundResult.success) {
               // Update backing status
