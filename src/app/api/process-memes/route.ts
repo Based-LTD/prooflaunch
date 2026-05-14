@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { launchToken, refundFromBurnerWallet } from '@/services/pumpfun';
+import { refundFromBurnerWallet } from '@/services/pumpfun';
 
 // This endpoint should be called by a cron job or manually to process memes
 // It handles both launching funded memes and refunding failed ones
@@ -42,66 +42,15 @@ async function runProcessor() {
       const hasReachedGoal = currentBacking >= goal;
 
       // Case 1: Goal reached - Launch the token
-      if (hasReachedGoal) {
-        console.log(`Launching meme ${meme.id}: ${meme.name}`);
+      // Case 1: Goal reached — creators trigger launch manually via /api/launch
+      //   (which uses launchWithBatchedBuys to execute backer buys properly).
+      //   The cron used to attempt auto-launch via the deprecated launchToken
+      //   path, which would create the token without executing backer buys —
+      //   funds would stay trapped in burners and the token would launch
+      //   with no holders. Removed entirely; only refund logic remains here.
 
-        // Update status to launching
-        await supabase
-          .from('memes')
-          .update({ status: 'launching' })
-          .eq('id', meme.id);
-
-        try {
-          const launchResult = await launchToken({
-            name: meme.name,
-            symbol: meme.symbol,
-            description: meme.description,
-            imageUrl: meme.image_url,
-            twitter: meme.twitter,
-            telegram: meme.telegram,
-            discord: meme.discord,
-            website: meme.website,
-            totalBackingSol: currentBacking,
-            creatorWallet: meme.creator_wallet,
-          });
-
-          if (launchResult.success) {
-            // Update meme with launch info
-            await supabase
-              .from('memes')
-              .update({
-                status: 'live',
-                mint_address: launchResult.mintAddress,
-                pump_fun_url: launchResult.pumpFunUrl,
-                launched_at: new Date().toISOString(),
-              })
-              .eq('id', meme.id);
-
-            results.launched.push(meme.id);
-            console.log(`Successfully launched ${meme.name}: ${launchResult.pumpFunUrl}`);
-          } else {
-            // Launch failed - revert to backing status
-            await supabase
-              .from('memes')
-              .update({ status: 'backing' })
-              .eq('id', meme.id);
-
-            results.errors.push({ memeId: meme.id, error: launchResult.error || 'Launch failed' });
-          }
-        } catch (err) {
-          await supabase
-            .from('memes')
-            .update({ status: 'backing' })
-            .eq('id', meme.id);
-
-          results.errors.push({
-            memeId: meme.id,
-            error: err instanceof Error ? err.message : 'Unknown launch error',
-          });
-        }
-      }
       // Case 2: Deadline passed without reaching goal - Process refunds
-      else if (isPastDeadline && meme.auto_refund) {
+      if (isPastDeadline && meme.auto_refund) {
         console.log(`Processing refunds for failed meme ${meme.id}: ${meme.name}`);
 
         // Get all confirmed backings for this meme

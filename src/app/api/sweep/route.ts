@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { sweepBurnerWallet } from '@/services/pumpfun';
-import { verifyWalletSignature } from '@/lib/crypto';
+import { verifySignedAuthMessage } from '@/lib/crypto';
 
 // POST /api/sweep - Sweep tokens from burner wallet to main wallet
 // Actions: "sell" (sell tokens, send SOL to main) or "transfer" (transfer tokens to main)
@@ -27,17 +27,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Require wallet signature to prove ownership
+    // Require timestamped wallet signature to prove ownership
     if (!signature || !message) {
       return NextResponse.json({ error: 'Wallet signature required' }, { status: 401 });
     }
-    // Bind the signed message to this specific sweep to prevent replay across actions/memes
-    const expectedMessage = `sweep:${meme_id}:${backer_wallet}:${action}`;
-    if (message !== expectedMessage) {
-      return NextResponse.json({ error: 'Invalid signature message' }, { status: 401 });
-    }
-    if (!verifyWalletSignature(message, signature, backer_wallet)) {
-      return NextResponse.json({ error: 'Invalid wallet signature' }, { status: 401 });
+    const auth = verifySignedAuthMessage(
+      `sweep:${meme_id}:${backer_wallet}:${action}`,
+      message, signature, backer_wallet
+    );
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     // Get the meme to verify it's launched

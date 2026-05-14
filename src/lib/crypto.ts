@@ -45,6 +45,41 @@ export function decryptPrivateKey(encrypted: string): string {
   throw new Error('Unknown encryption format');
 }
 
+// Auth messages older than this are rejected to prevent replay
+export const MAX_SIG_AGE_MS = 5 * 60 * 1000; // 5 minutes
+
+// Verify a signed auth message with timestamp replay protection.
+// Expected message format: "<expectedPrefix>:<unix_ms_timestamp>"
+// Example expectedPrefix: "withdraw:abc123:wallet_pubkey"
+//
+// Checks (in order):
+//   1. Message starts with the expected prefix
+//   2. Timestamp is a valid integer within the allowed age window
+//   3. Signature is valid for that exact message from that wallet
+export function verifySignedAuthMessage(
+  expectedPrefix: string,
+  message: string,
+  signatureB58: string,
+  walletAddress: string
+): { ok: true } | { ok: false; error: string; status: number } {
+  if (!message.startsWith(`${expectedPrefix}:`)) {
+    return { ok: false, error: 'Invalid signature message', status: 401 };
+  }
+  const timestampStr = message.slice(expectedPrefix.length + 1);
+  const ts = parseInt(timestampStr, 10);
+  if (!Number.isFinite(ts) || ts <= 0) {
+    return { ok: false, error: 'Invalid signature timestamp', status: 401 };
+  }
+  const age = Math.abs(Date.now() - ts);
+  if (age > MAX_SIG_AGE_MS) {
+    return { ok: false, error: 'Signature expired — please retry', status: 401 };
+  }
+  if (!verifyWalletSignature(message, signatureB58, walletAddress)) {
+    return { ok: false, error: 'Invalid wallet signature', status: 401 };
+  }
+  return { ok: true };
+}
+
 // Verify an Ed25519 wallet signature (from Phantom's signMessage)
 // message: the original string that was signed
 // signatureB58: the signature encoded in base58

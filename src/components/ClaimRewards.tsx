@@ -74,7 +74,7 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
 
     try {
       const wallet = publicKey.toBase58();
-      const authMessage = `claim:${memeId}:${wallet}`;
+      const authMessage = `claim:${memeId}:${wallet}:${Date.now()}`;
       const msgBytes = new TextEncoder().encode(authMessage);
       const sigBytes = await signMessage(msgBytes);
       const sigB58 = bs58.encode(sigBytes);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { refundFromBurnerWallet } from '@/services/pumpfun';
-import { verifyWalletSignature } from '@/lib/crypto';
+import { verifySignedAuthMessage } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 
 // Withdrawal fee - stays in burner wallet as dust
@@ -22,19 +22,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Require wallet signature to prove ownership
+    // Require timestamped wallet signature to prove ownership
     if (!signature || !message) {
-      return NextResponse.json(
-        { error: 'Wallet signature required' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Wallet signature required' }, { status: 401 });
     }
-
-    if (!verifyWalletSignature(message, signature, backer_wallet)) {
-      return NextResponse.json(
-        { error: 'Invalid wallet signature' },
-        { status: 401 }
-      );
+    const auth = verifySignedAuthMessage(
+      `withdraw:${meme_id}:${backer_wallet}`,
+      message, signature, backer_wallet
+    );
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     // Rate limiting - 3 withdraw requests per minute per wallet

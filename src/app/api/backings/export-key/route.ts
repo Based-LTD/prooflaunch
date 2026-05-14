@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyWalletSignature, decryptPrivateKey } from '@/lib/crypto';
+import { verifySignedAuthMessage, decryptPrivateKey } from '@/lib/crypto';
 
 // POST /api/backings/export-key - Export burner wallet private key (only after launch)
 export async function POST(request: NextRequest) {
@@ -18,19 +18,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Require wallet signature to prove ownership
+    // Require timestamped wallet signature to prove ownership
     if (!signature || !message) {
-      return NextResponse.json(
-        { error: 'Wallet signature required' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Wallet signature required' }, { status: 401 });
     }
-
-    if (!verifyWalletSignature(message, signature, backer_wallet)) {
-      return NextResponse.json(
-        { error: 'Invalid wallet signature' },
-        { status: 401 }
-      );
+    const auth = verifySignedAuthMessage(
+      `export-key:${meme_id}:${backer_wallet}`,
+      message, signature, backer_wallet
+    );
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     // Get the meme to verify it's launched

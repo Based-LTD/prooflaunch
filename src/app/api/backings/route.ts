@@ -224,6 +224,13 @@ export async function POST(request: NextRequest) {
     console.log(`Backing created: slot ${slotNumber} (${slotTier}) for ${amount_sol} SOL`);
 
     if (error) {
+      // Postgres unique violation: another backing claimed this slot in a race window
+      if ((error as { code?: string }).code === '23505') {
+        return NextResponse.json(
+          { error: 'That slot was just claimed by another backer. Please retry.' },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

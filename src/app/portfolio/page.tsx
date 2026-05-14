@@ -199,7 +199,7 @@ export default function PortfolioPage() {
     try {
       // Sign a message to prove wallet ownership (server requires this)
       const backerWallet = publicKey.toBase58();
-      const authMessage = `withdraw:${backing.meme_id}:${backerWallet}`;
+      const authMessage = `withdraw:${backing.meme_id}:${backerWallet}:${Date.now()}`;
       const msgBytes = new TextEncoder().encode(authMessage);
       const sigBytes = await signMessage(msgBytes);
       const sigB58 = bs58.encode(sigBytes);

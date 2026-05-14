@@ -384,7 +384,7 @@ export default function MemeDetailPage() {
 
     try {
       // Sign a message to prove wallet ownership
-      const authMessage = `launch:${meme.id}:${publicKey!.toBase58()}`;
+      const authMessage = `launch:${meme.id}:${publicKey!.toBase58()}:${Date.now()}`;
       const msgBytes = new TextEncoder().encode(authMessage);
       const sigBytes = await signMessage!(msgBytes);
       const sigB58 = bs58.encode(sigBytes);
@@ -430,7 +430,7 @@ export default function MemeDetailPage() {
 
     try {
       // Sign a message to prove wallet ownership
-      const authMessage = `withdraw:${meme.id}:${backerWallet}`;
+      const authMessage = `withdraw:${meme.id}:${backerWallet}:${Date.now()}`;
       const msgBytes = new TextEncoder().encode(authMessage);
       const sigBytes = await signMessage!(msgBytes);
       const sigB58 = bs58.encode(sigBytes);
@@ -477,7 +477,7 @@ export default function MemeDetailPage() {
     try {
       // Sign auth message bound to this sweep
       const backerWallet = publicKey.toBase58();
-      const authMessage = `sweep:${meme.id}:${backerWallet}:${action}`;
+      const authMessage = `sweep:${meme.id}:${backerWallet}:${action}:${Date.now()}`;
       const msgBytes = new TextEncoder().encode(authMessage);
       const sigBytes = await signMessage(msgBytes);
       const sigB58 = bs58.encode(sigBytes);
@@ -524,7 +524,7 @@ export default function MemeDetailPage() {
 
     try {
       // Sign a message to prove wallet ownership
-      const authMessage = `export-key:${meme.id}:${publicKey.toBase58()}`;
+      const authMessage = `export-key:${meme.id}:${publicKey.toBase58()}:${Date.now()}`;
       const msgBytes = new TextEncoder().encode(authMessage);
       const sigBytes = await signMessage!(msgBytes);
       const sigB58 = bs58.encode(sigBytes);

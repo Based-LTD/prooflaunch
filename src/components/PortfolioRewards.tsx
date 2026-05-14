@@ -81,7 +81,7 @@ export const PortfolioRewards: FC = () => {
 
     try {
       const wallet = publicKey.toBase58();
-      const authMessage = `claim:all:${wallet}`;
+      const authMessage = `claim:all:${wallet}:${Date.now()}`;
       const msgBytes = new TextEncoder().encode(authMessage);
       const sigBytes = await signMessage(msgBytes);
       const sigB58 = bs58.encode(sigBytes);

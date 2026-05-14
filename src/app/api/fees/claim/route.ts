@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { verifyWalletSignature } from '@/lib/crypto';
+import { verifySignedAuthMessage } from '@/lib/crypto';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const ESCROW_PRIVATE_KEY = process.env.ESCROW_WALLET_PRIVATE_KEY!;
@@ -22,18 +22,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
     }
 
-    // Require wallet signature to prove ownership
+    // Require timestamped wallet signature to prove ownership
     if (!signature || !message) {
       return NextResponse.json({ error: 'Wallet signature required' }, { status: 401 });
     }
-    const expectedMessage = meme_id
+    const expectedPrefix = meme_id
       ? `claim:${meme_id}:${wallet_address}`
       : `claim:all:${wallet_address}`;
-    if (message !== expectedMessage) {
-      return NextResponse.json({ error: 'Invalid signature message' }, { status: 401 });
-    }
-    if (!verifyWalletSignature(message, signature, wallet_address)) {
-      return NextResponse.json({ error: 'Invalid wallet signature' }, { status: 401 });
+    const auth = verifySignedAuthMessage(expectedPrefix, message, signature, wallet_address);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
     const supabase = createServerClient();
