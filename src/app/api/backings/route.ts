@@ -164,25 +164,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Count current confirmed backings to check slot availability
-    const { count: currentBackerCount } = await supabase
+    // Find the lowest unfilled slot — fixes a bug where the previous algorithm
+    // (count + 1) ignored withdrawn slots in the count but assigned sequential
+    // numbers, producing duplicate slot_numbers when an earlier slot was
+    // withdrawn and a new backer came in.
+    const { data: activeSlotRows } = await supabase
       .from('backings')
-      .select('id', { count: 'exact', head: true })
+      .select('slot_number')
       .eq('meme_id', meme_id)
       .neq('status', 'withdrawn');
 
+    const taken = new Set((activeSlotRows || []).map((r) => Number(r.slot_number)));
     const totalSlots = Number(meme.total_slots) || 8;
-    const filledSlots = currentBackerCount || 0;
 
-    if (filledSlots >= totalSlots) {
+    let slotNumber = 0;
+    for (let i = 1; i <= totalSlots; i++) {
+      if (!taken.has(i)) { slotNumber = i; break; }
+    }
+    if (slotNumber === 0) {
       return NextResponse.json(
         { error: 'All backer slots are filled' },
         { status: 400 }
       );
     }
 
-    // Assign slot number (1-indexed)
-    const slotNumber = filledSlots + 1;
     const slotTier = slotNumber <= 4 ? 'Genesis' : 'Wave 2';
 
     // Verify the deposit transaction on-chain
