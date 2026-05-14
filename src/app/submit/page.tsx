@@ -609,17 +609,20 @@ export default function SubmitPage() {
             </div>
           </div>
 
-          {/* Social Links */}
+          {/* Social Links — written to on-chain token metadata */}
           <div className="border border-[var(--border)] bg-[var(--card)]">
             <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                // SOCIALS · OPTIONAL
+                // TOKEN METADATA · OPTIONAL
               </span>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                 04
               </span>
             </div>
             <div className="p-6 space-y-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] -mt-2">
+              &gt; Written to the token&apos;s on-chain metadata on Pump.fun
+            </p>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -799,11 +802,8 @@ export default function SubmitPage() {
                 // CREATION_FEE · {CREATION_FEE_SOL} SOL
               </span>
             </div>
-            <div className="p-4 space-y-2 text-xs font-mono text-[var(--muted)] leading-relaxed">
+            <div className="p-4 text-xs font-mono text-[var(--muted)] leading-relaxed">
               <p>&gt; A small fee covers token creation on Pump.fun. To receive tokens at launch, you must also back your own meme separately.</p>
-              <p className="opacity-70">
-                &gt; Phantom may show a &quot;This transaction may be harmful&quot; warning — this is a false positive. The escrow address is new and hasn&apos;t been allowlisted yet. It is safe to proceed.
-              </p>
             </div>
           </div>
 
