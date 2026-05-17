@@ -38,7 +38,7 @@ export async function GET() {
           <span>// TEST_TOKEN</span>
           <span style={{ color: '#00d97e', display: 'flex', alignItems: 'center', gap: 14 }}>
             <span style={{ width: 18, height: 18, background: '#00d97e', display: 'flex' }} />
-            DEVNET
+            MAINNET
           </span>
         </div>
 
@@ -114,6 +114,10 @@ export async function GET() {
       width: 1024,
       height: 1024,
       fonts: [{ name: 'Plex', data: fontData, weight: 600, style: 'normal' }],
+      headers: {
+        'Content-Disposition': 'attachment; filename="proof-test-coin.png"',
+        'Cache-Control': 'no-store',
+      },
     }
   );
 }
