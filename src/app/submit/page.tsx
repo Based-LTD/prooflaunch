@@ -406,7 +406,7 @@ export default function SubmitPage() {
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6" autoComplete="off">
           {/* Error Display */}
           {error && (
             <div className="bg-[var(--error)]/10 border-2 border-[var(--error)]/30 p-4">
@@ -434,6 +434,9 @@ export default function SubmitPage() {
                 <label className="block text-sm font-medium mb-2">Name *</label>
                 <input
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
@@ -460,6 +463,9 @@ export default function SubmitPage() {
                 <label className="block text-sm font-medium mb-2">Symbol *</label>
                 <input
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   name="symbol"
                   value={formData.symbol}
                   onChange={handleChange}
@@ -488,6 +494,7 @@ export default function SubmitPage() {
               <label className="block text-sm font-medium mb-2">Description</label>
               <textarea
                 name="description"
+                autoComplete="off"
                 value={formData.description}
                 onChange={handleChange}
                 onBlur={() => handleBlur('description')}
@@ -588,6 +595,9 @@ export default function SubmitPage() {
               <label className="block text-sm font-bold uppercase tracking-wide mb-2">X Profile or Community</label>
               <input
                 type="text"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 name="creatorTwitter"
                 value={formData.creatorTwitter}
                 onChange={handleChange}
@@ -629,6 +639,9 @@ export default function SubmitPage() {
                 <label className="block text-sm font-medium mb-2">Token X (Twitter)</label>
                 <input
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   name="twitter"
                   value={formData.twitter}
                   onChange={handleChange}
@@ -648,6 +661,9 @@ export default function SubmitPage() {
                 <label className="block text-sm font-medium mb-2">Website</label>
                 <input
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   name="website"
                   value={formData.website}
                   onChange={handleChange}
@@ -667,6 +683,9 @@ export default function SubmitPage() {
                 <label className="block text-sm font-medium mb-2">Telegram</label>
                 <input
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   name="telegram"
                   value={formData.telegram}
                   onChange={handleChange}
@@ -686,6 +705,9 @@ export default function SubmitPage() {
                 <label className="block text-sm font-medium mb-2">Discord</label>
                 <input
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   name="discord"
                   value={formData.discord}
                   onChange={handleChange}
