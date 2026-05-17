@@ -7,6 +7,10 @@
     {
       "path": "/api/process-memes",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/reconcile",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

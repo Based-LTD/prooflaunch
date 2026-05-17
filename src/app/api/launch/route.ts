@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { launchWithBatchedBuys, LaunchConfig, BurnerBackerInfo } from '@/services/pumpfun';
 import { verifySignedAuthMessage } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
+import { createLaunchLogger } from '@/lib/launchLog';
 
 // POST /api/launch - Launch a funded meme token via batched RPC buys
 // Creates token on pump.fun, then executes buys from each backer's burner wallet
@@ -129,8 +130,11 @@ export async function POST(request: NextRequest) {
     console.log(`Launching ${config.name} with ${burnerBackers.length} burner wallets...`);
     console.log('Burner wallets will buy in order of backing time (earliest first = best price)');
 
-    // Launch with batched RPC buys (Genesis batch 1, Wave 2 batch 2)
-    const result = await launchWithBatchedBuys(config, burnerBackers);
+    // Launch with batched RPC buys (Genesis batch 1, Wave 2 batch 2).
+    // Logger persists every step to launch_events so a silent failure is
+    // diagnosable from data (the $TEST incident had no retained logs).
+    const launchLog = createLaunchLogger(meme_id);
+    const result = await launchWithBatchedBuys(config, burnerBackers, launchLog);
 
     if (!result.success || !result.mintAddress) {
       // Revert status on failure

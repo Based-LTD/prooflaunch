@@ -3,6 +3,7 @@ import { PumpFunSDK } from 'pumpdotfun-sdk';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import type { Wallet as WalletInterface } from '@coral-xyz/anchor/dist/cjs/provider';
 import bs58 from 'bs58';
+import { LaunchLogger, noopLaunchLogger } from '@/lib/launchLog';
 import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
@@ -1561,7 +1562,8 @@ async function executeAllBuysStandard(
 // Snipe window: ~200ms (time between create confirm and batch 1 sends)
 export async function launchWithBatchedBuys(
   config: LaunchConfig,
-  burnerBackers: BurnerBackerInfo[]
+  burnerBackers: BurnerBackerInfo[],
+  log: LaunchLogger = noopLaunchLogger
 ): Promise<{
   success: boolean;
   mintAddress?: string;
@@ -1647,6 +1649,7 @@ export async function launchWithBatchedBuys(
       maxRetries: 3,
     });
     console.log(`Create tx sent: ${createSig}`);
+    log('create_sent', { signature: createSig, detail: { mint: mintPubkey.toBase58(), backers: sortedBackers.length } });
 
     // Wait for create to be confirmed (bonding curve must exist for buys).
     // confirmTransaction alone is unreliable here: a blockhash/lastValidBlockHeight
@@ -1670,12 +1673,18 @@ export async function launchWithBatchedBuys(
       await new Promise((r) => setTimeout(r, 1000)); // 1s between polls, ~15s max
     }
     if (!curveReady) {
+      log('curve_timeout', {
+        ok: false,
+        signature: createSig,
+        detail: { bondingCurvePda: bondingCurvePda.toBase58(), mint: mintPubkey.toBase58() },
+      });
       throw new Error(
         `Bonding curve account ${bondingCurvePda.toBase58()} not found ~15s after create ` +
         `(createSig=${createSig}). Aborting before buys so backer funds stay in burners.`
       );
     }
     console.log(`Create confirmed + curve readable! Mint: ${mintPubkey.toBase58()}`);
+    log('curve_ready', { signature: createSig, detail: { mint: mintPubkey.toBase58() } });
 
     // === PHASE 4: Read ACTUAL curve state, build + blast batch 1 ===
     const buyResults: BurnerBuyResult[] = [];
@@ -1779,6 +1788,9 @@ export async function launchWithBatchedBuys(
       const sigs = await Promise.all(
         txs.map(tx => connection.sendTransaction(tx, { skipPreflight: true, maxRetries: 3 }))
       );
+      infos.forEach((info, i) =>
+        log('buy_sent', { backerWallet: info.backer.mainWallet, signature: sigs[i], detail: { batch: batchLabel } })
+      );
 
       // Wait for all to confirm
       const { blockhash: confirmBh, lastValidBlockHeight: lvbh } = await connection.getLatestBlockhash();
@@ -1807,6 +1819,12 @@ export async function launchWithBatchedBuys(
         }
 
         console.log(`  ${batchLabel} ${i + 1}: ${confirmed ? `${tokensReceived} tokens` : 'FAILED'}`);
+        log(confirmed ? 'buy_confirmed' : 'buy_failed', {
+          backerWallet: backer.mainWallet,
+          ok: confirmed,
+          signature: sigs[i],
+          detail: { batch: batchLabel, tokensReceived, burnerWallet: backer.burnerWallet },
+        });
         buyResults.push({
           mainWallet: backer.mainWallet,
           burnerWallet: backer.burnerWallet,
@@ -1855,8 +1873,15 @@ export async function launchWithBatchedBuys(
         const backer = sortedBackers.find(b => b.mainWallet === failed.mainWallet);
         if (!backer) continue;
 
+        log('retry_attempt', { backerWallet: failed.mainWallet, detail: { burnerWallet: failed.burnerWallet } });
         const burnerKeypair = decryptBurnerKey(backer.encryptedPrivateKey);
         const retryResult = await executeBurnerBuy(sdk, connection, burnerKeypair, mintPubkey, backer.amountSol);
+        log('retry_result', {
+          backerWallet: failed.mainWallet,
+          ok: !!retryResult.signature,
+          signature: retryResult.signature,
+          detail: { tokensReceived: retryResult.tokensReceived, error: retryResult.error },
+        });
 
         // Update the result in place
         const idx = buyResults.findIndex(r => r.mainWallet === failed.mainWallet);
@@ -1877,6 +1902,16 @@ export async function launchWithBatchedBuys(
 
     const successfulBuys = buyResults.filter(r => r.buySignature);
     console.log(`=== LAUNCH COMPLETE: ${successfulBuys.length}/${sortedBackers.length} buys successful ===`);
+    log('launch_complete', {
+      ok: successfulBuys.length === sortedBackers.length,
+      signature: createSig,
+      detail: {
+        mint: mintKeypair.publicKey.toBase58(),
+        successfulBuys: successfulBuys.length,
+        totalBackers: sortedBackers.length,
+        failed: buyResults.filter(r => !r.buySignature).map(r => r.mainWallet),
+      },
+    });
 
     return {
       success: successfulBuys.length > 0,
@@ -1887,6 +1922,10 @@ export async function launchWithBatchedBuys(
     };
   } catch (error) {
     console.error('Batched RPC launch failed:', error);
+    log('launch_error', {
+      ok: false,
+      detail: { error: error instanceof Error ? error.message : 'Unknown error' },
+    });
     return {
       success: false,
       buyResults: [],
