@@ -2453,16 +2453,30 @@ export async function refundFromBurnerWallet(
       return { success: false, error: 'Burner wallet has no SOL' };
     }
 
-    // Calculate refund amount (minus fee and tx costs)
-    const feeAmount = Math.floor(burnerBalance * (feePercent / 100));
-    const txFee = 10000; // ~0.00001 SOL for transaction fees (2 transfers)
-    const amountToSend = burnerBalance - feeAmount - txFee;
+    // Drain the burner to EXACTLY 0 lamports.
+    //
+    // A burner is a plain system account. Solana rejects any transaction
+    // that leaves a non-rent-exempt account with a non-zero balance, so
+    // leaving even a few hundred lamports of dust makes the refund fail
+    // with "insufficient funds for rent" (the exact failure the
+    // reconcile job hit on the $TEST burners). The only safe terminal
+    // state is exactly 0 — that closes the account cleanly.
+    //
+    // This tx has one signer (the burner) and only SystemProgram
+    // transfers, no compute-budget instructions, so the network fee is
+    // the flat base fee of 5000 lamports.
+    const BASE_FEE = 5000;
+    const rawFee = Math.floor(burnerBalance * (feePercent / 100));
+    // Only route a fee to escrow if it clears dust; otherwise it folds
+    // back into the user's refund so the account can still hit zero.
+    const escrowFee = rawFee > BASE_FEE ? rawFee : 0;
+    const amountToSend = burnerBalance - BASE_FEE - escrowFee;
 
     if (amountToSend <= 0) {
       return { success: false, error: 'Insufficient balance after fees' };
     }
 
-    console.log(`Refunding ${amountToSend / LAMPORTS_PER_SOL} SOL (fee: ${feeAmount / LAMPORTS_PER_SOL} SOL to escrow)`);
+    console.log(`Refunding ${amountToSend / LAMPORTS_PER_SOL} SOL (escrow fee: ${escrowFee / LAMPORTS_PER_SOL} SOL), draining burner to 0`);
 
     // Get escrow wallet for fee collection
     const escrowWallet = getEscrowWallet();
@@ -2479,16 +2493,18 @@ export async function refundFromBurnerWallet(
       })
     );
 
-    // Transfer fee to escrow (only if there's a meaningful fee amount)
-    if (feeAmount > 5000) {
+    // Transfer fee to escrow (only when it cleared the dust threshold).
+    // amountToSend + escrowFee + BASE_FEE == burnerBalance, so the
+    // burner lands at exactly 0 either way.
+    if (escrowFee > 0) {
       transaction.add(
         SystemProgram.transfer({
           fromPubkey: burnerKeypair.publicKey,
           toPubkey: escrowWallet.publicKey,
-          lamports: feeAmount,
+          lamports: escrowFee,
         })
       );
-      console.log(`Sending ${feeAmount / LAMPORTS_PER_SOL} SOL fee to escrow: ${escrowWallet.publicKey.toBase58()}`);
+      console.log(`Sending ${escrowFee / LAMPORTS_PER_SOL} SOL fee to escrow: ${escrowWallet.publicKey.toBase58()}`);
     }
 
     const { blockhash } = await connection.getLatestBlockhash();
