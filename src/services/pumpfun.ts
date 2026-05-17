@@ -1934,11 +1934,15 @@ export async function launchWithBatchedBuys(
   }
 }
 
-// DEPRECATED: Jito bundle launch - replaced by launchWithBatchedBuys
-// Kept as dead code safety net. Do not call directly.
+// PRIMARY LAUNCH PATH. Atomic Jito bundle = create tx (tip embedded) +
+// the 4 Genesis buys in ONE block, eliminating the sniper/create->buy
+// gap entirely for slots 1-4. Slots 5-8 buy via RPC immediately after.
+// Layered fallback to standard RPC if the bundle does not land, with the
+// reconcile/auto-refund net underneath as the final backstop.
 export async function launchWithJitoBundle(
   config: LaunchConfig,
-  burnerBackers: BurnerBackerInfo[]
+  burnerBackers: BurnerBackerInfo[],
+  log: LaunchLogger = noopLaunchLogger
 ): Promise<{
   success: boolean;
   mintAddress?: string;
@@ -2046,6 +2050,10 @@ export async function launchWithJitoBundle(
     // 7. Submit bundle to Jito
     console.log('Step 5: Submitting Jito bundle...');
     const bundleId = await submitJitoBundle(transactions);
+    log('create_sent', {
+      signature: bundleId,
+      detail: { mode: 'jito-bundle', mint: mintKeypair.publicKey.toBase58(), genesis: bundledBuyInfo.length, wave2: waveTwoBackers.length },
+    });
 
     // 8. Wait for confirmation
     console.log('Step 6: Waiting for bundle confirmation...');
@@ -2053,12 +2061,20 @@ export async function launchWithJitoBundle(
 
     if (!confirmation.landed) {
       console.warn('Jito bundle did not land, checking if token was created...');
+      log('curve_timeout', { ok: false, signature: bundleId, detail: { reason: 'jito bundle did not land' } });
 
       // Check if token was created anyway (bundle timeout doesn't mean failure)
       const mintInfo = await connection.getAccountInfo(mintKeypair.publicKey);
       if (mintInfo) {
         console.log('Token was created despite bundle timeout - executing all buys via standard flow');
+        log('retry_attempt', { detail: { reason: 'bundle missed but token exists, all buys via RPC', mint: mintKeypair.publicKey.toBase58() } });
         const allBuyResults = await executeAllBuysStandard(sdk, connection, mintKeypair.publicKey, sortedBackers);
+        allBuyResults.forEach(r =>
+          log(r.buySignature ? 'buy_confirmed' : 'buy_failed', {
+            backerWallet: r.mainWallet, ok: !!r.buySignature, signature: r.buySignature,
+            detail: { via: 'rpc-fallback', tokensReceived: r.tokensReceived, error: r.error },
+          })
+        );
         return {
           success: allBuyResults.some(r => r.buySignature),
           mintAddress: mintKeypair.publicKey.toBase58(),
@@ -2071,11 +2087,17 @@ export async function launchWithJitoBundle(
 
       // Full fallback to standard launch
       console.log('Falling back to standard launchWithBurnerWallets...');
+      log('retry_attempt', { detail: { reason: 'bundle missed, no token, full standard launch' } });
       const fallbackResult = await launchWithBurnerWallets(config, burnerBackers);
+      log(fallbackResult.success ? 'launch_complete' : 'launch_error', {
+        ok: fallbackResult.success,
+        detail: { via: 'standard-fallback', mint: fallbackResult.mintAddress },
+      });
       return { ...fallbackResult, bundleUsed: false, bundleId };
     }
 
     console.log(`Genesis bundle landed! ${bundledBuyInfo.length} Genesis buys included.`);
+    log('curve_ready', { signature: bundleId, detail: { mode: 'jito-bundle-landed', mint: mintKeypair.publicKey.toBase58(), genesisBuys: bundledBuyInfo.length } });
 
     // 9. Build results for bundled buys - verify actual token balances
     const buyResults: BurnerBuyResult[] = [];
@@ -2106,12 +2128,24 @@ export async function launchWithJitoBundle(
         tokensReceived,
         buySignature,
       });
+      log(buySignature || tokensReceived > 0 ? 'buy_confirmed' : 'buy_failed', {
+        backerWallet: backer.mainWallet,
+        ok: !!(buySignature || tokensReceived > 0),
+        signature: buySignature,
+        detail: { tier: 'genesis', via: 'jito-bundle', tokensReceived },
+      });
     }
 
     // 10. Execute Wave 2 buys (backers 5+) via fast overflow flow
     if (waveTwoBackers.length > 0) {
       console.log(`Step 7: Executing ${waveTwoBackers.length} Wave 2 buys...`);
       const waveTwoResults = await executeAllBuysStandard(sdk, connection, mintKeypair.publicKey, waveTwoBackers);
+      waveTwoResults.forEach(r =>
+        log(r.buySignature ? 'buy_confirmed' : 'buy_failed', {
+          backerWallet: r.mainWallet, ok: !!r.buySignature, signature: r.buySignature,
+          detail: { tier: 'wave2', via: 'rpc', tokensReceived: r.tokensReceived, error: r.error },
+        })
+      );
       buyResults.push(...waveTwoResults);
     }
 
@@ -2119,6 +2153,17 @@ export async function launchWithJitoBundle(
     console.log(`=== JITO LAUNCH COMPLETE ===`);
     console.log(`${successfulBuys.length}/${sortedBackers.length} buys successful`);
     console.log(`Bundle ID: ${bundleId}`);
+    log('launch_complete', {
+      ok: successfulBuys.length === sortedBackers.length,
+      signature: bundleId,
+      detail: {
+        mode: 'jito-bundle',
+        mint: mintKeypair.publicKey.toBase58(),
+        successfulBuys: successfulBuys.length,
+        totalBackers: sortedBackers.length,
+        failed: buyResults.filter(r => !(r.buySignature || r.tokensReceived > 0)).map(r => r.mainWallet),
+      },
+    });
 
     return {
       success: true,
@@ -2130,6 +2175,7 @@ export async function launchWithJitoBundle(
     };
   } catch (error) {
     console.error('Jito bundle launch failed:', error);
+    log('retry_attempt', { ok: false, detail: { reason: 'jito path threw, entering fast RPC fallback', error: error instanceof Error ? error.message : String(error) } });
 
     // Fast fallback: reuse mint keypair + metadata, send create via RPC, then blast buys
     // This avoids re-uploading to IPFS and minimizes the snipe window
@@ -2209,6 +2255,17 @@ export async function launchWithJitoBundle(
       const successfulBuys = buyResults.filter(r => r.buySignature);
       console.log(`=== FAST FALLBACK COMPLETE ===`);
       console.log(`${successfulBuys.length}/${sortedBackers.length} buys successful`);
+      buyResults.forEach(r =>
+        log(r.buySignature ? 'buy_confirmed' : 'buy_failed', {
+          backerWallet: r.mainWallet, ok: !!r.buySignature, signature: r.buySignature,
+          detail: { via: 'fast-fallback', tokensReceived: r.tokensReceived, error: r.error },
+        })
+      );
+      log(successfulBuys.length > 0 ? 'launch_complete' : 'launch_error', {
+        ok: successfulBuys.length === sortedBackers.length,
+        signature: createSig,
+        detail: { mode: 'fast-fallback', mint: fallbackMintKeypair.publicKey.toBase58(), successfulBuys: successfulBuys.length, totalBackers: sortedBackers.length },
+      });
 
       return {
         success: successfulBuys.length > 0,
@@ -2220,6 +2277,14 @@ export async function launchWithJitoBundle(
       };
     } catch (fallbackError) {
       console.error('Fast fallback also failed:', fallbackError);
+      log('launch_error', {
+        ok: false,
+        detail: {
+          stage: 'fast-fallback',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+        },
+      });
       return {
         success: false,
         buyResults: [],
