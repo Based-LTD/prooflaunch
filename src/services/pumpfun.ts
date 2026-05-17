@@ -1613,7 +1613,7 @@ export async function launchWithBatchedBuys(
     // === PHASE 2: Build create tx and decrypt keys ===
     console.log('Phase 2: Building create tx + decrypting burner keys...');
 
-    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
 
     // Build create tx
     const createTx = await buildCreationVersionedTx(
@@ -1648,14 +1648,34 @@ export async function launchWithBatchedBuys(
     });
     console.log(`Create tx sent: ${createSig}`);
 
-    // Wait for create to be confirmed (bonding curve must exist for buys)
-    const { lastValidBlockHeight: createLvbh } = await connection.getLatestBlockhash();
-    await connection.confirmTransaction({
-      signature: createSig,
-      blockhash,
-      lastValidBlockHeight: createLvbh,
-    }, 'confirmed');
-    console.log(`Create confirmed! Mint: ${mintPubkey.toBase58()}`);
+    // Wait for create to be confirmed (bonding curve must exist for buys).
+    // confirmTransaction alone is unreliable here: a blockhash/lastValidBlockHeight
+    // mismatch can make it resolve on expiry rather than real confirmation, and
+    // even a confirmed create can lag the bonding-curve account being readable.
+    // The actual precondition for buys is that bondingCurvePda exists on chain —
+    // poll for that directly with a bounded retry so buys never fire early.
+    try {
+      await connection.confirmTransaction(
+        { signature: createSig, blockhash, lastValidBlockHeight },
+        'confirmed'
+      );
+    } catch (e) {
+      console.warn('confirmTransaction(create) did not cleanly confirm, will poll curve:', e);
+    }
+
+    let curveReady = false;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const acct = await connection.getAccountInfo(bondingCurvePda);
+      if (acct) { curveReady = true; break; }
+      await new Promise((r) => setTimeout(r, 1000)); // 1s between polls, ~15s max
+    }
+    if (!curveReady) {
+      throw new Error(
+        `Bonding curve account ${bondingCurvePda.toBase58()} not found ~15s after create ` +
+        `(createSig=${createSig}). Aborting before buys so backer funds stay in burners.`
+      );
+    }
+    console.log(`Create confirmed + curve readable! Mint: ${mintPubkey.toBase58()}`);
 
     // === PHASE 4: Read ACTUAL curve state, build + blast batch 1 ===
     const buyResults: BurnerBuyResult[] = [];

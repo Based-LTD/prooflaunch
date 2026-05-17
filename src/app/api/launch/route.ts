@@ -169,17 +169,18 @@ export async function POST(request: NextRequest) {
 
     // Update backing records with buy results
     for (const buyResult of result.buyResults) {
-      // Update if buy was successful (has signature) OR if tokens were received
-      // Also consider it successful if there was no error (some buys succeed without returning signature)
+      // A buy only counts as successful if tokens were actually received, or a
+      // confirmed buy signature exists. Absence of an error string is NOT proof
+      // of success — a silently-dropped buy returns no sig, no tokens, no error,
+      // and must NOT be marked distributed (that would freeze the backer's SOL
+      // in the burner while telling them they got tokens).
       const hasSignature = !!buyResult.buySignature;
       const hasTokens = (buyResult.tokensReceived || 0) > 0;
-      const noError = !buyResult.error;
-      const wasSuccessful = hasSignature || hasTokens || noError;
+      const wasSuccessful = hasTokens || hasSignature;
 
       console.log(`Updating backing for ${buyResult.mainWallet}:`, {
         hasSignature,
         hasTokens,
-        noError,
         wasSuccessful,
         buySignature: buyResult.buySignature,
         tokensReceived: buyResult.tokensReceived,
