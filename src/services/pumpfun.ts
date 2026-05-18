@@ -2787,3 +2787,125 @@ export async function distributeTokensToBackers(
     };
   }
 }
+
+// ── TEMPORARY DIAGNOSTIC ──────────────────────────────────────────────
+// Builds the EXACT create+buy Jito bundle that launchWithJitoBundle
+// produces, RPC-simulates each tx, submits the real bundle to Jito, and
+// captures Jito's inflight verdict — to find definitively why bundles
+// don't land. Funds a throwaway burner with a tiny amount and drains it
+// back to escrow at the end (net cost ≈ tx fees). No DB writes, no
+// fallback. DELETE after diagnosis.
+export async function diagnoseBundleLanding(): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  const connection = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const sdk = await createPumpFunSDK();
+  const mint = Keypair.generate();
+  const burner = Keypair.generate();
+  out.mint = mint.publicKey.toBase58();
+  out.burner = burner.publicKey.toBase58();
+
+  // Fund burner just enough for a realistic Genesis buy (recovered at end)
+  const FUND = Math.floor(0.1 * LAMPORTS_PER_SOL);
+  {
+    const t = new Transaction().add(SystemProgram.transfer({
+      fromPubkey: escrow.publicKey, toPubkey: burner.publicKey, lamports: FUND,
+    }));
+    const { blockhash } = await connection.getLatestBlockhash();
+    t.recentBlockhash = blockhash; t.feePayer = escrow.publicKey;
+    const s = await connection.sendTransaction(t, [escrow]);
+    await connection.confirmTransaction(s, 'confirmed');
+  }
+
+  try {
+    const config = {
+      name: 'DIAG', symbol: 'DIAG', description: 'diag', imageUrl: 'https://example.com/x.png',
+      twitter: '', telegram: '', discord: '', website: '',
+      totalBackingSol: 0.1, creatorWallet: escrow.publicKey.toBase58(),
+    } as unknown as LaunchConfig;
+
+    const initial = await fetchInitialCurveConstants(sdk);
+    const burnerBal = await connection.getBalance(burner.publicKey);
+    const buyAmount = calculateBundledBuyAmount(burnerBal);
+    const { tokensOut } = simulateBuy(initial, buyAmount);
+    out.buyAmountSol = Number(buyAmount) / LAMPORTS_PER_SOL;
+    out.predictedTokensOut = tokensOut.toString();
+
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    const createTx = await buildCreationVersionedTx(
+      sdk, escrow, mint, 'https://example.com/meta.json', config, blockhash, 7_000_000
+    );
+    const buyTx = await buildBundledBuyVersionedTx(
+      burner, mint.publicKey, escrow.publicKey, buyAmount, tokensOut, blockhash
+    );
+
+    // Per-tx RPC simulation (sequential state NOT applied — standalone)
+    for (const [label, vtx] of [['create', createTx], ['buy', buyTx]] as const) {
+      try {
+        const sim = await connection.simulateTransaction(vtx, {
+          sigVerify: false, replaceRecentBlockhash: true,
+        });
+        out[`sim_${label}`] = {
+          err: sim.value.err ? JSON.stringify(sim.value.err) : null,
+          logs: (sim.value.logs || []).slice(-12),
+        };
+      } catch (e) {
+        out[`sim_${label}`] = { thrown: e instanceof Error ? e.message : String(e) };
+      }
+    }
+
+    // Submit the REAL bundle to Jito
+    let bundleId: string | null = null;
+    try {
+      bundleId = await submitJitoBundle([createTx, buyTx]);
+      out.bundleId = bundleId;
+      out.jitoAccepted = true;
+    } catch (e) {
+      out.jitoAccepted = false;
+      out.jitoSubmitError = e instanceof Error ? e.message : String(e);
+    }
+
+    // Poll Jito for the verdict (inflight + final), ~25s
+    if (bundleId) {
+      const jrpc = async (url: string, method: string) => {
+        try {
+          const r = await fetch(url, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: [[bundleId]] }),
+          });
+          return await r.json();
+        } catch (e) { return { fetchError: e instanceof Error ? e.message : String(e) }; }
+      };
+      const history: unknown[] = [];
+      for (let i = 0; i < 13; i++) {
+        const infl = await jrpc('https://mainnet.block-engine.jito.wtf/api/v1/getInflightBundleStatuses', 'getInflightBundleStatuses');
+        history.push({ t: i * 2, inflight: infl?.result?.value ?? infl?.error ?? infl });
+        const st = infl?.result?.value?.[0]?.status;
+        if (st === 'Failed' || st === 'Landed') break;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      out.jitoPolls = history;
+      out.finalBundleStatus = await jrpc('https://mainnet.block-engine.jito.wtf/api/v1/getBundleStatuses', 'getBundleStatuses');
+      out.mintLandedOnChain = !!(await connection.getAccountInfo(mint.publicKey));
+    }
+  } finally {
+    // Drain burner back to escrow (recover funds)
+    try {
+      const bal = await connection.getBalance(burner.publicKey);
+      if (bal > 5000) {
+        const t = new Transaction().add(SystemProgram.transfer({
+          fromPubkey: burner.publicKey, toPubkey: escrow.publicKey, lamports: bal - 5000,
+        }));
+        const { blockhash } = await connection.getLatestBlockhash();
+        t.recentBlockhash = blockhash; t.feePayer = burner.publicKey;
+        const s = await connection.sendTransaction(t, [burner]);
+        await connection.confirmTransaction(s, 'confirmed');
+        out.burnerDrainedBack = bal - 5000;
+      }
+    } catch (e) {
+      out.burnerDrainError = e instanceof Error ? e.message : String(e);
+      out.burnerSecretKeyB58 = bs58.encode(burner.secretKey); // so funds recoverable
+    }
+  }
+  return out;
+}
