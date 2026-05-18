@@ -3720,9 +3720,32 @@ export async function diagnosePooledLaunch(): Promise<Record<string, unknown>> {
     out.elapsedSec = ((Date.now() - t0) / 1000).toFixed(1);
     out.launch = { success: r.success, mint: r.mintAddress, sig: r.createSignature?.slice(0, 16), tokens: r.tokensReceived, err: r.error };
 
-    if (r.success && r.mintAddress) {
-      const sw = await sweepBurnerWallet(r.mintAddress, bs58.encode(pool.secretKey), pool.publicKey.toBase58(), escrow.publicKey.toBase58(), 'sell');
-      out.sellBack = { ok: sw.success, sig: sw.signature, sol: sw.amount, err: sw.error };
+    if (r.success && r.mintAddress && r.tokensReceived) {
+      // Full product path: split pool tokens 60/40 to two throwaway
+      // "backers" via the real distributeFromPool, verify on-chain.
+      const b1 = Keypair.generate(), b2 = Keypair.generate();
+      const total = BigInt(r.tokensReceived);
+      const a1 = (total * BigInt(60)) / BigInt(100);
+      const a2 = total - a1; // remainder to last = no dust loss
+      const dist = await distributeFromPool(
+        bs58.encode(pool.secretKey), pool.publicKey.toBase58(), r.mintAddress,
+        [{ backerWallet: b1.publicKey.toBase58(), tokens: a1.toString() },
+         { backerWallet: b2.publicKey.toBase58(), tokens: a2.toString() }],
+      );
+      const conn2 = conn;
+      const bal = async (w: PublicKey) => {
+        try {
+          const tp = await getMintTokenProgram(conn2, new PublicKey(r.mintAddress!));
+          const ata = await getAssociatedTokenAddress(new PublicKey(r.mintAddress!), w, false, tp);
+          return (await getAccount(conn2, ata, 'confirmed', tp)).amount.toString();
+        } catch { return '0'; }
+      };
+      out.distribute = {
+        results: dist.results.map(x => ({ w: x.backerWallet.slice(0, 6), tokens: x.tokens, sig: x.signature?.slice(0, 10), err: x.error })),
+        backer1OnChain: await bal(b1.publicKey),
+        backer2OnChain: await bal(b2.publicKey),
+        expected1: a1.toString(), expected2: a2.toString(),
+      };
     }
   } catch (e) {
     out.error = e instanceof Error ? e.message : String(e);
