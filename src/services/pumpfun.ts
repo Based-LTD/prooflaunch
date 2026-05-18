@@ -3372,3 +3372,99 @@ export async function diagnoseProductionLaunch(): Promise<Record<string, unknown
   }
   return out;
 }
+
+// ── TEMPORARY DIAGNOSTIC: ALT fit test ───────────────────────────────
+// Creates a real on-chain Address Lookup Table of the STABLE launch
+// accounts (reusable forever), then measures createV2+buy compressed
+// against it — definitively answering whether single-tx atomic launch
+// (and multi-distinct-buy) fits. One-time ~tiny SOL for the ALT.
+export async function diagnoseAltFit(): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  const { AddressLookupTableProgram } = await import('@solana/web3.js');
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const sdk = new PumpSdk();
+  const online = new OnlinePumpSdk(conn);
+  await online.fetchGlobal();
+  const FEE = PUMP_FEE_RECIPIENT;
+  const BUYBACK = getBuybackFeeRecipient();
+  const uri = 'https://pump.mypinata.cloud/ipfs/Qmb3kCf9z2pXq7vNw8aLrT4dHs9YfE6uJ1mKpQ2sVx';
+
+  try {
+    const mint = Keypair.generate();
+    const createIx = await sdk.createV2Instruction({
+      mint: mint.publicKey, name: 'Proof Launch Token', symbol: 'PROOF',
+      uri, creator: escrow.publicKey, user: escrow.publicKey,
+      mayhemMode: false, cashback: false,
+    });
+    const mkBuy = async (buyer: Keypair) => {
+      const ata = getAssociatedTokenAddressSync(mint.publicKey, buyer.publicKey, true, TOKEN_2022_PROGRAM_ID);
+      const ix = await sdk.getBuyInstructionRaw({
+        user: buyer.publicKey, mint: mint.publicKey, creator: escrow.publicKey,
+        amount: new BN(1), solAmount: new BN(50000000),
+        feeRecipient: FEE, buybackFeeRecipient: BUYBACK, tokenProgram: TOKEN_2022_PROGRAM_ID,
+      });
+      return { ata, ixs: [createAssociatedTokenAccountIdempotentInstruction(buyer.publicKey, ata, buyer.publicKey, mint.publicKey, TOKEN_2022_PROGRAM_ID), ix] };
+    };
+    const pool = Keypair.generate();
+    const pb = await mkBuy(pool);
+
+    // Harvest accounts; signers + mint-derived stay static, the rest go in ALT.
+    const dyn = new Set<string>([
+      escrow.publicKey.toBase58(), mint.publicKey.toBase58(),
+      pool.publicKey.toBase58(), pb.ata.toBase58(),
+    ]);
+    const stable = new Set<string>();
+    for (const ix of [createIx, ...pb.ixs]) {
+      stable.add(ix.programId.toBase58());
+      for (const k of ix.keys) if (!dyn.has(k.pubkey.toBase58())) stable.add(k.pubkey.toBase58());
+    }
+    const altAddrs = [...stable].map(s => new PublicKey(s));
+    out.stableAccountCount = altAddrs.length;
+
+    const slot = await conn.getSlot('finalized');
+    const [createAltIx, altAddr] = AddressLookupTableProgram.createLookupTable({ authority: escrow.publicKey, payer: escrow.publicKey, recentSlot: slot });
+    out.alt = altAddr.toBase58();
+    const sendV0 = async (ixs: import('@solana/web3.js').TransactionInstruction[]) => {
+      const bh = (await conn.getLatestBlockhash()).blockhash;
+      const m = new TransactionMessage({ payerKey: escrow.publicKey, recentBlockhash: bh, instructions: ixs }).compileToV0Message();
+      const t = new VersionedTransaction(m); t.sign([escrow]);
+      const sg = await conn.sendTransaction(t, { skipPreflight: true }); await conn.confirmTransaction(sg, 'confirmed'); return sg;
+    };
+    await sendV0([createAltIx]);
+    // extend in chunks of 20
+    for (let i = 0; i < altAddrs.length; i += 20) {
+      await sendV0([AddressLookupTableProgram.extendLookupTable({ payer: escrow.publicKey, authority: escrow.publicKey, lookupTable: altAddr, addresses: altAddrs.slice(i, i + 20) })]);
+    }
+    // ALTs need ~1 slot to warm up
+    await new Promise(r => setTimeout(r, 4000));
+    const alt = (await conn.getAddressLookupTable(altAddr)).value;
+    if (!alt) { out.error = 'ALT not active'; return out; }
+
+    const bh = (await conn.getLatestBlockhash()).blockhash;
+    const cb = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 800000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+    ];
+    const measure = (label: string, ixs: import('@solana/web3.js').TransactionInstruction[], signers: Keypair[]) => {
+      try {
+        const m = new TransactionMessage({ payerKey: escrow.publicKey, recentBlockhash: bh, instructions: ixs }).compileToV0Message([alt]);
+        const t = new VersionedTransaction(m); t.sign(signers);
+        const sz = t.serialize().length;
+        return { label, bytes: sz, fits: sz <= 1232, spare: 1232 - sz };
+      } catch (e) { return { label, error: e instanceof Error ? e.message : String(e) }; }
+    };
+    const b1 = Keypair.generate(), b2 = Keypair.generate(), b3 = Keypair.generate(), b4 = Keypair.generate();
+    const r1 = await mkBuy(b1), r2 = await mkBuy(b2), r3 = await mkBuy(b3), r4 = await mkBuy(b4);
+    out.results = [
+      measure('createV2 + 1 separate-pool buy (ALT)', [...cb, createIx, ...pb.ixs], [escrow, mint, pool]),
+      measure('createV2 + 2 distinct buys (ALT)', [...cb, createIx, ...r1.ixs, ...r2.ixs], [escrow, mint, b1, b2]),
+      measure('createV2 + 3 distinct buys (ALT)', [...cb, createIx, ...r1.ixs, ...r2.ixs, ...r3.ixs], [escrow, mint, b1, b2, b3]),
+      measure('createV2 + 4 distinct buys (ALT)', [...cb, createIx, ...r1.ixs, ...r2.ixs, ...r3.ixs, ...r4.ixs], [escrow, mint, b1, b2, b3, b4]),
+    ];
+  } catch (e) {
+    out.error = e instanceof Error ? e.message : String(e);
+    out.stack = e instanceof Error ? e.stack?.split('\n').slice(0, 5) : undefined;
+  }
+  return out;
+}
