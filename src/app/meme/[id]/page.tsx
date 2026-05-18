@@ -69,6 +69,8 @@ export default function MemeDetailPage() {
   const [backingStatus, setBackingStatus] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
   const [launchStatus, setLaunchStatus] = useState<string | null>(null);
+  const [distributing, setDistributing] = useState(false);
+  const [distributeStatus, setDistributeStatus] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawStatus, setWithdrawStatus] = useState<string | null>(null);
   const [showBackConfirm, setShowBackConfirm] = useState(false);
@@ -385,6 +387,44 @@ export default function MemeDetailPage() {
       setLaunchStatus(`Error: ${err instanceof Error ? err.message : 'Launch failed'}`);
     } finally {
       setLaunching(false);
+    }
+  };
+
+  const handleDistribute = async () => {
+    if (!meme || !publicKey || !signMessage || distributing) return;
+    setDistributing(true);
+    setDistributeStatus('Sign to authorize distribution...');
+    try {
+      const authMessage = `claim:${meme.id}:${publicKey.toBase58()}:${Date.now()}`;
+      const sigBytes = await signMessage(new TextEncoder().encode(authMessage));
+      const sigB58 = bs58.encode(sigBytes);
+
+      setDistributeStatus('Distributing tokens to backers...');
+      const response = await fetch('/api/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meme_id: meme.id,
+          caller_wallet: publicKey.toBase58(),
+          signature: sigB58,
+          message: authMessage,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Distribution failed');
+
+      setDistributeStatus(
+        data.remaining > 0
+          ? `Distributed ${data.distributed}, ${data.remaining} failed — retry to finish`
+          : `All ${data.distributed} backers received their tokens!`
+      );
+      await Promise.all([refetchMeme(), refetchBackings()]);
+      setTimeout(() => setDistributeStatus(null), 6000);
+    } catch (err) {
+      console.error('Distribute failed:', err);
+      setDistributeStatus(`Error: ${err instanceof Error ? err.message : 'Distribution failed'}`);
+    } finally {
+      setDistributing(false);
     }
   };
 
@@ -753,6 +793,48 @@ export default function MemeDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Distribute Section — creator releases pooled tokens to backers */}
+      {isLaunched && isCreator && (
+        <div className="border border-[var(--accent)] bg-[var(--card)]">
+          <div className="border-b border-[var(--accent)] px-4 py-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+              // DISTRIBUTE_TO_BACKERS
+            </span>
+          </div>
+          <div className="p-4 space-y-3">
+            <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+              The pool bought the tokens at launch. Release each backer&apos;s
+              proportional share to their wallet. Safe to run again if any fail.
+            </p>
+            <button
+              onClick={handleDistribute}
+              disabled={distributing}
+              className="btn-primary w-full"
+            >
+              {distributing ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Distributing…
+                </span>
+              ) : (
+                '[▶] Distribute Tokens to Backers'
+              )}
+            </button>
+            {distributeStatus && (
+              <div className={`p-3 text-xs font-mono uppercase tracking-widest text-center border ${
+                distributeStatus.includes('Error') || distributeStatus.includes('failed')
+                  ? 'text-[var(--error)] border-[var(--error)]'
+                  : distributeStatus.includes('received')
+                  ? 'text-[var(--success)] border-[var(--success)]'
+                  : 'text-[var(--accent)] border-[var(--accent)]'
+              }`}>
+                &gt; {distributeStatus}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Launch Section — terminal alert */}
       {(isFunded || isLaunching) && (
