@@ -652,18 +652,21 @@ export default function MemeDetailPage() {
         )}
       </div>
 
-      {/* Distribute Section — creator releases pooled tokens to backers */}
-      {isLaunched && isCreator && (
-        <div className="border border-[var(--accent)] bg-[var(--card)]">
-          <div className="border-b border-[var(--accent)] px-4 py-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-              // DISTRIBUTE_TO_BACKERS
+      {/* Distribution is automatic at launch (and a reconcile cron is the
+          backstop). This manual control only appears as a fallback when
+          some backers are still pending — never the primary path. */}
+      {isLaunched && isCreator && backings.some((b) => b.status === 'confirmed') && (
+        <div className="border border-[var(--warning)] bg-[var(--card)]">
+          <div className="border-b border-[var(--warning)] px-4 py-2">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
+              // DISTRIBUTION_PENDING
             </span>
           </div>
           <div className="p-4 space-y-3">
             <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
-              The pool bought the tokens at launch. Release each backer&apos;s
-              proportional share to their wallet. Safe to run again if any fail.
+              Tokens distribute automatically at launch and a background job
+              retries any stragglers — you normally don&apos;t touch this. Some
+              backers are still pending; you can nudge it manually here.
             </p>
             <button
               onClick={handleDistribute}
@@ -676,7 +679,7 @@ export default function MemeDetailPage() {
                   Distributing…
                 </span>
               ) : (
-                '[▶] Distribute Tokens to Backers'
+                '[▶] Retry Pending Distribution'
               )}
             </button>
             {distributeStatus && (

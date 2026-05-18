@@ -4,6 +4,7 @@ import { launchPooledAtomic, LaunchConfig } from '@/services/pumpfun';
 import { verifySignedAuthMessage } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 import { createLaunchLogger } from '@/lib/launchLog';
+import { settlePoolDistribution } from '@/services/distribution';
 
 // Launch can take ~36s of Jito bundle retries + RPC fallback + buys.
 // Without this the platform default would kill it mid-launch.
@@ -138,8 +139,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Live. Record the pool's token balance — backers' proportional
-    // claims are computed from this. Distribution is a SEPARATE step
-    // (/api/claim); backings stay 'confirmed' until claimed.
+    // shares are computed from this.
     await supabase
       .from('memes')
       .update({
@@ -155,6 +155,22 @@ export async function POST(request: NextRequest) {
 
     console.log(`Pooled launch complete: ${result.tokensReceived} tokens in pool ${meme.pool_wallet}`);
 
+    // Distribution is AUTOMATIC: the platform pushes each backer's
+    // proportional share to their wallet immediately, in this same
+    // request — no human "Distribute" click required. settlePoolDistribution
+    // is shared + idempotent, so the manual button (retry) and the
+    // reconcile cron (backstop) remain safe no-ops once this completes.
+    // Best-effort: a partial/failed distribution must NOT fail an
+    // otherwise-successful launch — the cron finishes any remainder.
+    let distribution: { distributed: number; remaining: number } | undefined;
+    try {
+      const d = await settlePoolDistribution(supabase, meme_id, launchLog);
+      distribution = { distributed: d.distributed, remaining: d.remaining };
+      console.log(`Auto-distribute: ${d.distributed} sent, ${d.remaining} pending (cron backstop)`);
+    } catch (e) {
+      console.error('Auto-distribute error (cron will finish):', e);
+    }
+
     return NextResponse.json({
       success: true,
       mint_address: result.mintAddress,
@@ -163,6 +179,7 @@ export async function POST(request: NextRequest) {
       pool_wallet: result.poolWallet,
       pool_token_balance: result.tokensReceived,
       total_backers: backings.length,
+      distribution,
     });
   } catch (error) {
     console.error('Launch error:', error);
