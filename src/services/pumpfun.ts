@@ -58,6 +58,11 @@ const PUMP_PROGRAM_ID = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF
 const PUMP_FEE_PROGRAM_ID = new PublicKey('pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ');
 const PUMP_GLOBAL_ADDRESS = new PublicKey('4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf');
 const PUMP_FEE_RECIPIENT = new PublicKey('CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM');
+// Permanent platform Address Lookup Table — compresses createV2 + pooled
+// buy into one atomic transaction (proven 758 bytes). Reused every
+// launch; never deactivate. Authority/payer = escrow. Created via
+// createProductionAlt() (29 stable accounts incl. all 8 buyback recips).
+const PRODUCTION_ALT = new PublicKey('9TaT2hRwB4TnvpWz5eJ6kDtuHzagzWV2uUhReeVd6rsk');
 
 // Derive volume accumulator PDAs
 function deriveGlobalVolumeAccumulator(): PublicKey {
