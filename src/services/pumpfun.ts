@@ -2825,8 +2825,20 @@ export async function diagnoseBundleLanding(): Promise<Record<string, unknown>> 
     } as unknown as LaunchConfig;
 
     const initial = await fetchInitialCurveConstants(sdk);
-    const burnerBal = await connection.getBalance(burner.publicKey);
+    // Poll until the funding actually reflects (avoid balance-race that
+    // yields buyAmount=0 -> simulateBuy(...,0n) -> tokensOut=-1n).
+    let burnerBal = 0;
+    for (let i = 0; i < 15; i++) {
+      burnerBal = await connection.getBalance(burner.publicKey, 'confirmed');
+      if (burnerBal >= FUND * 0.9) break;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    out.burnerBalForBuild = burnerBal;
     const buyAmount = calculateBundledBuyAmount(burnerBal);
+    if (buyAmount <= BigInt(0)) {
+      out.fatal = `calculateBundledBuyAmount returned ${buyAmount} for balance ${burnerBal} — would throw -1n in real launch (underfunded-burner bug)`;
+      return out;
+    }
     const { tokensOut } = simulateBuy(initial, buyAmount);
     out.buyAmountSol = Number(buyAmount) / LAMPORTS_PER_SOL;
     out.predictedTokensOut = tokensOut.toString();
