@@ -26,7 +26,6 @@ import { BackersList } from '@/components/BackersList';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClaimRewards } from '@/components/ClaimRewards';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
-import { createBurnerWallet, getSignMessage } from '@/lib/burnerWallet';
 
 // Calculate time remaining from deadline
 function getTimeRemaining(deadline: string): string {
@@ -78,43 +77,11 @@ export default function MemeDetailPage() {
   const [showLaunchConfirm, setShowLaunchConfirm] = useState(false);
   const [pendingWithdrawWallet, setPendingWithdrawWallet] = useState<string | null>(null);
   const [pendingWithdrawAmount, setPendingWithdrawAmount] = useState<number>(0);
-  // Burner wallet state
-  const [pendingBurnerKeypair, setPendingBurnerKeypair] = useState<Keypair | null>(null);
-  const [showBurnerInfo, setShowBurnerInfo] = useState(false);
-  // Sweep state
-  const [sweeping, setSweeping] = useState(false);
-  const [sweepStatus, setSweepStatus] = useState<string | null>(null);
-  const [burnerInfo, setBurnerInfo] = useState<{
-    burner_wallet: string;
-    buy_executed: boolean;
-    amount_sol: number | null;
-    swept: boolean;
-    sweep_action: string | null;
-  } | null>(null);
-  const [showExportKey, setShowExportKey] = useState(false);
-  const [exportedKey, setExportedKey] = useState<string | null>(null);
-  const [exportKeyCopied, setExportKeyCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-
-  // Platform config
-  const [escrowAddress, setEscrowAddress] = useState<string | null>(null);
-  const PLATFORM_FEE_PERCENT = 0.02; // 2%
 
   // Use real-time hooks for meme and backings
   const { meme, loading, error, refetch: refetchMeme } = useRealtimeMeme(id as string);
   const { backings, refetch: refetchBackings } = useRealtimeBackings(id as string);
-
-  // Fetch platform config (escrow address)
-  useEffect(() => {
-    fetch('/api/config')
-      .then(res => res.json())
-      .then(data => {
-        if (data.escrow_address) {
-          setEscrowAddress(data.escrow_address);
-        }
-      })
-      .catch(err => console.error('Failed to fetch config:', err));
-  }, []);
 
   // Set trade type based on meme status
   useEffect(() => {
@@ -124,29 +91,6 @@ export default function MemeDetailPage() {
       setTradeType('back'); // Default to back for proving tokens
     }
   }, [meme?.status]);
-
-  // Fetch burner wallet info when viewing a launched token
-  useEffect(() => {
-    const fetchBurnerInfo = async () => {
-      if (!meme || meme.status !== 'live' || !connected || !publicKey) return;
-
-      try {
-        const response = await fetch(
-          `/api/sweep?meme_id=${meme.id}&backer_wallet=${publicKey.toBase58()}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setBurnerInfo(data);
-        }
-        // 404 is expected if user is not a backer - no need to log
-      } catch (err) {
-        // Network errors only
-        console.error('Failed to fetch burner info:', err);
-      }
-    };
-
-    fetchBurnerInfo();
-  }, [meme, connected, publicKey]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -189,13 +133,13 @@ export default function MemeDetailPage() {
     }
 
     // Check wallet balance before attempting transaction
-    const totalNeeded = amountSol + (amountSol * PLATFORM_FEE_PERCENT) + 0.005; // backing + 2% fee + tx fees buffer
+    const totalNeeded = amountSol + 0.005; // backing to pool + tx fee buffer
     try {
       const balance = await connection.getBalance(publicKey);
       const balanceSol = balance / LAMPORTS_PER_SOL;
       if (balanceSol < totalNeeded) {
         setBackingStatus(
-          `Error: Insufficient balance. You have ${balanceSol.toFixed(4)} SOL but need ~${totalNeeded.toFixed(4)} SOL (${amountSol} backing + ${(amountSol * PLATFORM_FEE_PERCENT).toFixed(4)} fee + tx costs).`
+          `Error: Insufficient balance. You have ${balanceSol.toFixed(4)} SOL but need ~${totalNeeded.toFixed(4)} SOL (${amountSol} backing + tx costs).`
         );
         return;
       }
@@ -267,7 +211,6 @@ export default function MemeDetailPage() {
     } catch (err) {
       console.error('Backing failed:', err);
       setBackingStatus(`Error: ${err instanceof Error ? err.message : 'Transaction failed'}`);
-      setPendingBurnerKeypair(null);
     } finally {
       setBacking(false);
     }
@@ -471,91 +414,6 @@ export default function MemeDetailPage() {
       setWithdrawStatus(`Error: ${err instanceof Error ? err.message : 'Withdrawal failed'}`);
     } finally {
       setWithdrawing(false);
-    }
-  };
-
-  const handleSweep = async (action: 'sell' | 'transfer') => {
-    if (!meme || !publicKey || !signMessage || sweeping) return;
-
-    setSweeping(true);
-    setSweepStatus('Sign to authorize…');
-
-    try {
-      // Sign auth message bound to this sweep
-      const backerWallet = publicKey.toBase58();
-      const authMessage = `sweep:${meme.id}:${backerWallet}:${action}:${Date.now()}`;
-      const msgBytes = new TextEncoder().encode(authMessage);
-      const sigBytes = await signMessage(msgBytes);
-      const sigB58 = bs58.encode(sigBytes);
-
-      setSweepStatus(action === 'sell' ? 'Selling tokens...' : 'Transferring tokens...');
-      const response = await fetch('/api/sweep', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meme_id: meme.id,
-          backer_wallet: backerWallet,
-          action,
-          signature: sigB58,
-          message: authMessage,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Sweep failed');
-      }
-
-      setSweepStatus(data.message);
-
-      // Update burner info to show swept status
-      setBurnerInfo(prev => prev ? { ...prev, swept: true, sweep_action: action } : null);
-
-      // Clear status after a moment
-      setTimeout(() => setSweepStatus(null), 5000);
-    } catch (err) {
-      console.error('Sweep failed:', err);
-      setSweepStatus(`Error: ${err instanceof Error ? err.message : 'Sweep failed'}`);
-    } finally {
-      setSweeping(false);
-    }
-  };
-
-  const handleExportPrivateKey = async () => {
-    if (!meme || !publicKey) return;
-
-    setShowExportKey(true);
-    setExportedKey(null); // Reset
-
-    try {
-      // Sign a message to prove wallet ownership
-      const authMessage = `export-key:${meme.id}:${publicKey.toBase58()}:${Date.now()}`;
-      const msgBytes = new TextEncoder().encode(authMessage);
-      const sigBytes = await signMessage!(msgBytes);
-      const sigB58 = bs58.encode(sigBytes);
-
-      const response = await fetch('/api/backings/export-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meme_id: meme.id,
-          backer_wallet: publicKey.toBase58(),
-          signature: sigB58,
-          message: authMessage,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to export key');
-      }
-
-      setExportedKey(data.private_key);
-    } catch (err) {
-      console.error('Export key error:', err);
-      // Keep modal open but show error state
     }
   };
 
@@ -961,75 +819,55 @@ export default function MemeDetailPage() {
               </div>
             </div>
           ) : isLaunched ? (
-            /* Trading options for launched tokens */
-            <div className="space-y-4">
-              {burnerInfo && burnerInfo.burner_wallet && !burnerInfo.swept ? (
-                <>
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => handleSweep('transfer')}
-                      disabled={sweeping}
-                      className="flex-1 flex items-center justify-center gap-2 py-4 bg-[var(--success)] hover:bg-[var(--success)]/90 text-white font-black uppercase tracking-wide transition-colors disabled:opacity-50 border-2 border-[var(--success)]"
-                    >
-                      {sweeping ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowUpRight className="w-5 h-5" />}
-                      Claim Tokens
-                    </button>
-                    <a
-                      href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 px-6 py-4 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold uppercase tracking-wide transition-colors border-2 border-[var(--accent)]"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Trade
-                    </a>
-                  </div>
-                  <button
-                    onClick={handleExportPrivateKey}
-                    className="w-full flex items-center justify-center gap-2 p-2.5 bg-[var(--background)] hover:bg-[var(--border)] border border-[var(--border)] transition-colors text-xs uppercase tracking-wide text-[var(--muted)]"
-                  >
-                    <Key className="w-3 h-3" />
-                    Export Private Key
-                  </button>
-                  {sweepStatus && (
-                    <div className={`p-3 text-sm text-center ${
-                      sweepStatus.includes('Error')
-                        ? 'bg-[var(--error)]/20 text-[var(--error)]'
-                        : 'bg-[var(--success)]/20 text-[var(--success)]'
-                    }`}>
-                      {sweeping && <Loader2 className="w-4 h-4 animate-spin inline mr-2" />}
-                      {sweepStatus}
+            /* Launched: pooled allocation view */
+            (() => {
+              const myBacking = backings.find(
+                (b) => b.backer_wallet === publicKey?.toBase58() && b.status !== 'withdrawn'
+              ) as (typeof backings[number] & { claim_tokens?: string | number; claim_tx?: string }) | undefined;
+              const distributed = myBacking?.status === 'distributed' && !!myBacking?.claim_tx;
+              return (
+                <div className="space-y-3">
+                  {myBacking && (
+                    <div className="border border-[var(--border)] bg-[var(--background)] p-4 space-y-2">
+                      <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest">
+                        <span className="text-[var(--accent)]">// YOUR_ALLOCATION</span>
+                        <span className="text-[var(--muted)]">backed {Number(myBacking.amount_sol).toFixed(3)} SOL</span>
+                      </div>
+                      {distributed ? (
+                        <>
+                          <div className="flex items-center gap-2 text-[var(--success)]">
+                            <Check className="w-4 h-4" />
+                            <span className="font-bold uppercase text-sm">
+                              Received {Number(myBacking.claim_tokens || 0).toLocaleString()} tokens
+                            </span>
+                          </div>
+                          <a
+                            href={`https://solscan.io/tx/${myBacking.claim_tx}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)] underline"
+                          >
+                            &gt; view distribution tx
+                          </a>
+                        </>
+                      ) : (
+                        <div className="text-xs font-mono uppercase tracking-widest text-[var(--muted)]">
+                          &gt; Awaiting distribution — the creator releases your
+                          proportional share of the pool to this wallet.
+                        </div>
+                      )}
                     </div>
                   )}
-                </>
-              ) : burnerInfo?.swept ? (
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 text-[var(--success)]">
-                    <Check className="w-5 h-5" />
-                    <span className="font-bold uppercase text-sm">Tokens claimed</span>
-                  </div>
                   <a
                     href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-auto flex items-center gap-2 px-6 py-3 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-bold uppercase tracking-wide transition-colors border-2 border-[var(--accent)]"
+                    target="_blank" rel="noopener noreferrer"
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-black uppercase tracking-wide transition-colors border-2 border-[var(--accent)]"
                   >
-                    <ExternalLink className="w-4 h-4" />
+                    <ExternalLink className="w-5 h-5" />
                     Trade on pump.fun
                   </a>
                 </div>
-              ) : (
-                <a
-                  href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-4 bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white font-black uppercase tracking-wide transition-colors border-2 border-[var(--accent)]"
-                >
-                  <ExternalLink className="w-5 h-5" />
-                  Trade on pump.fun
-                </a>
-              )}
-            </div>
+              );
+            })()
           ) : (
             /* Backing panel — mobile-first */
             <div className="space-y-3">
@@ -1247,132 +1085,6 @@ export default function MemeDetailPage() {
         isLoading={backing}
       />
 
-      {/* Token Wallet Info Modal - shows after backing, hides private key until launch */}
-      {showBurnerInfo && pendingBurnerKeypair && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-[var(--card)] border-2 border-[var(--success)] p-6 max-w-md w-full mx-4 shadow-xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-[var(--success)]/20 flex items-center justify-center border-2 border-[var(--success)]">
-                <span className="text-xl">★</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-black uppercase tracking-tight">You're In!</h3>
-                <p className="text-sm text-[var(--muted)]">Your position is secured</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="bg-[var(--accent)]/10 border-2 border-[var(--accent)]/30 p-4">
-                <p className="text-sm text-[var(--accent)] font-bold uppercase tracking-wide mb-2">What Happens Next:</p>
-                <ul className="text-xs text-[var(--muted)] space-y-1">
-                  <li>★ Your SOL is now in a secure token wallet</li>
-                  <li>★ When the token launches, it will automatically acquire tokens</li>
-                  <li>★ After launch, claim, transfer, or export your tokens</li>
-                  <li>★ Your private key is encrypted and secured</li>
-                </ul>
-              </div>
-
-              <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4">
-                <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
-                  <Key className="w-4 h-4" />
-                  <span className="font-bold uppercase tracking-wide">Hidden until launch</span>
-                </div>
-                <p className="text-xs text-[var(--muted)] mt-2">
-                  For operational security, your token wallet address and private key remain hidden until launch. This prevents front-running and protects your position.
-                </p>
-              </div>
-
-              <div className="bg-[var(--warning)]/10 border-2 border-[var(--warning)]/30 p-4">
-                <p className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide mb-1">Changed your mind?</p>
-                <p className="text-xs text-[var(--muted)]">
-                  You may withdraw anytime before launch for a 2% withdrawal fee. Visit your Portfolio or use the withdraw button.
-                </p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setShowBurnerInfo(false);
-                  setPendingBurnerKeypair(null);
-                  setBackingStatus(null);
-                }}
-                className="w-full py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 border-2 border-[var(--accent)]"
-              >
-                Got it
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Export Private Key Modal (for launched tokens) */}
-      {showExportKey && burnerInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-[var(--card)] border-2 border-[var(--warning)] p-6 max-w-md w-full mx-4 shadow-xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-[var(--warning)]/20 flex items-center justify-center border-2 border-[var(--warning)]">
-                <Key className="w-6 h-6 text-[var(--warning)]" />
-              </div>
-              <div>
-                <h3 className="text-lg font-black uppercase tracking-tight">Sensitive Information</h3>
-                <p className="text-sm text-[var(--muted)]">Handle with extreme care</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="bg-[var(--warning)]/10 border-2 border-[var(--warning)]/30 p-4">
-                <p className="text-sm text-[var(--warning)] font-bold uppercase tracking-wide mb-2">Security Notes:</p>
-                <ul className="text-xs text-[var(--muted)] space-y-1">
-                  <li>★ Never share your private key with anyone</li>
-                  <li>★ Only import to trusted wallet apps (Phantom, Solflare)</li>
-                  <li>★ This gives full control of the token wallet</li>
-                </ul>
-              </div>
-
-              {exportedKey ? (
-                <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4">
-                  <p className="text-sm text-[var(--muted)] mb-2 uppercase tracking-wide font-bold">Private Key:</p>
-                  <div className="flex gap-2">
-                    <code className="flex-1 text-xs break-all bg-[var(--card)] p-2 border-2 border-[var(--border)]">
-                      {exportKeyCopied ? '••••••••••••••••' : exportedKey}
-                    </code>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(exportedKey);
-                        setExportKeyCopied(true);
-                        setTimeout(() => setExportKeyCopied(false), 3000);
-                      }}
-                      className="px-3 py-2 bg-[var(--accent)] text-white text-sm hover:opacity-90 border-2 border-[var(--accent)]"
-                    >
-                      {exportKeyCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
-                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-[var(--accent)]" />
-                  <p className="text-sm text-[var(--muted)]">
-                    Decrypting...
-                  </p>
-                  <p className="text-xs text-[var(--muted)] mt-2">
-                    Wallet: <code className="text-xs">{burnerInfo.burner_wallet.slice(0, 8)}...{burnerInfo.burner_wallet.slice(-8)}</code>
-                  </p>
-                </div>
-              )}
-
-              <button
-                onClick={() => {
-                  setShowExportKey(false);
-                  setExportedKey(null);
-                  setExportKeyCopied(false);
-                }}
-                className="w-full py-3 bg-[var(--background)] hover:bg-[var(--border)] font-bold uppercase tracking-wide transition-colors border-2 border-[var(--border)]"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <ConfirmDialog
         isOpen={showWithdrawConfirm}
