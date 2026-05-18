@@ -318,10 +318,21 @@ export default function MemeDetailPage() {
         throw new Error(data.error || 'Launch failed');
       }
 
-      setLaunchStatus('Token launched successfully!');
+      // Auto-distribute ran inside /api/launch — reflect its real result
+      // and refetch BOTH meme and backings so the post-launch UI is
+      // accurate (backings flip confirmed -> distributed). Without the
+      // backings refetch the stale 'confirmed' rows make the pending-
+      // distribution warning flash even though tokens already went out.
+      const dist = data.distribution as { distributed: number; remaining: number } | undefined;
+      if (dist && dist.remaining === 0) {
+        setLaunchStatus(`Launched! Tokens distributed to all ${dist.distributed} backers.`);
+      } else if (dist && dist.remaining > 0) {
+        setLaunchStatus(`Launched! ${dist.distributed} distributed, ${dist.remaining} auto-retrying…`);
+      } else {
+        setLaunchStatus('Token launched successfully!');
+      }
 
-      // Refresh meme data to show updated status
-      await refetchMeme();
+      await Promise.all([refetchMeme(), refetchBackings()]);
 
       // Clear status after a moment
       setTimeout(() => setLaunchStatus(null), 5000);
@@ -655,7 +666,7 @@ export default function MemeDetailPage() {
       {/* Distribution is automatic at launch (and a reconcile cron is the
           backstop). This manual control only appears as a fallback when
           some backers are still pending — never the primary path. */}
-      {isLaunched && isCreator && backings.some((b) => b.status === 'confirmed') && (
+      {isLaunched && isCreator && !launching && !distributing && backings.some((b) => b.status === 'confirmed') && (
         <div className="border border-[var(--warning)] bg-[var(--card)]">
           <div className="border-b border-[var(--warning)] px-4 py-2">
             <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
