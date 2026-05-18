@@ -3570,14 +3570,11 @@ export async function launchPooledAtomic(
 }> {
   const conn = new Connection(RPC_URL, 'confirmed');
   const escrow = getEscrowWallet();
-  // Use a pre-ground `...pump` vanity mint if the pool has one; degrade
-  // to a random keypair if it's empty — NEVER block a launch on vanity.
-  let mintKp = Keypair.generate();
-  try {
-    const { consumeVanityWallet } = await import('@/lib/vanity');
-    const v = await consumeVanityWallet('pump', `mint:${config.symbol}`);
-    if (v) mintKp = decryptBurnerKey(v.encryptedPrivateKey);
-  } catch { /* vanity unavailable — random keypair is fine */ }
+  // Mint is a plain random keypair — intentionally NOT `...pump`
+  // vanity (that's pump.fun's own convention; we don't mimic it). The
+  // only vanity we use is the `...pool` POOL wallet, consumed at
+  // submission (Phase 2), since that's the wallet scanners tag.
+  const mintKp = Keypair.generate();
   const mint = mintKp.publicKey;
   const pumpFunUrl = `https://pump.fun/coin/${mint.toBase58()}`;
 
