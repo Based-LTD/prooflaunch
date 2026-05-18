@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Connection, Keypair, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, TransactionMessage, VersionedTransaction, ComputeBudgetProgram, TransactionInstruction } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync, createAssociatedTokenAccountIdempotentInstruction, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { PumpSdk, OnlinePumpSdk } from '@pump-fun/pump-sdk';
 import BN from 'bn.js';
@@ -38,11 +38,11 @@ export async function POST(req: NextRequest) {
         user: buyer.publicKey, mint: mint.publicKey, creator: creator.publicKey,
         amount: new BN(1), solAmount: new BN(50000000),
         feeRecipient: FEE, buybackFeeRecipient: BUYBACK,
-        tokenProgram: TOKEN_2022_PROGRAM_ID, cashback: false,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       });
       return [createAssociatedTokenAccountIdempotentInstruction(buyer.publicKey, ata, buyer.publicKey, mint.publicKey, TOKEN_2022_PROGRAM_ID), ix];
     };
-    const measure = (label: string, ixs: ReturnType<typeof ComputeBudgetProgram.setComputeUnitLimit>[], signers: Keypair[]) => {
+    const measure = (label: string, ixs: TransactionInstruction[], signers: Keypair[]) => {
       try {
         const msg = new TransactionMessage({ payerKey: signers[0].publicKey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message();
         const tx = new VersionedTransaction(msg); tx.sign(signers);
