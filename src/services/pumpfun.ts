@@ -3268,3 +3268,87 @@ export async function launchViaCreateV2Bundle(
     return { success: false, buyResults, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
+
+// ── TEMPORARY DIAGNOSTIC: full PRODUCTION-path validation ─────────────
+// Calls the REAL launchViaCreateV2Bundle on a throwaway burner (so it
+// exercises the actual shipping code: atomic bundle, RPC fallback,
+// logging, the lot), then sweeps the tokens back via the production
+// Token-2022 sell path and drains SOL home. Proves the real guarantee
+// — tokens delivered (bundle OR fallback) AND sweepable — for ~tx fees.
+// DELETE after the gate passes.
+export async function diagnoseProductionLaunch(): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const burner = Keypair.generate();
+  out.burner = burner.publicKey.toBase58();
+  const FUND = Math.floor(0.04 * LAMPORTS_PER_SOL);
+
+  // fund throwaway burner
+  {
+    const t = new Transaction().add(SystemProgram.transfer({
+      fromPubkey: escrow.publicKey, toPubkey: burner.publicKey, lamports: FUND }));
+    t.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    t.feePayer = escrow.publicKey;
+    const s = await conn.sendTransaction(t, [escrow]);
+    await conn.confirmTransaction(s, 'confirmed');
+  }
+  for (let i = 0; i < 15; i++) {
+    if (await conn.getBalance(burner.publicKey, 'confirmed') >= FUND * 0.9) break;
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  try {
+    const config = {
+      name: 'PRODDIAG', symbol: 'PRDG', description: 'prod path validation',
+      imageUrl: 'https://example.com/x.png', twitter: '', telegram: '',
+      discord: '', website: '', totalBackingSol: 0.04,
+      creatorWallet: escrow.publicKey.toBase58(),
+    } as unknown as LaunchConfig;
+
+    // decryptBurnerKey accepts a raw base58 secret (its fallback path),
+    // so we can hand the production fn a throwaway backer directly.
+    const backer: BurnerBackerInfo = {
+      mainWallet: escrow.publicKey.toBase58(),
+      burnerWallet: burner.publicKey.toBase58(),
+      encryptedPrivateKey: bs58.encode(burner.secretKey),
+      amountSol: 0.04,
+      backedAt: new Date(),
+    };
+
+    const t0 = Date.now();
+    const result = await launchViaCreateV2Bundle(config, [backer]);
+    out.elapsedSec = ((Date.now() - t0) / 1000).toFixed(1);
+    out.launchResult = {
+      success: result.success, mint: result.mintAddress,
+      createSig: result.createSignature, error: result.error,
+      buys: result.buyResults.map(r => ({ w: r.mainWallet.slice(0, 6), tokens: r.tokensReceived, sig: r.buySignature?.slice(0, 12), err: r.error })),
+    };
+
+    // Validate sweep: sell the burner's tokens back via production path
+    if (result.success && result.mintAddress) {
+      const sweep = await sweepBurnerWallet(
+        result.mintAddress, bs58.encode(burner.secretKey),
+        burner.publicKey.toBase58(), escrow.publicKey.toBase58(), 'sell',
+      );
+      out.sweepBack = { ok: sweep.success, sig: sweep.signature, amount: sweep.amount, error: sweep.error };
+    }
+  } catch (e) {
+    out.error = e instanceof Error ? e.message : String(e);
+    out.stack = e instanceof Error ? e.stack?.split('\n').slice(0, 4) : undefined;
+  } finally {
+    try {
+      const b = await conn.getBalance(burner.publicKey);
+      if (b > 5000) {
+        const t = new Transaction().add(SystemProgram.transfer({
+          fromPubkey: burner.publicKey, toPubkey: escrow.publicKey, lamports: b - 5000 }));
+        t.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+        t.feePayer = burner.publicKey;
+        const s = await conn.sendTransaction(t, [burner]);
+        await conn.confirmTransaction(s, 'confirmed');
+        out.drainedBack = (b - 5000) / LAMPORTS_PER_SOL;
+      }
+    } catch (e) { out.drainErr = e instanceof Error ? e.message : String(e); }
+  }
+  return out;
+}
