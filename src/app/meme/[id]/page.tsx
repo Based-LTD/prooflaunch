@@ -44,6 +44,15 @@ function getTimeRemaining(deadline: string): string {
   return `${minutes}m`;
 }
 
+// Pump.fun tokens are Token-2022 with 6 decimals (verified on-chain).
+// On-chain / DB amounts are raw base units; humans want whole tokens
+// (e.g. 3,671,647,218,713 raw -> "3,671,647 tokens").
+const PUMP_TOKEN_DECIMALS = 6;
+function formatTokenAmount(raw: string | number | null | undefined): string {
+  const n = Number(raw || 0) / 10 ** PUMP_TOKEN_DECIMALS;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
 // Map status to display style
 function getStatusConfig(status: string) {
   const configs: Record<string, { label: string; class: string }> = {
@@ -852,7 +861,7 @@ export default function MemeDetailPage() {
                           <div className="flex items-center gap-2 text-[var(--success)]">
                             <Check className="w-4 h-4" />
                             <span className="font-bold uppercase text-sm">
-                              Received {Number(myBacking.claim_tokens || 0).toLocaleString()} tokens
+                              Received {formatTokenAmount(myBacking.claim_tokens)} tokens
                             </span>
                           </div>
                           <a
