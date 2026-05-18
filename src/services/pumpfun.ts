@@ -2850,7 +2850,9 @@ export async function diagnoseCreateV2Bundle(): Promise<Record<string, unknown>>
   out.mint = mint.publicKey.toBase58();
   out.burner = burner.publicKey.toBase58();
 
-  const FUND = Math.floor(0.1 * LAMPORTS_PER_SOL);
+  // 0.04 to fit current low escrow — proves the mechanism (create+buy+
+  // sell on Token-2022); real launches use full 0.1 backings.
+  const FUND = Math.floor(0.04 * LAMPORTS_PER_SOL);
   {
     const t = new Transaction().add(SystemProgram.transfer({
       fromPubkey: escrow.publicKey, toPubkey: burner.publicKey, lamports: FUND }));
