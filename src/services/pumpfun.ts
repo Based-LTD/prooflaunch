@@ -15,7 +15,7 @@ import {
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
-import { PumpSdk, OnlinePumpSdk, getBuyTokenAmountFromSolAmount } from '@pump-fun/pump-sdk';
+import { PumpSdk, OnlinePumpSdk, getBuyTokenAmountFromSolAmount, getSellSolAmountFromTokenAmount } from '@pump-fun/pump-sdk';
 import BN from 'bn.js';
 
 // Simple wallet implementation for AnchorProvider
@@ -2378,16 +2378,21 @@ export async function sweepBurnerWallet(
     const mintPubkey = new PublicKey(mintAddress);
     const mainWalletPubkey = new PublicKey(mainWalletAddress);
 
+    // Detect token program (Token-2022 for createV2 mints, classic for legacy)
+    const tokenProgram = await getMintTokenProgram(connection, mintPubkey);
+
     // Get burner's token account
     const burnerTokenAccount = await getAssociatedTokenAddress(
       mintPubkey,
-      burnerKeypair.publicKey
+      burnerKeypair.publicKey,
+      false,
+      tokenProgram
     );
 
     // Get token balance
     let tokenBalance: bigint;
     try {
-      const accountInfo = await getAccount(connection, burnerTokenAccount);
+      const accountInfo = await getAccount(connection, burnerTokenAccount, 'confirmed', tokenProgram);
       tokenBalance = accountInfo.amount;
     } catch {
       return { success: false, error: 'No tokens in burner wallet' };
@@ -2400,19 +2405,52 @@ export async function sweepBurnerWallet(
     console.log(`Token balance: ${tokenBalance}`);
 
     if (action === 'sell') {
-      // Sell tokens on pump.fun, receive SOL
-      const sdk = await createPumpFunSDK();
+      // Sell via the official @pump-fun/pump-sdk (Token-2022 + current
+      // program). The legacy pumpdotfun-sdk .sell() is broken for
+      // createV2 mints — same stale-SDK class of bug as create/buy.
+      const online = new OnlinePumpSdk(connection);
+      const sdk = new PumpSdk();
+      const bondingCurve = await online.fetchBondingCurve(mintPubkey);
+      let feeConfig = null;
+      try { feeConfig = await online.fetchFeeConfig(); } catch { /* optional */ }
 
-      const sellResult = await sdk.sell(
-        burnerKeypair,
-        mintPubkey,
-        tokenBalance,
-        BigInt(1000), // 10% slippage
-        {
-          unitLimit: 400000,
-          unitPrice: 500000,
-        }
-      );
+      // Min SOL out with 15% slippage tolerance; 0 if estimate unavailable
+      let minSolOut = new BN(0);
+      try {
+        const expected = getSellSolAmountFromTokenAmount({
+          global: await online.fetchGlobal(), feeConfig,
+          mintSupply: bondingCurve.tokenTotalSupply, bondingCurve,
+          amount: new BN(tokenBalance.toString()),
+        });
+        minSolOut = expected.muln(85).divn(100);
+      } catch { minSolOut = new BN(0); }
+
+      const sellIx = await sdk.getSellInstructionRaw({
+        user: burnerKeypair.publicKey, mint: mintPubkey,
+        creator: bondingCurve.creator,
+        amount: new BN(tokenBalance.toString()), solAmount: minSolOut,
+        feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
+        tokenProgram, cashback: false,
+      });
+      const sellMsg = new TransactionMessage({
+        payerKey: burnerKeypair.publicKey,
+        recentBlockhash: (await connection.getLatestBlockhash('confirmed')).blockhash,
+        instructions: [
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+          sellIx,
+        ],
+      }).compileToV0Message();
+      const sellTx = new VersionedTransaction(sellMsg);
+      sellTx.sign([burnerKeypair]);
+      let sellResult: { success: boolean; signature?: string; error?: string };
+      try {
+        const sig = await connection.sendTransaction(sellTx, { skipPreflight: true, maxRetries: 3 });
+        await connection.confirmTransaction(sig, 'confirmed');
+        sellResult = { success: true, signature: sig };
+      } catch (e) {
+        sellResult = { success: false, error: e instanceof Error ? e.message : 'Sell failed' };
+      }
 
       if (!sellResult.success) {
         return { success: false, error: sellResult.error?.toString() || 'Sell failed' };
@@ -2451,7 +2489,9 @@ export async function sweepBurnerWallet(
       // Transfer tokens to main wallet
       const mainTokenAccount = await getAssociatedTokenAddress(
         mintPubkey,
-        mainWalletPubkey
+        mainWalletPubkey,
+        false,
+        tokenProgram
       );
 
       const transaction = new Transaction();
@@ -2488,7 +2528,8 @@ export async function sweepBurnerWallet(
             burnerKeypair.publicKey,
             mainTokenAccount,
             mainWalletPubkey,
-            mintPubkey
+            mintPubkey,
+            tokenProgram
           )
         );
       }
@@ -2499,7 +2540,9 @@ export async function sweepBurnerWallet(
           burnerTokenAccount,
           mainTokenAccount,
           burnerKeypair.publicKey,
-          tokenBalance
+          tokenBalance,
+          [],
+          tokenProgram
         )
       );
 
@@ -2908,10 +2951,53 @@ export async function diagnoseCreateV2Bundle(): Promise<Record<string, unknown>>
       }
       out.jitoPolls = polls;
       out.mintLanded = !!(await conn.getAccountInfo(mint.publicKey));
+      let heldTokens = BigInt(0);
       try {
         const acct = await getAccount(conn, ata, 'confirmed', TOKEN_2022_PROGRAM_ID);
+        heldTokens = acct.amount;
         out.burnerTokens = acct.amount.toString();
       } catch { out.burnerTokens = '0 (no ATA / not landed)'; }
+
+      // FULL-PATH validation: sell the tokens back via the new
+      // Token-2022 sweep path. Proves create->buy->sell end-to-end AND
+      // recovers the SOL so this diagnostic nets ~tx fees.
+      if (heldTokens > BigInt(0)) {
+        try {
+          const bc = await online.fetchBondingCurve(mint.publicKey);
+          let minSolOut = new BN(0);
+          try {
+            const exp = getSellSolAmountFromTokenAmount({
+              global, feeConfig, mintSupply: bc.tokenTotalSupply,
+              bondingCurve: bc, amount: new BN(heldTokens.toString()),
+            });
+            minSolOut = exp.muln(80).divn(100);
+          } catch { minSolOut = new BN(0); }
+          const sellIx = await sdk.getSellInstructionRaw({
+            user: burner.publicKey, mint: mint.publicKey, creator: bc.creator,
+            amount: new BN(heldTokens.toString()), solAmount: minSolOut,
+            feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
+            tokenProgram: TOKEN_2022_PROGRAM_ID, cashback: false,
+          });
+          const sMsg = new TransactionMessage({
+            payerKey: burner.publicKey,
+            recentBlockhash: (await conn.getLatestBlockhash('confirmed')).blockhash,
+            instructions: [
+              ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
+              ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+              sellIx,
+            ],
+          }).compileToV0Message();
+          const sTx = new VersionedTransaction(sMsg);
+          sTx.sign([burner]);
+          const before = await conn.getBalance(burner.publicKey);
+          const sSig = await conn.sendTransaction(sTx, { skipPreflight: true, maxRetries: 3 });
+          await conn.confirmTransaction(sSig, 'confirmed');
+          const after = await conn.getBalance(burner.publicKey);
+          out.sellBack = { ok: true, sig: sSig, solRecovered: (after - before) / LAMPORTS_PER_SOL };
+        } catch (e) {
+          out.sellBack = { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      }
     }
   } finally {
     try {
@@ -2927,4 +3013,256 @@ export async function diagnoseCreateV2Bundle(): Promise<Record<string, unknown>>
     } catch (e) { out.drainErr = e instanceof Error ? e.message : String(e); out.burnerSecret = bs58.encode(burner.secretKey); }
   }
   return out;
+}
+
+// Detect which SPL token program owns a mint (Token-2022 vs classic),
+// so sweep/reconcile/distribution work for both legacy classic mints
+// and new createV2 (Token-2022) mints.
+export async function getMintTokenProgram(
+  connection: Connection,
+  mint: PublicKey
+): Promise<PublicKey> {
+  try {
+    const ai = await connection.getAccountInfo(mint);
+    if (ai?.owner?.equals(TOKEN_2022_PROGRAM_ID)) return TOKEN_2022_PROGRAM_ID;
+  } catch { /* default below */ }
+  return TOKEN_PROGRAM_ID;
+}
+
+// PRODUCTION LAUNCH — proven createV2 + Token-2022 atomic Jito bundle.
+// Validated on-chain: createV2 (escrow) + Genesis burner buys land in
+// ONE slot (zero sniper gap). Built entirely from @pump-fun/pump-sdk so
+// we track pump's program instead of hand-chasing it. Wave 2 buys via
+// RPC after the bundle lands. Layered fallback + reconcile net beneath.
+export async function launchViaCreateV2Bundle(
+  config: LaunchConfig,
+  burnerBackers: BurnerBackerInfo[],
+  log: LaunchLogger = noopLaunchLogger
+): Promise<{
+  success: boolean;
+  mintAddress?: string;
+  pumpFunUrl?: string;
+  createSignature?: string;
+  buyResults: BurnerBuyResult[];
+  error?: string;
+}> {
+  // Right-sized tip: Jito's measured floor is 0.0017 SOL @ 99th pctile;
+  // 0.002 lands near-certainly while costing ~3.5x less than the old
+  // 0.007 — materially improves per-launch economics.
+  const JITO_TIP_LAMPORTS = 2_000_000;
+  const MAX_BUNDLED_BUYS = 4; // Jito 5-tx bundle limit: 1 create + 4 buys
+
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const mintKp = Keypair.generate();
+  const mint = mintKp.publicKey;
+  const pumpFunUrl = `https://pump.fun/coin/${mint.toBase58()}`;
+  const buyResults: BurnerBuyResult[] = [];
+
+  try {
+    const sorted = [...burnerBackers].sort(
+      (a, b) => new Date(a.backedAt).getTime() - new Date(b.backedAt).getTime()
+    );
+    const genesis = sorted.slice(0, MAX_BUNDLED_BUYS);
+    const wave2 = sorted.slice(MAX_BUNDLED_BUYS);
+
+    const { metadataUri } = await uploadMetadata(config);
+    const online = new OnlinePumpSdk(conn);
+    const sdk = new PumpSdk();
+    const global = await online.fetchGlobal();
+    let feeConfig = null;
+    try { feeConfig = await online.fetchFeeConfig(); } catch { /* optional */ }
+
+    // Build buy tx for one burner (used by bundle + wave2 + fallback)
+    const buildBuyTx = async (
+      backer: BurnerBackerInfo, blockhash: string
+    ): Promise<{ tx: VersionedTransaction; kp: Keypair; ata: PublicKey } | null> => {
+      const kp = decryptBurnerKey(backer.encryptedPrivateKey);
+      if (kp.publicKey.toBase58() !== backer.burnerWallet) return null;
+      const bal = await conn.getBalance(kp.publicKey);
+      const buyLamports = calculateBundledBuyAmount(bal);
+      if (buyLamports <= BigInt(0)) {
+        log('buy_failed', { backerWallet: backer.mainWallet, ok: false,
+          detail: { reason: 'underfunded burner — skipped', bal } });
+        return null;
+      }
+      const tokenAmt = getBuyTokenAmountFromSolAmount({
+        global, feeConfig, mintSupply: null, bondingCurve: null,
+        amount: new BN(buyLamports.toString()),
+      });
+      const minOut = tokenAmt.muln(70).divn(100); // generous; bundle is atomic
+      const ata = getAssociatedTokenAddressSync(mint, kp.publicKey, true, TOKEN_2022_PROGRAM_ID);
+      const buyIx = await sdk.getBuyInstructionRaw({
+        user: kp.publicKey, mint, creator: escrow.publicKey,
+        amount: minOut, solAmount: new BN(buyLamports.toString()),
+        feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      });
+      const msg = new TransactionMessage({
+        payerKey: kp.publicKey, recentBlockhash: blockhash,
+        instructions: [
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 }),
+          createAssociatedTokenAccountIdempotentInstruction(
+            kp.publicKey, ata, kp.publicKey, mint, TOKEN_2022_PROGRAM_ID),
+          buyIx,
+        ],
+      }).compileToV0Message();
+      const tx = new VersionedTransaction(msg);
+      tx.sign([kp]);
+      return { tx, kp, ata };
+    };
+
+    const readTokens = async (ata: PublicKey): Promise<number> => {
+      try {
+        const a = await getAccount(conn, ata, 'confirmed', TOKEN_2022_PROGRAM_ID);
+        return Number(a.amount);
+      } catch { return 0; }
+    };
+
+    // ---- Build + submit the atomic Genesis bundle ----
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    const createV2Ix = await sdk.createV2Instruction({
+      mint, name: config.name, symbol: config.symbol, uri: metadataUri,
+      creator: escrow.publicKey, user: escrow.publicKey,
+      mayhemMode: false, cashback: false,
+    });
+    const createMsg = new TransactionMessage({
+      payerKey: escrow.publicKey, recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 500000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+        createV2Ix,
+        SystemProgram.transfer({ fromPubkey: escrow.publicKey,
+          toPubkey: getRandomJitoTipAccount(), lamports: JITO_TIP_LAMPORTS }),
+      ],
+    }).compileToV0Message();
+    const createTx = new VersionedTransaction(createMsg);
+    createTx.sign([escrow, mintKp]);
+
+    const genesisBuilt: { backer: BurnerBackerInfo; ata: PublicKey }[] = [];
+    const bundle: VersionedTransaction[] = [createTx];
+    for (const b of genesis) {
+      const built = await buildBuyTx(b, blockhash);
+      if (!built) continue;
+      bundle.push(built.tx);
+      genesisBuilt.push({ backer: b, ata: built.ata });
+    }
+
+    let landed = false;
+    let bundleId: string | undefined;
+    try {
+      bundleId = await submitJitoBundle(bundle);
+      log('create_sent', { signature: bundleId,
+        detail: { mode: 'createV2-bundle', mint: mint.toBase58(),
+          genesis: genesisBuilt.length, wave2: wave2.length } });
+      // Authoritative check: poll for the mint to exist on-chain (the
+      // inflight API falsely reports "Invalid" when a bundle lands fast).
+      for (let i = 0; i < 14; i++) {
+        await new Promise(r => setTimeout(r, 1500));
+        if (await conn.getAccountInfo(mint)) { landed = true; break; }
+      }
+    } catch (e) {
+      log('curve_timeout', { ok: false,
+        detail: { stage: 'bundle submit', error: e instanceof Error ? e.message : String(e) } });
+    }
+
+    if (landed) {
+      log('curve_ready', { signature: bundleId, detail: { mint: mint.toBase58(), via: 'jito-bundle' } });
+      for (const g of genesisBuilt) {
+        const toks = await readTokens(g.ata);
+        buyResults.push({
+          mainWallet: g.backer.mainWallet, burnerWallet: g.backer.burnerWallet,
+          amountSol: g.backer.amountSol, tokensReceived: toks,
+          buySignature: bundleId, error: toks > 0 ? undefined : 'no tokens after bundle',
+        });
+        log(toks > 0 ? 'buy_confirmed' : 'buy_failed', {
+          backerWallet: g.backer.mainWallet, ok: toks > 0,
+          detail: { tier: 'genesis', via: 'jito-bundle', tokensReceived: toks } });
+      }
+      // ---- Wave 2 via RPC (Token-2022) ----
+      for (const b of wave2) {
+        try {
+          const { blockhash: bh } = await conn.getLatestBlockhash('confirmed');
+          const built = await buildBuyTx(b, bh);
+          if (!built) { buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: 0, error: 'build failed/underfunded' }); continue; }
+          const sig = await conn.sendTransaction(built.tx, { skipPreflight: true, maxRetries: 3 });
+          await conn.confirmTransaction(sig, 'confirmed');
+          const toks = await readTokens(built.ata);
+          buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: toks, buySignature: sig, error: toks > 0 ? undefined : 'no tokens' });
+          log(toks > 0 ? 'buy_confirmed' : 'buy_failed', { backerWallet: b.mainWallet, ok: toks > 0, signature: sig, detail: { tier: 'wave2', via: 'rpc', tokensReceived: toks } });
+        } catch (e) {
+          buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: 0, error: e instanceof Error ? e.message : String(e) });
+          log('buy_failed', { backerWallet: b.mainWallet, ok: false, detail: { tier: 'wave2', error: String(e) } });
+        }
+      }
+      const ok = buyResults.filter(r => r.tokensReceived > 0).length;
+      log('launch_complete', { signature: bundleId, ok: ok === sorted.length,
+        detail: { mode: 'createV2-bundle', mint: mint.toBase58(), successfulBuys: ok, totalBackers: sorted.length } });
+      return { success: ok > 0, mintAddress: mint.toBase58(), pumpFunUrl, createSignature: bundleId, buyResults };
+    }
+
+    // ---- Fallback: bundle didn't land → RPC create + RPC buys ----
+    log('retry_attempt', { detail: { reason: 'bundle did not land — RPC fallback', mint: mint.toBase58() } });
+    const fbMintKp = Keypair.generate();
+    const fbMint = fbMintKp.publicKey;
+    const { blockhash: fbBh } = await conn.getLatestBlockhash('confirmed');
+    const fbCreateIx = await sdk.createV2Instruction({
+      mint: fbMint, name: config.name, symbol: config.symbol, uri: metadataUri,
+      creator: escrow.publicKey, user: escrow.publicKey, mayhemMode: false, cashback: false,
+    });
+    const fbMsg = new TransactionMessage({
+      payerKey: escrow.publicKey, recentBlockhash: fbBh,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 500000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+        fbCreateIx,
+      ],
+    }).compileToV0Message();
+    const fbCreateTx = new VersionedTransaction(fbMsg);
+    fbCreateTx.sign([escrow, fbMintKp]);
+    const fbCreateSig = await conn.sendTransaction(fbCreateTx, { skipPreflight: true, maxRetries: 3 });
+    await conn.confirmTransaction(fbCreateSig, 'confirmed');
+    let fbReady = false;
+    for (let i = 0; i < 15; i++) {
+      if (await conn.getAccountInfo(fbMint)) { fbReady = true; break; }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    if (!fbReady) throw new Error(`fallback create not visible (sig=${fbCreateSig})`);
+    log('curve_ready', { signature: fbCreateSig, detail: { mint: fbMint.toBase58(), via: 'rpc-fallback' } });
+
+    for (const b of sorted) {
+      try {
+        const { blockhash: bh } = await conn.getLatestBlockhash('confirmed');
+        const kp = decryptBurnerKey(b.encryptedPrivateKey);
+        const bal = await conn.getBalance(kp.publicKey);
+        const buyLamports = calculateBundledBuyAmount(bal);
+        if (buyLamports <= BigInt(0)) { buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: 0, error: 'underfunded' }); continue; }
+        const tokenAmt = getBuyTokenAmountFromSolAmount({ global, feeConfig, mintSupply: null, bondingCurve: null, amount: new BN(buyLamports.toString()) });
+        const ata = getAssociatedTokenAddressSync(fbMint, kp.publicKey, true, TOKEN_2022_PROGRAM_ID);
+        const buyIx = await sdk.getBuyInstructionRaw({ user: kp.publicKey, mint: fbMint, creator: escrow.publicKey, amount: tokenAmt.muln(70).divn(100), solAmount: new BN(buyLamports.toString()), feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(), tokenProgram: TOKEN_2022_PROGRAM_ID });
+        const msg = new TransactionMessage({ payerKey: kp.publicKey, recentBlockhash: bh, instructions: [
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 }),
+          createAssociatedTokenAccountIdempotentInstruction(kp.publicKey, ata, kp.publicKey, fbMint, TOKEN_2022_PROGRAM_ID),
+          buyIx,
+        ] }).compileToV0Message();
+        const tx = new VersionedTransaction(msg); tx.sign([kp]);
+        const sig = await conn.sendTransaction(tx, { skipPreflight: true, maxRetries: 3 });
+        await conn.confirmTransaction(sig, 'confirmed');
+        let toks = 0; try { toks = Number((await getAccount(conn, ata, 'confirmed', TOKEN_2022_PROGRAM_ID)).amount); } catch { /* none */ }
+        buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: toks, buySignature: sig, error: toks > 0 ? undefined : 'no tokens' });
+        log(toks > 0 ? 'buy_confirmed' : 'buy_failed', { backerWallet: b.mainWallet, ok: toks > 0, signature: sig, detail: { via: 'rpc-fallback', tokensReceived: toks } });
+      } catch (e) {
+        buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: 0, error: e instanceof Error ? e.message : String(e) });
+        log('buy_failed', { backerWallet: b.mainWallet, ok: false, detail: { via: 'rpc-fallback', error: String(e) } });
+      }
+    }
+    const ok2 = buyResults.filter(r => r.tokensReceived > 0).length;
+    log(ok2 > 0 ? 'launch_complete' : 'launch_error', { signature: fbCreateSig, ok: ok2 === sorted.length, detail: { mode: 'rpc-fallback', mint: fbMint.toBase58(), successfulBuys: ok2, totalBackers: sorted.length } });
+    return { success: ok2 > 0, mintAddress: fbMint.toBase58(), pumpFunUrl: `https://pump.fun/coin/${fbMint.toBase58()}`, createSignature: fbCreateSig, buyResults };
+  } catch (error) {
+    log('launch_error', { ok: false, detail: { error: error instanceof Error ? error.message : String(error) } });
+    return { success: false, buyResults, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
 }

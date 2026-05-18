@@ -1,7 +1,7 @@
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { refundFromBurnerWallet } from './pumpfun';
+import { refundFromBurnerWallet, getMintTokenProgram } from './pumpfun';
 import { createLaunchLogger } from '@/lib/launchLog';
 
 // Reconciliation + auto-recovery.
@@ -165,10 +165,12 @@ async function reconcileMeme(
       const burner = new PublicKey(b.burner_wallet);
 
       // On-chain truth #1: does the burner hold this token?
+      // Token-2022-aware (createV2 mints) with classic fallback.
       let tokenBalance = 0;
       try {
-        const ata = await getAssociatedTokenAddress(mint, burner);
-        const acct = await getAccount(connection, ata);
+        const tokenProgram = await getMintTokenProgram(connection, mint);
+        const ata = await getAssociatedTokenAddress(mint, burner, false, tokenProgram);
+        const acct = await getAccount(connection, ata, 'confirmed', tokenProgram);
         tokenBalance = Number(acct.amount);
       } catch {
         tokenBalance = 0; // no ATA / no balance

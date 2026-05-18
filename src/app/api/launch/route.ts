@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { launchWithJitoBundle, LaunchConfig, BurnerBackerInfo } from '@/services/pumpfun';
+import { launchViaCreateV2Bundle, LaunchConfig, BurnerBackerInfo } from '@/services/pumpfun';
 import { verifySignedAuthMessage } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 import { createLaunchLogger } from '@/lib/launchLog';
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
     // fallback. Logger persists every step to launch_events; the
     // reconcile/auto-refund net is the final backstop.
     const launchLog = createLaunchLogger(meme_id);
-    const result = await launchWithJitoBundle(config, burnerBackers, launchLog);
+    const result = await launchViaCreateV2Bundle(config, burnerBackers, launchLog);
 
     if (!result.success || !result.mintAddress) {
       // Revert status on failure

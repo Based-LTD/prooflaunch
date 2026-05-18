@@ -29,8 +29,8 @@ export async function GET() {
       escrow_address: escrowAddress,
       escrow_balance_sol: escrowBalance,
       platform_fee_bps: 200, // 2%
-      min_backing_sol: 0.01,
-      submission_fee_sol: 0.05,
+      min_backing_sol: 0.1,   // matches submit form + memes/route enforcement
+      submission_fee_sol: 0.02, // matches CREATION_FEE_SOL in memes/route.ts
       // rpc_url intentionally omitted — don't expose RPC API key to clients
     });
   } catch (error) {
