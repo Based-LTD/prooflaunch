@@ -4,7 +4,6 @@ import bs58 from 'bs58';
 import { createServerClient } from '@/lib/supabase';
 import { verifyDeposit } from '@/services/pumpfun';
 import { encryptPrivateKey } from '@/lib/crypto';
-import { consumeVanityWallet } from '@/lib/vanity';
 
 // GET /api/memes - List all memes with optional filters
 export async function GET(request: NextRequest) {
@@ -224,22 +223,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Provision this meme's POOL wallet — the wallet backers fund and
-    // that does the atomic createV2+buy at launch. Prefer a pre-ground
-    // `...pooL` vanity (so scanners/humans read the "Developer"-tagged
-    // wallet as the transparent Proof pool); fall back to a random
-    // keypair if the vanity pool is empty (never block submission).
-    let poolWallet: string;
-    let encryptedPoolKey: string;
-    const vanity = await consumeVanityWallet('pool', data.id);
-    if (vanity) {
-      poolWallet = vanity.publicKey;
-      encryptedPoolKey = vanity.encryptedPrivateKey;
-    } else {
-      const kp = Keypair.generate();
-      poolWallet = kp.publicKey.toBase58();
-      encryptedPoolKey = encryptPrivateKey(bs58.encode(kp.secretKey));
-      console.warn(`[memes] vanity pool empty — meme ${data.id} got a random pool wallet`);
-    }
+    // that does the atomic createV2+buy at launch. This is a plain
+    // RANDOM keypair: the vanity is reserved for the token CA (the
+    // mint), consumed at launch — that's the most-visible address and
+    // the brand signal. The pool wallet doesn't need to be vanity.
+    const poolKp = Keypair.generate();
+    const poolWallet = poolKp.publicKey.toBase58();
+    const encryptedPoolKey = encryptPrivateKey(bs58.encode(poolKp.secretKey));
     const { error: poolErr } = await supabase
       .from('memes')
       .update({ pool_wallet: poolWallet, encrypted_pool_key: encryptedPoolKey })
