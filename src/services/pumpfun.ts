@@ -6,12 +6,17 @@ import bs58 from 'bs58';
 import { LaunchLogger, noopLaunchLogger } from '@/lib/launchLog';
 import {
   getAssociatedTokenAddress,
+  getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
+  createAssociatedTokenAccountIdempotentInstruction,
   createTransferInstruction,
   getAccount,
   TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
+import { PumpSdk, OnlinePumpSdk, getBuyTokenAmountFromSolAmount } from '@pump-fun/pump-sdk';
+import BN from 'bn.js';
 
 // Simple wallet implementation for AnchorProvider
 class NodeWallet implements WalletInterface {
@@ -2786,4 +2791,140 @@ export async function distributeTokensToBackers(
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
+}
+
+// ── TEMPORARY DIAGNOSTIC: createV2 atomic Jito bundle ─────────────────
+// Proves the OFFICIAL-SDK approach (createV2 + Token-2022 burner buy in
+// one Jito bundle) actually LANDS, on a throwaway token. Funds a junk
+// burner, builds the real bundle, submits to Jito, polls the inflight
+// verdict, verifies on-chain, drains the burner back. DELETE after.
+export async function diagnoseCreateV2Bundle(): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const mint = Keypair.generate();
+  const burner = Keypair.generate();
+  out.mint = mint.publicKey.toBase58();
+  out.burner = burner.publicKey.toBase58();
+
+  const FUND = Math.floor(0.1 * LAMPORTS_PER_SOL);
+  {
+    const t = new Transaction().add(SystemProgram.transfer({
+      fromPubkey: escrow.publicKey, toPubkey: burner.publicKey, lamports: FUND }));
+    const { blockhash } = await conn.getLatestBlockhash();
+    t.recentBlockhash = blockhash; t.feePayer = escrow.publicKey;
+    const s = await conn.sendTransaction(t, [escrow]);
+    await conn.confirmTransaction(s, 'confirmed');
+  }
+
+  try {
+    let bal = 0;
+    for (let i = 0; i < 15; i++) {
+      bal = await conn.getBalance(burner.publicKey, 'confirmed');
+      if (bal >= FUND * 0.9) break;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    out.burnerBal = bal;
+
+    const online = new OnlinePumpSdk(conn);
+    const sdk = new PumpSdk();
+    const global = await online.fetchGlobal();
+    let feeConfig = null;
+    try { feeConfig = await online.fetchFeeConfig(); } catch { /* optional */ }
+
+    const buyLamports = calculateBundledBuyAmount(bal);
+    if (buyLamports <= BigInt(0)) { out.fatal = 'buyLamports<=0'; return out; }
+    const tokenAmt = getBuyTokenAmountFromSolAmount({
+      global, feeConfig, mintSupply: null, bondingCurve: null,
+      amount: new BN(buyLamports.toString()),
+    });
+    const minOut = tokenAmt.muln(70).divn(100);
+    out.buySol = Number(buyLamports) / LAMPORTS_PER_SOL;
+    out.expectedTokens = tokenAmt.toString();
+
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+
+    const createV2Ix = await sdk.createV2Instruction({
+      mint: mint.publicKey, name: 'DIAG', symbol: 'DIAG',
+      uri: 'https://example.com/m.json', creator: escrow.publicKey,
+      user: escrow.publicKey, mayhemMode: false, cashback: false,
+    });
+    const tx1msg = new TransactionMessage({
+      payerKey: escrow.publicKey, recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 500000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+        createV2Ix,
+        SystemProgram.transfer({ fromPubkey: escrow.publicKey, toPubkey: getRandomJitoTipAccount(), lamports: 7_000_000 }),
+      ],
+    }).compileToV0Message();
+    const tx1 = new VersionedTransaction(tx1msg);
+    tx1.sign([escrow, mint]);
+
+    const ata = getAssociatedTokenAddressSync(mint.publicKey, burner.publicKey, true, TOKEN_2022_PROGRAM_ID);
+    const buyIx = await sdk.getBuyInstructionRaw({
+      user: burner.publicKey, mint: mint.publicKey, creator: escrow.publicKey,
+      amount: minOut, solAmount: new BN(buyLamports.toString()),
+      feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
+    const tx2msg = new TransactionMessage({
+      payerKey: burner.publicKey, recentBlockhash: blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 }),
+        createAssociatedTokenAccountIdempotentInstruction(burner.publicKey, ata, burner.publicKey, mint.publicKey, TOKEN_2022_PROGRAM_ID),
+        buyIx,
+      ],
+    }).compileToV0Message();
+    const tx2 = new VersionedTransaction(tx2msg);
+    tx2.sign([burner]);
+
+    for (const [label, vtx] of [['create', tx1], ['buy', tx2]] as const) {
+      try {
+        const sim = await conn.simulateTransaction(vtx, { sigVerify: false, replaceRecentBlockhash: true });
+        out[`sim_${label}`] = { err: sim.value.err ? JSON.stringify(sim.value.err) : null, logs: (sim.value.logs || []).slice(-10) };
+      } catch (e) { out[`sim_${label}`] = { thrown: e instanceof Error ? e.message : String(e) }; }
+    }
+
+    let bundleId: string | null = null;
+    try { bundleId = await submitJitoBundle([tx1, tx2]); out.bundleId = bundleId; out.jitoAccepted = true; }
+    catch (e) { out.jitoAccepted = false; out.jitoErr = e instanceof Error ? e.message : String(e); }
+
+    if (bundleId) {
+      const polls: unknown[] = [];
+      for (let i = 0; i < 16; i++) {
+        try {
+          const r = await fetch('https://mainnet.block-engine.jito.wtf/api/v1/getInflightBundleStatuses', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getInflightBundleStatuses', params: [[bundleId]] }),
+          });
+          const j = await r.json();
+          const st = j?.result?.value?.[0]?.status;
+          polls.push({ t: i * 2, status: st ?? j });
+          if (st === 'Landed' || st === 'Failed') break;
+        } catch (e) { polls.push({ t: i * 2, err: String(e) }); }
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      out.jitoPolls = polls;
+      out.mintLanded = !!(await conn.getAccountInfo(mint.publicKey));
+      try {
+        const acct = await getAccount(conn, ata, 'confirmed', TOKEN_2022_PROGRAM_ID);
+        out.burnerTokens = acct.amount.toString();
+      } catch { out.burnerTokens = '0 (no ATA / not landed)'; }
+    }
+  } finally {
+    try {
+      const b = await conn.getBalance(burner.publicKey);
+      if (b > 5000) {
+        const t = new Transaction().add(SystemProgram.transfer({ fromPubkey: burner.publicKey, toPubkey: escrow.publicKey, lamports: b - 5000 }));
+        const { blockhash } = await conn.getLatestBlockhash();
+        t.recentBlockhash = blockhash; t.feePayer = burner.publicKey;
+        const s = await conn.sendTransaction(t, [burner]);
+        await conn.confirmTransaction(s, 'confirmed');
+        out.drainedBack = b - 5000;
+      }
+    } catch (e) { out.drainErr = e instanceof Error ? e.message : String(e); out.burnerSecret = bs58.encode(burner.secretKey); }
+  }
+  return out;
 }
