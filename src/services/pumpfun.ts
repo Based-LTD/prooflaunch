@@ -3640,12 +3640,23 @@ export async function launchPooledAtomic(
     if (spend <= 0) return { success: false, mintAddress: mint.toBase58(), error: 'Pool balance too low for buy + rent' };
     let landed = false;
     let lastSig: string | undefined;
+    // GROUND TRUTH (decoded from live pump buys): the buy `amount` is the
+    // EXACT token quantity to receive; `maxSolCost` only caps it. So we
+    // compute the tokens `spend` SOL buys on the fresh curve and ask for
+    // 90% of that — the 10% haircut absorbs any minor curve drift in the
+    // ~1-2s create->buy gap so the real cost stays under maxSolCost.
+    const estTokens = getBuyTokenAmountFromSolAmount({
+      global: await online.fetchGlobal(), feeConfig: null,
+      mintSupply: null, bondingCurve: null, amount: new BN(spend.toString()),
+    });
+    const wantTokens = estTokens.muln(90).divn(100);
+    if (wantTokens.lten(0)) return { success: false, mintAddress: mint.toBase58(), error: 'Computed token amount is zero' };
     const start = Date.now();
     while (Date.now() - start < 35000 && !landed) {
       try {
         const buyIx = await sdk.getBuyInstructionRaw({
           user: poolKp.publicKey, mint, creator: escrow.publicKey,
-          amount: new BN(1), solAmount: new BN(spend.toString()),
+          amount: wantTokens, solAmount: new BN(spend.toString()),
           feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         });
