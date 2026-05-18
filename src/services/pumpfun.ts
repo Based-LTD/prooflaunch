@@ -3154,16 +3154,31 @@ export async function launchViaCreateV2Bundle(
     let landed = false;
     let bundleId: string | undefined;
     try {
-      bundleId = await submitJitoBundle(bundle);
-      log('create_sent', { signature: bundleId,
-        detail: { mode: 'createV2-bundle', mint: mint.toBase58(),
-          genesis: genesisBuilt.length, wave2: wave2.length } });
-      // Authoritative check: poll for the mint to exist on-chain (the
-      // inflight API falsely reports "Invalid" when a bundle lands fast).
-      for (let i = 0; i < 14; i++) {
-        await new Promise(r => setTimeout(r, 1500));
-        if (await conn.getAccountInfo(mint)) { landed = true; break; }
+      // RELIABILITY: Jito misses aren't an auction-price problem (we're
+      // ~100x above the tip floor and still miss) — they're "no Jito
+      // leader caught it in the window". The fix is resubmission: keep
+      // re-sending the same signed bundle across regions until a
+      // Jito-leader slot lands it. The tip is embedded in the create tx,
+      // so a missed bundle costs NOTHING — only a landing pays. So we
+      // retry aggressively within the blockhash's validity window.
+      const RETRY_MS = 36000;
+      const start = Date.now();
+      let attempts = 0;
+      while (Date.now() - start < RETRY_MS && !landed) {
+        attempts++;
+        try {
+          const bid = await submitJitoBundle(bundle);
+          if (!bundleId) bundleId = bid;
+        } catch { /* 429/region — keep retrying, costs nothing */ }
+        for (let i = 0; i < 2 && !landed; i++) {
+          await new Promise(r => setTimeout(r, 1500));
+          if (await conn.getAccountInfo(mint)) { landed = true; }
+        }
       }
+      log('create_sent', { signature: bundleId, ok: landed,
+        detail: { mode: 'createV2-bundle', mint: mint.toBase58(),
+          genesis: genesisBuilt.length, wave2: wave2.length,
+          bundleAttempts: attempts, landed } });
     } catch (e) {
       log('curve_timeout', { ok: false,
         detail: { stage: 'bundle submit', error: e instanceof Error ? e.message : String(e) } });

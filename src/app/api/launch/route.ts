@@ -5,6 +5,10 @@ import { verifySignedAuthMessage } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 import { createLaunchLogger } from '@/lib/launchLog';
 
+// Launch can take ~36s of Jito bundle retries + RPC fallback + buys.
+// Without this the platform default would kill it mid-launch.
+export const maxDuration = 300;
+
 // POST /api/launch - Launch a funded meme token via batched RPC buys
 // Creates token on pump.fun, then executes buys from each backer's burner wallet
 // Genesis (slots 1-4) buy first at best prices, Wave 2 (slots 5-8) follow in second wave
