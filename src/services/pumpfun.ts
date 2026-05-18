@@ -3593,98 +3593,63 @@ export async function launchPooledAtomic(
       mint, name: config.name, symbol: config.symbol, uri: metadataUri,
       creator: escrow.publicKey, user: escrow.publicKey, mayhemMode: false, cashback: false,
     });
-    // TWO transactions, not one. Proven: a buy in the SAME tx as
-    // createV2 can't read the just-created curve (delivers ~nothing).
-    // The mechanic that provably delivers is create -> curve ready ->
-    // separate buy tx. For ONE large pooled buy the ~1-2s gap is
-    // negligible (a sniper's dust ahead of a huge pool buy is run over
-    // by the pool buy itself), and it needs no ALT and no Jito.
-
-    // --- tx1: createV2 (escrow pays; creator=escrow, ZERO dev buy) ---
-    log('create_sent', { detail: { mode: 'pooled-2tx', mint: mint.toBase58(), poolSol: poolBal / LAMPORTS_PER_SOL } });
-    {
-      const { blockhash } = await conn.getLatestBlockhash('confirmed');
-      const msg = new TransactionMessage({
-        payerKey: escrow.publicKey, recentBlockhash: blockhash,
-        instructions: [
-          ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
-          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
-          createV2Ix,
-        ],
-      }).compileToV0Message();
-      const tx = new VersionedTransaction(msg);
-      tx.sign([escrow, mintKp]);
-      const sig = await conn.sendTransaction(tx, { skipPreflight: true, maxRetries: 3 });
-      await conn.confirmTransaction(sig, 'confirmed');
-    }
-    // Wait for the bonding curve PDA to be readable (the proven
-    // curve-ready gate — buy fails if it fires before this).
-    const curvePda = deriveBondingCurve(mint);
-    let curveReady = false;
-    for (let i = 0; i < 25; i++) {
-      if (await conn.getAccountInfo(curvePda)) { curveReady = true; break; }
-      await new Promise(r => setTimeout(r, 600));
-    }
-    if (!curveReady) {
-      log('launch_error', { ok: false, detail: { mode: 'pooled-2tx', reason: 'curve not ready after create', mint: mint.toBase58() } });
-      return { success: false, mintAddress: mint.toBase58(), error: 'Bonding curve not ready after create' };
-    }
-    log('curve_ready', { detail: { mint: mint.toBase58() } });
-
-    // --- tx2: pooled buy (pool pays its own tx + ATA + the buy) ---
-    // Pool reserves rent for its ATA + tx fee; min-out=1 (this is the
-    // first buy on a fresh curve — accept any, spend the rest). Proven
-    // mechanic (CP91 delivered 811k tokens this exact way).
-    const POOL_RESERVE = 2_300_000; // ATA rent (~2.04M) + fees + buffer
-    const spend = poolBal - POOL_RESERVE;
-    if (spend <= 0) return { success: false, mintAddress: mint.toBase58(), error: 'Pool balance too low for buy + rent' };
-    let landed = false;
-    let lastSig: string | undefined;
-    // GROUND TRUTH (decoded from live pump buys): the buy `amount` is the
-    // EXACT token quantity to receive; `maxSolCost` only caps it. So we
-    // compute the tokens `spend` SOL buys on the fresh curve and ask for
-    // 90% of that — the 10% haircut absorbs any minor curve drift in the
-    // ~1-2s create->buy gap so the real cost stays under maxSolCost.
+    // ── SINGLE ATOMIC TRANSACTION (the dev-buy mechanic, minus the dev) ──
+    // createV2 + ATA + pooled buy in ONE ALT-compressed v0 tx. Instr
+    // execute in order: createV2 makes the curve, the buy reads it same
+    // tx (exactly how every pump dev buy works). ZERO gap, no slot for a
+    // sniper. creator=escrow (0 buy => "dev holds 0%"); buyer=pool.
+    // The curve is provably brand-new & first-buy here, so the fresh-
+    // curve token amount is EXACT (atomic => no drift possible). Escrow
+    // is fee payer + pays the pool's ATA rent, so the pool spends its
+    // whole balance on the buy.
     const estTokens = getBuyTokenAmountFromSolAmount({
       global: await online.fetchGlobal(), feeConfig: null,
-      mintSupply: null, bondingCurve: null, amount: new BN(spend.toString()),
+      mintSupply: null, bondingCurve: null, amount: new BN(poolBal.toString()),
     });
-    const wantTokens = estTokens.muln(90).divn(100);
-    if (wantTokens.lten(0)) return { success: false, mintAddress: mint.toBase58(), error: 'Computed token amount is zero' };
-    const start = Date.now();
-    while (Date.now() - start < 35000 && !landed) {
-      try {
-        const buyIx = await sdk.getBuyInstructionRaw({
-          user: poolKp.publicKey, mint, creator: escrow.publicKey,
-          amount: wantTokens, solAmount: new BN(spend.toString()),
-          feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-        });
-        const { blockhash } = await conn.getLatestBlockhash('confirmed');
-        const msg = new TransactionMessage({
-          payerKey: poolKp.publicKey, recentBlockhash: blockhash,
-          instructions: [
-            ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
-            ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
-            createAssociatedTokenAccountIdempotentInstruction(poolKp.publicKey, poolAta, poolKp.publicKey, mint, TOKEN_2022_PROGRAM_ID),
-            buyIx,
-          ],
-        }).compileToV0Message();
-        const tx = new VersionedTransaction(msg);
-        tx.sign([poolKp]);
-        lastSig = await conn.sendTransaction(tx, { skipPreflight: true, maxRetries: 3 });
-        await conn.confirmTransaction(lastSig, 'confirmed');
-      } catch { /* transient — retry */ }
-      try {
-        const a = await getAccount(conn, poolAta, 'confirmed', TOKEN_2022_PROGRAM_ID);
-        if (Number(a.amount) > 0) landed = true;
-      } catch { /* not yet */ }
-      if (!landed) await new Promise(r => setTimeout(r, 1000));
-    }
+    const wantTokens = estTokens.muln(97).divn(100); // tiny rounding margin
+    if (wantTokens.lten(0)) return { success: false, error: 'Computed token amount is zero' };
 
+    const buyIx = await sdk.getBuyInstructionRaw({
+      user: poolKp.publicKey, mint, creator: escrow.publicKey,
+      amount: wantTokens, solAmount: new BN(poolBal.toString()),
+      feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
+    const instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 700000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 2_000_000 }),
+      createV2Ix,
+      createAssociatedTokenAccountIdempotentInstruction(escrow.publicKey, poolAta, poolKp.publicKey, mint, TOKEN_2022_PROGRAM_ID),
+      buyIx,
+    ];
+    const altAcc = (await conn.getAddressLookupTable(PRODUCTION_ALT)).value;
+    if (!altAcc) return { success: false, error: `Production ALT ${PRODUCTION_ALT.toBase58()} not loadable` };
+
+    log('create_sent', { detail: { mode: 'pooled-single-atomic', mint: mint.toBase58(), poolSol: poolBal / LAMPORTS_PER_SOL } });
+
+    // One signed atomic tx; resend until the mint exists (idempotent — a
+    // duplicate that loses the race just fails harmlessly).
+    let landed = false;
+    let lastSig: string | undefined;
+    const start = Date.now();
+    while (Date.now() - start < 30000 && !landed) {
+      try {
+        const { blockhash } = await conn.getLatestBlockhash('processed');
+        const msg = new TransactionMessage({
+          payerKey: escrow.publicKey, recentBlockhash: blockhash, instructions,
+        }).compileToV0Message([altAcc]);
+        const tx = new VersionedTransaction(msg);
+        tx.sign([escrow, mintKp, poolKp]);
+        lastSig = await conn.sendTransaction(tx, { skipPreflight: true, maxRetries: 5 });
+      } catch { /* transient send error — retry */ }
+      for (let i = 0; i < 4 && !landed; i++) {
+        await new Promise(r => setTimeout(r, 400));
+        if (await conn.getAccountInfo(mint, 'processed')) landed = true;
+      }
+    }
     if (!landed) {
-      log('launch_error', { ok: false, detail: { mode: 'pooled-2tx', reason: 'pool buy did not deliver in 35s', lastSig } });
-      return { success: false, mintAddress: mint.toBase58(), error: 'Pool buy did not deliver tokens' };
+      log('launch_error', { ok: false, detail: { mode: 'pooled-single-atomic', reason: 'tx did not land in 30s', lastSig } });
+      return { success: false, mintAddress: mint.toBase58(), error: 'Launch transaction did not land' };
     }
 
     // Read what the pool actually received (on-chain truth, not assumed)
@@ -3766,4 +3731,63 @@ export async function diagnosePooledLaunch(): Promise<Record<string, unknown>> {
     } catch (e) { out.drainErr = e instanceof Error ? e.message : String(e); }
   }
   return out;
+}
+
+// Distribute pooled tokens to backers proportionally. The pool wallet
+// holds all tokens post-launch but ~no SOL (it spent it buying), so
+// escrow tops up the pool's gas first. Per-backer: idempotent transfer
+// (caller tracks which are done), Token-2022-aware, never double-sends.
+export async function distributeFromPool(
+  poolEncryptedKey: string,
+  poolWalletAddress: string,
+  mintAddress: string,
+  allocations: { backerWallet: string; tokens: string }[],
+  log: LaunchLogger = noopLaunchLogger
+): Promise<{ results: { backerWallet: string; tokens: string; signature?: string; error?: string }[] }> {
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const poolKp = decryptBurnerKey(poolEncryptedKey);
+  const results: { backerWallet: string; tokens: string; signature?: string; error?: string }[] = [];
+
+  if (poolKp.publicKey.toBase58() !== poolWalletAddress) {
+    return { results: allocations.map(a => ({ backerWallet: a.backerWallet, tokens: a.tokens, error: 'pool key mismatch' })) };
+  }
+  const mint = new PublicKey(mintAddress);
+  const tokenProgram = await getMintTokenProgram(conn, mint);
+  const poolAta = await getAssociatedTokenAddress(mint, poolKp.publicKey, false, tokenProgram);
+
+  // Escrow funds the pool's gas: ~0.0025 SOL/backer (ATA rent + fee).
+  const need = allocations.length * 2_500_000;
+  const have = await conn.getBalance(poolKp.publicKey);
+  if (have < need) {
+    const top = new Transaction().add(SystemProgram.transfer({
+      fromPubkey: escrow.publicKey, toPubkey: poolKp.publicKey, lamports: need - have }));
+    top.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    top.feePayer = escrow.publicKey;
+    const ts = await conn.sendTransaction(top, [escrow]);
+    await conn.confirmTransaction(ts, 'confirmed');
+    log('reconcile_recovered', { detail: { stage: 'pool gas topup', lamports: need - have } });
+  }
+
+  for (const a of allocations) {
+    try {
+      const backer = new PublicKey(a.backerWallet);
+      const backerAta = await getAssociatedTokenAddress(mint, backer, false, tokenProgram);
+      const tx = new Transaction().add(
+        createAssociatedTokenAccountIdempotentInstruction(poolKp.publicKey, backerAta, backer, mint, tokenProgram),
+        createTransferInstruction(poolAta, backerAta, poolKp.publicKey, BigInt(a.tokens), [], tokenProgram),
+      );
+      tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+      tx.feePayer = poolKp.publicKey;
+      const sig = await conn.sendTransaction(tx, [poolKp]);
+      await conn.confirmTransaction(sig, 'confirmed');
+      results.push({ backerWallet: a.backerWallet, tokens: a.tokens, signature: sig });
+      log('reconcile_recovered', { backerWallet: a.backerWallet, signature: sig, detail: { stage: 'distribute', tokens: a.tokens } });
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      results.push({ backerWallet: a.backerWallet, tokens: a.tokens, error: err });
+      log('reconcile_error', { backerWallet: a.backerWallet, ok: false, detail: { stage: 'distribute', error: err } });
+    }
+  }
+  return { results };
 }
