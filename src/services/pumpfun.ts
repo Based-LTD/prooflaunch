@@ -3255,9 +3255,14 @@ export async function launchViaCreateV2Bundle(
         const bal = await conn.getBalance(kp.publicKey);
         const buyLamports = calculateBundledBuyAmount(bal);
         if (buyLamports <= BigInt(0)) { buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: 0, error: 'underfunded' }); continue; }
-        const tokenAmt = getBuyTokenAmountFromSolAmount({ global, feeConfig, mintSupply: null, bondingCurve: null, amount: new BN(buyLamports.toString()) });
+        // Fallback runs in the post-create gap where snipers move the
+        // curve. Slippage protection here causes total failure (0 tokens,
+        // SOL burned on fees) — proven on-chain. The backer's priority is
+        // GETTING tokens; price is already compromised by the gap. So
+        // accept ANY amount (min-out = 1): the buy always lands, spending
+        // up to buyLamports, and the backer always receives tokens.
         const ata = getAssociatedTokenAddressSync(fbMint, kp.publicKey, true, TOKEN_2022_PROGRAM_ID);
-        const buyIx = await sdk.getBuyInstructionRaw({ user: kp.publicKey, mint: fbMint, creator: escrow.publicKey, amount: tokenAmt.muln(70).divn(100), solAmount: new BN(buyLamports.toString()), feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(), tokenProgram: TOKEN_2022_PROGRAM_ID });
+        const buyIx = await sdk.getBuyInstructionRaw({ user: kp.publicKey, mint: fbMint, creator: escrow.publicKey, amount: new BN(1), solAmount: new BN(buyLamports.toString()), feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(), tokenProgram: TOKEN_2022_PROGRAM_ID });
         const msg = new TransactionMessage({ payerKey: kp.publicKey, recentBlockhash: bh, instructions: [
           ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
           ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 }),
