@@ -3593,12 +3593,22 @@ export async function launchPooledAtomic(
       mint, name: config.name, symbol: config.symbol, uri: metadataUri,
       creator: escrow.publicKey, user: escrow.publicKey, mayhemMode: false, cashback: false,
     });
-    // Pool spends its full balance on the single buy; escrow pays tx fee
-    // + create rent + the pool's ATA rent. min-out = 1 (no prediction,
-    // pooled buy can't be sniped — it's atomic with create).
+    // The pool buy is the FIRST and ONLY buy on a brand-new curve in
+    // the same atomic tx — so the tokens for the pool's SOL are EXACTLY
+    // computable from the fresh curve (deterministic, not a prediction:
+    // no prior buys, no snipers possible inside an atomic tx). Spend the
+    // whole balance minus a tiny fee reserve; ask for 98% of the exact
+    // amount so solAmount comfortably covers cost.
+    const FEE_RESERVE = 30000; // lamports kept for the buyer's signature
+    const spend = poolBal - FEE_RESERVE;
+    if (spend <= 0) return { success: false, error: 'Pool balance too low after fee reserve' };
+    const exactTokens = getBuyTokenAmountFromSolAmount({
+      global: await online.fetchGlobal(), feeConfig: null,
+      mintSupply: null, bondingCurve: null, amount: new BN(spend.toString()),
+    });
     const buyIx = await sdk.getBuyInstructionRaw({
       user: poolKp.publicKey, mint, creator: escrow.publicKey,
-      amount: new BN(1), solAmount: new BN(poolBal.toString()),
+      amount: exactTokens.muln(98).divn(100), solAmount: new BN(poolBal.toString()),
       feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
       tokenProgram: TOKEN_2022_PROGRAM_ID,
     });
