@@ -3545,3 +3545,180 @@ export async function createProductionAlt(): Promise<Record<string, unknown>> {
   }
   return out;
 }
+
+// PRODUCTION pooled-atomic launch.
+// ONE ALT-compressed v0 transaction: createV2 (escrow creator, ZERO dev
+// buy) + a single buy from the per-launch pool wallet for the entire
+// pooled SOL. Atomic by definition (one tx = one slot), reliable every
+// time (plain RPC, no Jito/leader luck), no curve prediction, every
+// backer gets the identical price. Tokens land in the pool wallet for
+// proportional claim. Safe to retry: a re-sent tx whose mint already
+// exists simply fails harmlessly, so we resend until it lands.
+export async function launchPooledAtomic(
+  config: LaunchConfig,
+  poolEncryptedKey: string,
+  poolWalletAddress: string,
+  log: LaunchLogger = noopLaunchLogger
+): Promise<{
+  success: boolean;
+  mintAddress?: string;
+  pumpFunUrl?: string;
+  createSignature?: string;
+  poolWallet?: string;
+  tokensReceived?: number;
+  error?: string;
+}> {
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const mintKp = Keypair.generate();
+  const mint = mintKp.publicKey;
+  const pumpFunUrl = `https://pump.fun/coin/${mint.toBase58()}`;
+
+  try {
+    const poolKp = decryptBurnerKey(poolEncryptedKey);
+    if (poolKp.publicKey.toBase58() !== poolWalletAddress) {
+      return { success: false, error: 'Pool wallet key mismatch' };
+    }
+
+    const poolBal = await conn.getBalance(poolKp.publicKey);
+    if (poolBal <= 0) return { success: false, error: 'Pool wallet has no SOL' };
+
+    const { metadataUri } = await uploadMetadata(config);
+    const online = new OnlinePumpSdk(conn);
+    const sdk = new PumpSdk();
+    await online.fetchGlobal();
+
+    const poolAta = getAssociatedTokenAddressSync(mint, poolKp.publicKey, true, TOKEN_2022_PROGRAM_ID);
+    const createV2Ix = await sdk.createV2Instruction({
+      mint, name: config.name, symbol: config.symbol, uri: metadataUri,
+      creator: escrow.publicKey, user: escrow.publicKey, mayhemMode: false, cashback: false,
+    });
+    // Pool spends its full balance on the single buy; escrow pays tx fee
+    // + create rent + the pool's ATA rent. min-out = 1 (no prediction,
+    // pooled buy can't be sniped — it's atomic with create).
+    const buyIx = await sdk.getBuyInstructionRaw({
+      user: poolKp.publicKey, mint, creator: escrow.publicKey,
+      amount: new BN(1), solAmount: new BN(poolBal.toString()),
+      feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
+    const instructions = [
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 800000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+      createV2Ix,
+      createAssociatedTokenAccountIdempotentInstruction(escrow.publicKey, poolAta, poolKp.publicKey, mint, TOKEN_2022_PROGRAM_ID),
+      buyIx,
+    ];
+
+    const altRes = await conn.getAddressLookupTable(PRODUCTION_ALT);
+    const alt = altRes.value;
+    if (!alt) return { success: false, error: `Production ALT ${PRODUCTION_ALT.toBase58()} not found` };
+
+    log('create_sent', { detail: { mode: 'pooled-atomic', mint: mint.toBase58(), poolSol: poolBal / LAMPORTS_PER_SOL } });
+
+    // Build + sign once; resend until the mint exists (atomic, idempotent
+    // outcome — a duplicate that loses the race just fails harmlessly).
+    let landed = false;
+    let lastSig: string | undefined;
+    const start = Date.now();
+    while (Date.now() - start < 40000 && !landed) {
+      try {
+        const { blockhash } = await conn.getLatestBlockhash('confirmed');
+        const msg = new TransactionMessage({
+          payerKey: escrow.publicKey, recentBlockhash: blockhash, instructions,
+        }).compileToV0Message([alt]);
+        const tx = new VersionedTransaction(msg);
+        tx.sign([escrow, mintKp, poolKp]);
+        lastSig = await conn.sendTransaction(tx, { skipPreflight: true, maxRetries: 3 });
+      } catch { /* transient send error — retry */ }
+      for (let i = 0; i < 3 && !landed; i++) {
+        await new Promise(r => setTimeout(r, 1200));
+        if (await conn.getAccountInfo(mint)) landed = true;
+      }
+    }
+
+    if (!landed) {
+      log('launch_error', { ok: false, detail: { mode: 'pooled-atomic', reason: 'tx did not land in 40s', lastSig } });
+      return { success: false, mintAddress: mint.toBase58(), error: 'Launch transaction did not land' };
+    }
+
+    // Read what the pool actually received (on-chain truth, not assumed)
+    let tokensReceived = 0;
+    for (let i = 0; i < 10; i++) {
+      try {
+        const acct = await getAccount(conn, poolAta, 'confirmed', TOKEN_2022_PROGRAM_ID);
+        tokensReceived = Number(acct.amount);
+        if (tokensReceived > 0) break;
+      } catch { /* ata not visible yet */ }
+      await new Promise(r => setTimeout(r, 1200));
+    }
+
+    log(tokensReceived > 0 ? 'launch_complete' : 'launch_error', {
+      ok: tokensReceived > 0, signature: lastSig,
+      detail: { mode: 'pooled-atomic', mint: mint.toBase58(), tokensReceived, poolWallet: poolWalletAddress },
+    });
+
+    return {
+      success: tokensReceived > 0,
+      mintAddress: mint.toBase58(),
+      pumpFunUrl,
+      createSignature: lastSig,
+      poolWallet: poolWalletAddress,
+      tokensReceived,
+      error: tokensReceived > 0 ? undefined : 'Launched but pool received no tokens',
+    };
+  } catch (error) {
+    log('launch_error', { ok: false, detail: { mode: 'pooled-atomic', error: error instanceof Error ? error.message : String(error) } });
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// ── TEMPORARY DIAGNOSTIC: pooled-atomic full path ────────────────────
+// Funds a throwaway pool wallet, runs the REAL launchPooledAtomic,
+// verifies the pool received tokens, then sells them back via the
+// production sweep and drains home. Proves the pooled architecture
+// end-to-end for ~tx fees. DELETE after gate passes.
+export async function diagnosePooledLaunch(): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const pool = Keypair.generate();
+  out.pool = pool.publicKey.toBase58();
+  const FUND = Math.floor(0.04 * LAMPORTS_PER_SOL);
+  {
+    const t = new Transaction().add(SystemProgram.transfer({ fromPubkey: escrow.publicKey, toPubkey: pool.publicKey, lamports: FUND }));
+    t.recentBlockhash = (await conn.getLatestBlockhash()).blockhash; t.feePayer = escrow.publicKey;
+    const s = await conn.sendTransaction(t, [escrow]); await conn.confirmTransaction(s, 'confirmed');
+  }
+  for (let i = 0; i < 15; i++) { if (await conn.getBalance(pool.publicKey, 'confirmed') >= FUND * 0.9) break; await new Promise(r => setTimeout(r, 1000)); }
+
+  try {
+    const config = {
+      name: 'Proof Pooled Test', symbol: 'PPT', description: 'pooled-atomic validation',
+      imageUrl: 'https://example.com/x.png', twitter: '', telegram: '', discord: '', website: '',
+      totalBackingSol: 0.04, creatorWallet: escrow.publicKey.toBase58(),
+    } as unknown as LaunchConfig;
+    const t0 = Date.now();
+    const r = await launchPooledAtomic(config, bs58.encode(pool.secretKey), pool.publicKey.toBase58());
+    out.elapsedSec = ((Date.now() - t0) / 1000).toFixed(1);
+    out.launch = { success: r.success, mint: r.mintAddress, sig: r.createSignature?.slice(0, 16), tokens: r.tokensReceived, err: r.error };
+
+    if (r.success && r.mintAddress) {
+      const sw = await sweepBurnerWallet(r.mintAddress, bs58.encode(pool.secretKey), pool.publicKey.toBase58(), escrow.publicKey.toBase58(), 'sell');
+      out.sellBack = { ok: sw.success, sig: sw.signature, sol: sw.amount, err: sw.error };
+    }
+  } catch (e) {
+    out.error = e instanceof Error ? e.message : String(e);
+  } finally {
+    try {
+      const b = await conn.getBalance(pool.publicKey);
+      if (b > 5000) {
+        const t = new Transaction().add(SystemProgram.transfer({ fromPubkey: pool.publicKey, toPubkey: escrow.publicKey, lamports: b - 5000 }));
+        t.recentBlockhash = (await conn.getLatestBlockhash()).blockhash; t.feePayer = pool.publicKey;
+        const s = await conn.sendTransaction(t, [pool]); await conn.confirmTransaction(s, 'confirmed');
+        out.drainedBack = (b - 5000) / LAMPORTS_PER_SOL;
+      }
+    } catch (e) { out.drainErr = e instanceof Error ? e.message : String(e); }
+  }
+  return out;
+}
