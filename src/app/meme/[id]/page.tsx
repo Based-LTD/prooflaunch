@@ -205,62 +205,33 @@ export default function MemeDetailPage() {
     setBackingStatus('Creating token wallet...');
 
     try {
-      // 1. Sign message to verify wallet ownership
-      setBackingStatus('Sign to verify your wallet...');
-      const messageToSign = getSignMessage(meme.id);
-      const encodedMessage = new TextEncoder().encode(messageToSign);
-      await signMessage(encodedMessage);
+      // Pooled model: the backer simply sends their backing SOL to this
+      // meme's pool wallet. No burner, no client keypair. At launch the
+      // pool does ONE atomic createV2+buy; tokens are then distributed
+      // proportionally to backers (claimed to their main wallet).
+      const poolWallet: string | undefined = (meme as { pool_wallet?: string }).pool_wallet;
+      if (!poolWallet) {
+        throw new Error('This meme has no pool wallet yet — please refresh and try again.');
+      }
 
-      // 2. Generate token wallet (private key sent to server over HTTPS)
-      setBackingStatus('Generating token wallet...');
-      const burnerWallet = createBurnerWallet();
-
-      // Store the keypair temporarily so user can export it after success
-      setPendingBurnerKeypair(burnerWallet.keypair);
-
-      // 3. Create SOL transfer transaction to burner wallet + platform fee
-      // User sends backing amount to burner wallet, and 2% fee to escrow
-      const burnerPubkey = new PublicKey(burnerWallet.publicKey);
       const backingLamports = Math.floor(amountSol * LAMPORTS_PER_SOL);
-      const platformFee = amountSol * PLATFORM_FEE_PERCENT;
-      const feeLamports = Math.floor(platformFee * LAMPORTS_PER_SOL);
-
       const transaction = new Transaction();
-
-      // Transfer backing amount to burner wallet
       transaction.add(
         SystemProgram.transfer({
           fromPubkey: publicKey,
-          toPubkey: burnerPubkey,
+          toPubkey: new PublicKey(poolWallet),
           lamports: backingLamports,
         })
       );
 
-      // Transfer 2% platform fee to escrow wallet
-      if (escrowAddress && feeLamports > 0) {
-        const escrowPubkey = new PublicKey(escrowAddress);
-        transaction.add(
-          SystemProgram.transfer({
-            fromPubkey: publicKey,
-            toPubkey: escrowPubkey,
-            lamports: feeLamports,
-          })
-        );
-      }
-
-      // Get recent blockhash
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
-      // 4. Sign and send transaction — use signTransaction (not signAndSendTransaction)
-      // to avoid Phantom's "may be harmful" warning on unfamiliar addresses
-      const totalSol = (amountSol + platformFee).toFixed(4);
-      setBackingStatus(`Approve transfer of ${totalSol} SOL...`);
+      setBackingStatus(`Approve ${amountSol} SOL to the pool...`);
       const signed = await signTransaction!(transaction);
       const txSignature = await connection.sendRawTransaction(signed.serialize());
 
-      // 5. Confirm transaction landed
       setBackingStatus('Processing transaction...');
       await connection.confirmTransaction({
         signature: txSignature,
@@ -268,7 +239,6 @@ export default function MemeDetailPage() {
         lastValidBlockHeight,
       }, 'confirmed');
 
-      // 6. Register backing with API (private key sent securely over HTTPS)
       setBackingStatus('Registering backing...');
       const response = await fetch('/api/backings', {
         method: 'POST',
@@ -278,9 +248,6 @@ export default function MemeDetailPage() {
           backer_wallet: publicKey.toBase58(),
           amount_sol: amountSol,
           deposit_tx: txSignature,
-          // Burner wallet data - private key encrypted server-side
-          burner_wallet: burnerWallet.publicKey,
-          burner_private_key: burnerWallet.privateKey,
         }),
       });
 
@@ -291,7 +258,6 @@ export default function MemeDetailPage() {
 
       setBackingStatus('Backing successful!');
       setAmount('');
-      setShowBurnerInfo(true); // Show the burner wallet export info
 
       // Refresh meme data and backings to show updates
       await Promise.all([refetchMeme(), refetchBackings()]);
