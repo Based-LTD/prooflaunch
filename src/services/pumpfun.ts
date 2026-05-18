@@ -94,7 +94,10 @@ function deriveBondingCurveV2(mint: PublicKey): PublicKey {
 // Current pump.fun buyback fee recipients (from @pump-fun/pump-sdk
 // CURRENT_FEE_RECIPIENTS_FOR_BUYBACK). One is picked at random per buy,
 // matching SDK behavior.
-const BUYBACK_FEE_RECIPIENTS = [
+// Exported read-only so the drift detector can verify these against
+// authoritative sources. Exporting does not change launch behavior.
+export const EXPECTED_PUMP_BUY_ACCOUNT_COUNT = 18;
+export const BUYBACK_FEE_RECIPIENTS = [
   '5YxQFdt3Tr9zJLvkFccqXVUwhdTWJQc1fFg2YPbxvxeD',
   '9M4giFFMxmFGXtc3feFzRai56WbBqehoSeRE5GK7gf7',
   'GXPFM2caqTtQYC2cJ5yJRi9VDkpsYZXzYdwYpGnLmtDL',
@@ -862,7 +865,7 @@ const JITO_BUNDLE_URLS = [
 // Verified against Jito's authoritative getTipAccounts RPC (May 2026).
 // 2 prior entries were stale; a stale tip account makes Jito reject the
 // bundle with "must write lock at least one tip account".
-const JITO_TIP_ACCOUNTS = [
+export const JITO_TIP_ACCOUNTS = [
   'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
   'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
   'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',

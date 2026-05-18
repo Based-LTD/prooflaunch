@@ -11,6 +11,10 @@
     {
       "path": "/api/reconcile",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/health/drift",
+      "schedule": "0 13 * * *"
     }
   ]
 }
