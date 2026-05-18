@@ -79,6 +79,38 @@ function deriveBondingCurve(mint: PublicKey): PublicKey {
   return pda;
 }
 
+// pump.fun program upgrade (May 2026): buy/sell now require a V2 bonding
+// curve PDA + a buyback fee recipient appended as remaining accounts.
+// Omitting them throws AnchorError 6062 BuybackFeeRecipientMissing.
+// Verified against @pump-fun/pump-sdk and cross-checked on live mainnet buys.
+function deriveBondingCurveV2(mint: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from('bonding-curve-v2'), mint.toBuffer()],
+    PUMP_PROGRAM_ID
+  );
+  return pda;
+}
+
+// Current pump.fun buyback fee recipients (from @pump-fun/pump-sdk
+// CURRENT_FEE_RECIPIENTS_FOR_BUYBACK). One is picked at random per buy,
+// matching SDK behavior.
+const BUYBACK_FEE_RECIPIENTS = [
+  '5YxQFdt3Tr9zJLvkFccqXVUwhdTWJQc1fFg2YPbxvxeD',
+  '9M4giFFMxmFGXtc3feFzRai56WbBqehoSeRE5GK7gf7',
+  'GXPFM2caqTtQYC2cJ5yJRi9VDkpsYZXzYdwYpGnLmtDL',
+  '3BpXnfJaUTiwXnJNe7Ej1rcbzqTTQUvLShZaWazebsVR',
+  '5cjcW9wExnJJiqgLjq7DEG75Pm6JBgE1hNv4B2vHXUW6',
+  'EHAAiTxcdDwQ3U4bU6YcMsQGaekdzLS3B5SmYo46kJtL',
+  '5eHhjP8JaYkz83CWwvGU2uMUXefd3AazWGx4gpcuEEYD',
+  'A7hAgCzFw14fejgCp387JUJRMNyz4j89JKnhtKU8piqW',
+].map((a) => new PublicKey(a));
+
+function getBuybackFeeRecipient(): PublicKey {
+  return BUYBACK_FEE_RECIPIENTS[
+    Math.floor(Math.random() * BUYBACK_FEE_RECIPIENTS.length)
+  ];
+}
+
 function deriveCreatorVault(creator: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from('creator-vault'), creator.toBuffer()],
@@ -181,7 +213,8 @@ function buildBuyInstruction(
   data.writeUInt8(1, 24);
   data.writeUInt8(1, 25);
 
-  // 16 accounts in exact order from IDL
+  // 18 accounts: 16 from the published IDL + 2 appended remaining
+  // accounts required by the May 2026 program upgrade (see above).
   const keys = [
     { pubkey: PUMP_GLOBAL_ADDRESS, isSigner: false, isWritable: false },           // 0: global
     { pubkey: PUMP_FEE_RECIPIENT, isSigner: false, isWritable: true },              // 1: feeRecipient
@@ -199,6 +232,11 @@ function buildBuyInstruction(
     { pubkey: deriveUserVolumeAccumulator(user), isSigner: false, isWritable: true },// 13: userVolumeAccumulator
     { pubkey: deriveFeeConfig(), isSigner: false, isWritable: false },              // 14: feeConfig
     { pubkey: PUMP_FEE_PROGRAM_ID, isSigner: false, isWritable: false },            // 15: feeProgram
+    // Remaining accounts added by the May 2026 pump.fun program upgrade.
+    // Not declared in the published IDL (stale) but required by the
+    // deployed program — absence => error 6062 BuybackFeeRecipientMissing.
+    { pubkey: deriveBondingCurveV2(mint), isSigner: false, isWritable: false },     // 16: bondingCurveV2
+    { pubkey: getBuybackFeeRecipient(), isSigner: false, isWritable: true },        // 17: buybackFeeRecipient
   ];
 
   return new TransactionInstruction({
@@ -820,16 +858,19 @@ const JITO_BUNDLE_URLS = [
 
 // === JITO BUNDLE SUPPORT ===
 
-// Jito tip accounts (mainnet) - one is randomly selected per bundle
+// Jito tip accounts (mainnet) - one is randomly selected per bundle.
+// Verified against Jito's authoritative getTipAccounts RPC (May 2026).
+// 2 prior entries were stale; a stale tip account makes Jito reject the
+// bundle with "must write lock at least one tip account".
 const JITO_TIP_ACCOUNTS = [
-  '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
-  'HFqU5x63VTqvQss8hp11i4bVqkfRtQ7NmXwkiNPLFzWn',
-  'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
-  'ADaUMid9yfUytqMBgopwjb2DTLSLzA2A1qkb6YsP2kaY',
-  'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
   'ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt',
+  'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
+  'Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY',
+  'ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49',
   'DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL',
+  '96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5',
   '3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT',
+  'DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh',
 ];
 
 function getRandomJitoTipAccount(): PublicKey {
