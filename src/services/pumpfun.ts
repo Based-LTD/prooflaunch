@@ -3468,3 +3468,75 @@ export async function diagnoseAltFit(): Promise<Record<string, unknown>> {
   }
   return out;
 }
+
+// ── Production ALT builder (run ONCE) ─────────────────────────────────
+// Curated reusable Address Lookup Table: every STABLE account a pooled
+// launch touches + ALL 8 buyback recipients + the fee recipient, so a
+// random buyback pick is always ALT-covered. Per-launch dynamic accounts
+// (mint, bonding-curve PDAs, pool wallet/ATA) intentionally excluded.
+export async function createProductionAlt(): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  const { AddressLookupTableProgram } = await import('@solana/web3.js');
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = getEscrowWallet();
+  const sdk = new PumpSdk();
+  const online = new OnlinePumpSdk(conn);
+  await online.fetchGlobal();
+  try {
+    const mint = Keypair.generate();
+    const pool = Keypair.generate();
+    const createIx = await sdk.createV2Instruction({
+      mint: mint.publicKey, name: 'Proof Launch Token', symbol: 'PROOF',
+      uri: 'https://pump.mypinata.cloud/ipfs/Qmb3kCf9z2pXq7vNw8aLrT4dHs9YfE6uJ1mKpQ2sVx',
+      creator: escrow.publicKey, user: escrow.publicKey, mayhemMode: false, cashback: false,
+    });
+    const poolAta = getAssociatedTokenAddressSync(mint.publicKey, pool.publicKey, true, TOKEN_2022_PROGRAM_ID);
+    const buyIx = await sdk.getBuyInstructionRaw({
+      user: pool.publicKey, mint: mint.publicKey, creator: escrow.publicKey,
+      amount: new BN(1), solAmount: new BN(50000000),
+      feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: BUYBACK_FEE_RECIPIENTS[0],
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
+
+    // Per-launch dynamic — must NOT go in the reusable ALT
+    const dynamic = new Set<string>([
+      mint.publicKey.toBase58(), pool.publicKey.toBase58(), poolAta.toBase58(),
+      deriveBondingCurve(mint.publicKey).toBase58(),
+    ]);
+    const stable = new Set<string>();
+    for (const ix of [createIx, buyIx, createAssociatedTokenAccountIdempotentInstruction(pool.publicKey, poolAta, pool.publicKey, mint.publicKey, TOKEN_2022_PROGRAM_ID)]) {
+      stable.add(ix.programId.toBase58());
+      for (const k of ix.keys) if (!dynamic.has(k.pubkey.toBase58())) stable.add(k.pubkey.toBase58());
+    }
+    // Explicitly guarantee every recipient + escrow infra is covered
+    for (const r of BUYBACK_FEE_RECIPIENTS) stable.add(r.toBase58());
+    stable.add(PUMP_FEE_RECIPIENT.toBase58());
+    stable.add(escrow.publicKey.toBase58());
+    stable.add(deriveCreatorVault(escrow.publicKey).toBase58());
+    stable.add(deriveGlobalVolumeAccumulator().toBase58());
+
+    const addrs = [...stable].map(s => new PublicKey(s));
+    out.accountCount = addrs.length;
+
+    const slot = await conn.getSlot('finalized');
+    const [createAltIx, altAddr] = AddressLookupTableProgram.createLookupTable({ authority: escrow.publicKey, payer: escrow.publicKey, recentSlot: slot });
+    out.alt = altAddr.toBase58();
+    const send = async (ixs: import('@solana/web3.js').TransactionInstruction[]) => {
+      const m = new TransactionMessage({ payerKey: escrow.publicKey, recentBlockhash: (await conn.getLatestBlockhash()).blockhash, instructions: ixs }).compileToV0Message();
+      const t = new VersionedTransaction(m); t.sign([escrow]);
+      const sg = await conn.sendTransaction(t, { skipPreflight: true }); await conn.confirmTransaction(sg, 'confirmed'); return sg;
+    };
+    await send([createAltIx]);
+    for (let i = 0; i < addrs.length; i += 20) {
+      await send([AddressLookupTableProgram.extendLookupTable({ payer: escrow.publicKey, authority: escrow.publicKey, lookupTable: altAddr, addresses: addrs.slice(i, i + 20) })]);
+    }
+    await new Promise(r => setTimeout(r, 4000));
+    const alt = (await conn.getAddressLookupTable(altAddr)).value;
+    out.active = !!alt;
+    out.altEntries = alt?.state.addresses.length ?? 0;
+    out.note = 'Hardcode this ALT address as PRODUCTION_ALT and reuse forever.';
+  } catch (e) {
+    out.error = e instanceof Error ? e.message : String(e);
+  }
+  return out;
+}
