@@ -134,7 +134,7 @@ export default function DocsPage() {
               </div>
             </section>
 
-            {/* How Backing Works - Burner Wallets */}
+            {/* How Backing Works — Pooled Atomic Launch */}
             <section className="relative border-2 border-[var(--warning)] bg-[var(--card)] p-6 space-y-4">
               <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--warning)] text-black text-xs font-bold uppercase tracking-wider">
                 // KEY_INNOVATION
@@ -144,15 +144,18 @@ export default function DocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">How Backing Works</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                When you back a meme, a unique <strong>token wallet</strong> is created just for your backing.
-                This is the key innovation that makes Proof Launch different from other launchpads.
+                Backers pool their SOL into one transparent, on-chain wallet for the meme.
+                At launch, that pool creates the token and buys it in a <strong>single atomic
+                transaction</strong> — the creator (dev) holds <strong>0%</strong>, there is
+                no gap for snipers, and <strong>every backer gets the exact same entry price</strong>.
+                Tokens are then distributed to each backer proportionally.
               </p>
               <div className="space-y-3 pt-2">
                 {[
-                  { num: '1', title: 'Claim a Slot', desc: 'When you click "Back This Meme", you claim one of 2-8 available slots. A token wallet is created for your backing.' },
-                  { num: '2', title: 'Wallet is Locked', desc: 'Until launch, your token wallet is locked. This ensures fair ordering and prevents manipulation.' },
-                  { num: '3', title: 'All Slots Fill → Launch', desc: 'When all slots are filled, the token launches. Slots 1-4 (Genesis) buy first at the lowest prices. Slots 5-8 (Wave 2) buy immediately after.' },
-                  { num: '4', title: 'Full Access', desc: 'After launch, transfer tokens to your main wallet, export the private key to Phantom, or sell directly on pump.fun.' },
+                  { num: '1', title: 'Back the Pool', desc: 'Send at least the creator\'s minimum to claim one of 2–8 slots. Your SOL goes to the meme\'s transparent pool wallet — publicly visible on-chain.' },
+                  { num: '2', title: 'Pool Locked Until Launch', desc: 'The pool simply holds the backers\' SOL until all slots fill. Nothing can be done with it but launch or refund.' },
+                  { num: '3', title: 'One Atomic Launch', desc: 'When slots fill, the creator launches: ONE transaction creates the token and the pool buys it in the same block. No sniper gap. Dev holds 0%. The contract address ends in “pooL” so anyone can verify it\'s a real Proof launch.' },
+                  { num: '4', title: 'Proportional Distribution', desc: 'Tokens are sent to every backer\'s own wallet, proportional to their backing. Same price for everyone — no slot is favored.' },
                 ].map((step) => (
                   <div key={step.num} className="flex items-start gap-4 p-4 bg-[var(--background)] border-l-4 border-[var(--warning)]">
                     <div className="w-8 h-8 bg-[var(--warning)] text-black flex items-center justify-center text-sm font-black flex-shrink-0">
@@ -166,12 +169,13 @@ export default function DocsPage() {
                 ))}
               </div>
               <div className="bg-[var(--accent-gold)]/10 border-2 border-[var(--accent-gold)]/30 p-4 mt-4">
-                <h3 className="font-bold text-[var(--accent-gold)] mb-2 uppercase tracking-wide">The Two Tiers</h3>
+                <h3 className="font-bold text-[var(--accent-gold)] mb-2 uppercase tracking-wide">Why This Is Different</h3>
                 <ul className="text-sm text-[var(--muted)] space-y-1">
-                  <li>· <strong className="text-[var(--accent-gold)]">Genesis (slots 1-4):</strong> First to buy right after token creation — best prices on the curve</li>
-                  <li>· <strong className="text-[var(--accent)]">Wave 2 (slots 5-8):</strong> Second wave buys immediately after Genesis</li>
-                  <li>· <strong>First come, first served:</strong> Earlier backers get the protected slots</li>
-                  <li>· <strong>No max per wallet:</strong> Back as much as you want (just meet the minimum)</li>
+                  <li>· <strong className="text-[var(--accent-gold)]">Same price for all:</strong> one atomic pool buy — no backer is front-run or favored</li>
+                  <li>· <strong className="text-[var(--accent)]">Dev holds 0%:</strong> the creator never holds the bag — nothing to rug</li>
+                  <li>· <strong>No sniper gap:</strong> create + buy land in the same transaction</li>
+                  <li>· <strong>Verifiable:</strong> the “…pooL” contract address marks every genuine Proof launch</li>
+                  <li>· <strong>No max per wallet:</strong> back as much as you want (just meet the minimum)</li>
                 </ul>
               </div>
             </section>
@@ -187,10 +191,10 @@ export default function DocsPage() {
               </p>
               <ul className="space-y-3">
                 {[
-                  { title: 'Claim a slot', desc: 'Back at least the creator\'s minimum amount to claim one of 2-8 available slots. No maximum — back as much as you want!' },
-                  { title: 'First 4 = Genesis', desc: 'The first 4 backers get Genesis slots and buy first at the best prices on the bonding curve.' },
-                  { title: 'Slots 5-8 = Wave 2', desc: 'Additional backers get Wave 2 slots and buy in the second wave, right after Genesis.' },
-                  { title: 'Withdraw anytime', desc: 'Changed your mind? Withdraw before launch (2% fee). If slots don\'t fill in 3 days, claim refund from Portfolio.' },
+                  { title: 'Back the pool', desc: 'Send at least the creator\'s minimum to claim one of 2-8 slots. No maximum — back as much as you want! Your SOL joins the meme\'s transparent pool.' },
+                  { title: 'Same price for everyone', desc: 'At launch the pool makes ONE buy — every backer enters at the identical price. No slot is favored, no one is front-run.' },
+                  { title: 'Proportional share', desc: 'You receive tokens proportional to how much you backed, sent straight to your wallet.' },
+                  { title: 'Withdraw anytime', desc: 'Changed your mind? Withdraw before launch. If slots don\'t fill in 3 days, claim a refund from Portfolio.' },
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 p-3 bg-[var(--background)] border-l-4 border-[var(--success)]">
                     <CheckCircle className="w-5 h-5 text-[var(--success)] mt-0.5 flex-shrink-0" />
@@ -216,10 +220,10 @@ export default function DocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { icon: Coins, color: 'text-[var(--accent)]', title: 'Claim a Slot', desc: 'Browse the Proving Grounds and claim one of 2-8 backer slots. First 4 slots (Genesis) buy first at the best prices!' },
-                { icon: Key, color: 'text-[var(--warning)]', title: 'Your Own Token Wallet', desc: 'Each backing creates a unique wallet. Export the private key and import it into Phantom for full control of your tokens.' },
-                { icon: Zap, color: 'text-[var(--success)]', title: 'Genesis = Best Prices', desc: 'Slots 1-4 are first to buy right after token creation — lowest prices on the bonding curve. Be early to secure a Genesis slot!' },
-                { icon: Wallet, color: 'text-[var(--accent-gold)]', title: 'Transfer or Sell After Launch', desc: 'After launch, transfer tokens to your main wallet or sell directly on pump.fun. You have full control.' },
+                { icon: Coins, color: 'text-[var(--accent)]', title: 'Back the Pool', desc: 'Browse the Proving Grounds and claim one of 2-8 backer slots. Your SOL joins the meme\'s transparent on-chain pool.' },
+                { icon: Key, color: 'text-[var(--warning)]', title: 'Dev Holds 0%', desc: 'The creator never holds the supply. The pool buys at launch and distributes to backers — nothing for a dev to rug.' },
+                { icon: Zap, color: 'text-[var(--success)]', title: 'Same Price For Everyone', desc: 'One atomic pool buy at launch — every backer enters at the identical price. No front-running, no favored slot.' },
+                { icon: Wallet, color: 'text-[var(--accent-gold)]', title: 'Tokens Sent To You', desc: 'After launch, your proportional share is distributed straight to your connected wallet. Trade anywhere instantly.' },
                 { icon: Undo2, color: 'text-[var(--error)]', title: 'Withdraw Anytime', desc: 'Changed your mind? Withdraw before launch. Your SOL returns to your wallet (minus 2% fee).' },
                 { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Earn Trading Fees', desc: 'Genesis backers earn 90% of all trading fees proportional to contribution. Platform takes 10%.' },
               ].map((item, i) => {
@@ -380,16 +384,17 @@ export default function DocsPage() {
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 space-y-3">
                 <h3 className="font-bold flex items-center gap-2 uppercase tracking-wide">
                   <Key className="w-5 h-5 text-[var(--warning)]" />
-                  Token Wallet Security
+                  The Pool & Distribution
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  Your backing goes to your own token wallet, not a shared pool. The private key
-                  is encrypted and stored server-side until launch. After launch, you can:
+                  Your backing goes into the meme&apos;s transparent on-chain pool wallet —
+                  publicly viewable, key held encrypted server-side. It can only do two
+                  things: launch (one atomic create+buy) or refund. After launch:
                 </p>
                 <ul className="text-sm text-[var(--muted)] space-y-1">
-                  <li>· Export the private key and import into Phantom</li>
-                  <li>· Transfer tokens directly from Portfolio</li>
-                  <li>· Sell tokens directly from Portfolio</li>
+                  <li>· The pool buys at launch and tokens are distributed proportionally to backers</li>
+                  <li>· Your tokens land in your own connected wallet — nothing to export or claim manually</li>
+                  <li>· Trade them anywhere (pump.fun, any DEX) the moment they arrive</li>
                 </ul>
               </div>
 
@@ -441,14 +446,14 @@ export default function DocsPage() {
             </div>
             <div className="space-y-3">
               {[
-                { q: 'What happens if slots don\'t fill?', a: 'If all slots aren\'t filled within 3 days, the meme expires. Backers can claim a refund from their Portfolio page. Refunds return SOL from your token wallet back to your main wallet.' },
-                { q: 'How do I get my tokens after launch?', a: 'Your tokens are in your token wallet after launch. You can transfer them from the meme page or from Portfolio. Click "Transfer" to move them to your main wallet, or "Export Key" to import the wallet into Phantom.' },
-                { q: 'What\'s the difference between Genesis and Wave 2?', a: 'Genesis (slots 1-4) are first to buy right after token creation — they get the lowest prices on the bonding curve. Wave 2 (slots 5-8) buy in the second wave immediately after. Both get great prices, but Genesis buys before the curve moves.' },
+                { q: 'What happens if slots don\'t fill?', a: 'If all slots aren\'t filled within 3 days, the meme expires. Backers can claim a refund from their Portfolio page — SOL is returned from the pool back to your main wallet.' },
+                { q: 'How do I get my tokens after launch?', a: 'They\'re distributed to your connected wallet automatically — proportional to how much you backed. Nothing to export or claim manually. You\'ll see your allocation on the meme page once distributed.' },
+                { q: 'Does everyone get the same price?', a: 'Yes. At launch the pool makes ONE atomic buy, so every backer enters at the identical price. No slot is favored and no one can be front-run — that\'s the core fairness of the pooled model.' },
                 { q: 'Can I back multiple times?', a: 'Currently one backing per wallet per meme. Withdraw first if you want to change your backing amount.' },
-                { q: 'What\'s the minimum/maximum backing?', a: 'The creator sets a minimum backing amount (at least 0.05 SOL). There is NO maximum — back as much as you want! Your share of tokens and trading fees is proportional to your contribution.' },
-                { q: 'Where does my backed SOL go?', a: 'Your SOL goes to your own token wallet (unique keypair). On launch, that wallet executes a buy on Pump.fun. The tokens stay in the wallet until you transfer them.' },
-                { q: 'Can I access my token wallet before launch?', a: 'No. Token wallets are locked until the meme launches. You cannot add more SOL or spend from it. After launch, you get full access immediately — transfer tokens, export the key, or sell.' },
-                { q: 'How do I get a Genesis slot?', a: 'First come, first served! The first 4 backers get Genesis slots and buy first at the best prices. Watch the slot grid on the meme page to see what\'s available.' },
+                { q: 'What\'s the minimum/maximum backing?', a: 'The creator sets a minimum (at least 0.1 SOL). There is NO maximum — back as much as you want! Your token share is proportional to your contribution.' },
+                { q: 'Where does my backed SOL go?', a: 'Into the meme\'s transparent on-chain pool wallet (publicly viewable). It can only launch (one atomic create+buy) or refund — it never sits with the creator.' },
+                { q: 'Why does the contract address end in "pooL"?', a: 'Every genuine Proof Launch token\'s contract address ends in “pooL”. It\'s a verifiable on-chain signature that the token was launched fairly through Proof — dev holds 0%, atomic pooled buy, proportional distribution.' },
+                { q: 'How is this rug-resistant?', a: 'The creator never holds the supply (dev = 0%). The pool buys atomically with token creation — no sniper gap — and tokens go straight to backers. There is no concentrated dev bag to dump.' },
               ].map((faq, i) => (
                 <div key={i} className="bg-[var(--background)] border-2 border-[var(--border)] p-4 hover:border-[var(--accent)] transition-colors">
                   <h3 className="font-bold mb-2 uppercase tracking-wide text-sm">{faq.q}</h3>
