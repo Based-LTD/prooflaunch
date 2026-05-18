@@ -3589,10 +3589,6 @@ export async function launchPooledAtomic(
     await online.fetchGlobal();
 
     const poolAta = getAssociatedTokenAddressSync(mint, poolKp.publicKey, true, TOKEN_2022_PROGRAM_ID);
-    const createV2Ix = await sdk.createV2Instruction({
-      mint, name: config.name, symbol: config.symbol, uri: metadataUri,
-      creator: escrow.publicKey, user: escrow.publicKey, mayhemMode: false, cashback: false,
-    });
     // ── SINGLE ATOMIC TRANSACTION (the dev-buy mechanic, minus the dev) ──
     // createV2 + ATA + pooled buy in ONE ALT-compressed v0 tx. Instr
     // execute in order: createV2 makes the curve, the buy reads it same
@@ -3602,25 +3598,34 @@ export async function launchPooledAtomic(
     // curve token amount is EXACT (atomic => no drift possible). Escrow
     // is fee payer + pays the pool's ATA rent, so the pool spends its
     // whole balance on the buy.
+    // Pool pays createV2 rent (Token-2022 mint + metadata + curve) + ATA
+    // + tx fee in the SAME tx before the buy runs, so reserve for it;
+    // the buy can only spend what's left.
+    const CREATE_RESERVE = 35_000_000; // ~0.035 SOL: createV2 + ATA + fees
+    const spend = poolBal - CREATE_RESERVE;
+    if (spend <= 0) return { success: false, error: 'Pool balance too low for createV2 + buy' };
+    const global = await online.fetchGlobal();
     const estTokens = getBuyTokenAmountFromSolAmount({
-      global: await online.fetchGlobal(), feeConfig: null,
-      mintSupply: null, bondingCurve: null, amount: new BN(poolBal.toString()),
+      global, feeConfig: null, mintSupply: null, bondingCurve: null,
+      amount: new BN(spend.toString()),
     });
     const wantTokens = estTokens.muln(97).divn(100); // tiny rounding margin
     if (wantTokens.lten(0)) return { success: false, error: 'Computed token amount is zero' };
 
-    const buyIx = await sdk.getBuyInstructionRaw({
-      user: poolKp.publicKey, mint, creator: escrow.publicKey,
-      amount: wantTokens, solAmount: new BN(poolBal.toString()),
-      feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    // SDK's OWN tested atomic create+buy. creator=escrow (token's
+    // on-chain creator => "dev holds 0%"); user=pool (createV2 payer +
+    // buyer). Returns [createV2, idempotent ATA, buy] as one coherent,
+    // SDK-validated instruction set — not hand-assembled.
+    const builtIxs = await sdk.createV2AndBuyInstructions({
+      global, mint, name: config.name, symbol: config.symbol, uri: metadataUri,
+      creator: escrow.publicKey, user: poolKp.publicKey,
+      amount: wantTokens, solAmount: new BN(spend.toString()),
+      mayhemMode: false, cashback: false,
     });
     const instructions = [
       ComputeBudgetProgram.setComputeUnitLimit({ units: 700000 }),
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 2_000_000 }),
-      createV2Ix,
-      createAssociatedTokenAccountIdempotentInstruction(escrow.publicKey, poolAta, poolKp.publicKey, mint, TOKEN_2022_PROGRAM_ID),
-      buyIx,
+      ...builtIxs,
     ];
     const altAcc = (await conn.getAddressLookupTable(PRODUCTION_ALT)).value;
     if (!altAcc) return { success: false, error: `Production ALT ${PRODUCTION_ALT.toBase58()} not loadable` };
@@ -3635,11 +3640,13 @@ export async function launchPooledAtomic(
     while (Date.now() - start < 30000 && !landed) {
       try {
         const { blockhash } = await conn.getLatestBlockhash('processed');
+        // user=pool is createV2 payer + buyer; mint signs. creator=escrow
+        // is just a data field (no signature). Fee payer = pool.
         const msg = new TransactionMessage({
-          payerKey: escrow.publicKey, recentBlockhash: blockhash, instructions,
+          payerKey: poolKp.publicKey, recentBlockhash: blockhash, instructions,
         }).compileToV0Message([altAcc]);
         const tx = new VersionedTransaction(msg);
-        tx.sign([escrow, mintKp, poolKp]);
+        tx.sign([poolKp, mintKp]);
         lastSig = await conn.sendTransaction(tx, { skipPreflight: true, maxRetries: 5 });
       } catch { /* transient send error — retry */ }
       for (let i = 0; i < 4 && !landed; i++) {
@@ -3694,7 +3701,7 @@ export async function diagnosePooledLaunch(): Promise<Record<string, unknown>> {
   const escrow = getEscrowWallet();
   const pool = Keypair.generate();
   out.pool = pool.publicKey.toBase58();
-  const FUND = Math.floor(0.04 * LAMPORTS_PER_SOL);
+  const FUND = Math.floor(0.1 * LAMPORTS_PER_SOL); // covers createV2 rent + a real buy
   {
     const t = new Transaction().add(SystemProgram.transfer({ fromPubkey: escrow.publicKey, toPubkey: pool.publicKey, lamports: FUND }));
     t.recentBlockhash = (await conn.getLatestBlockhash()).blockhash; t.feePayer = escrow.publicKey;
