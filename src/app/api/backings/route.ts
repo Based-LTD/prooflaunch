@@ -232,8 +232,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Check if all slots are now filled - if so, update status to funded
-    const newFilledSlots = slotNumber; // We just filled this slot
+    // Check if all slots are now filled - if so, update status to funded.
+    // Use the active (non-withdrawn) backing COUNT, not slotNumber:
+    // slotNumber is the lowest open slot, so when a previously-withdrawn
+    // middle slot is the last to refill, slotNumber < totalSlots even
+    // though every slot is now taken. `taken` was computed pre-insert and
+    // excludes withdrawn, so active count = taken.size + 1 (this insert).
+    const newFilledSlots = taken.size + 1;
     const allSlotsFilled = newFilledSlots >= totalSlots;
 
     if (allSlotsFilled && meme.status === 'backing') {

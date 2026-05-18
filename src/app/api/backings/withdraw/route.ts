@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { refundFromBurnerWallet } from '@/services/pumpfun';
+import { refundFromPool } from '@/services/pumpfun';
 import { verifySignedAuthMessage } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Get the meme to check status
     const { data: meme, error: memeError } = await supabase
       .from('memes')
-      .select('status, name')
+      .select('status, name, pool_wallet, encrypted_pool_key')
       .eq('id', meme_id)
       .single();
 
@@ -54,10 +54,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
     }
 
-    // Only allow withdrawal during backing phase
+    // Voluntary withdrawal is only allowed while slots are still being
+    // filled ('backing'). Once the pool is full ('funded') it's a
+    // committed group ready to launch — a last-second exit would break
+    // the deal for the other backers and the creator. An abandoned
+    // 'funded' meme is NOT a trap: the process-memes cron auto-refunds
+    // every backer in full once the backing_deadline passes.
     if (meme.status !== 'backing') {
       return NextResponse.json(
-        { error: `Cannot withdraw: meme is ${meme.status}. Withdrawals only allowed during backing phase.` },
+        { error: `Cannot withdraw: meme is ${meme.status}. Withdrawals are only allowed while slots are still filling.` },
         { status: 400 }
       );
     }
@@ -91,10 +96,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this backing has a burner wallet (new flow)
-    if (!backing.burner_wallet || !backing.encrypted_private_key) {
+    // Pooled model: refund comes from this meme's pool wallet (where the
+    // backer's SOL was deposited), not a per-backer burner.
+    if (!meme.pool_wallet || !meme.encrypted_pool_key) {
       return NextResponse.json(
-        { error: 'This backing does not have a burner wallet. Please contact support.' },
+        { error: 'This meme has no pool wallet. Please contact support.' },
         { status: 400 }
       );
     }
@@ -105,11 +111,13 @@ export async function POST(request: NextRequest) {
     const withdrawalFee = amountSol * (WITHDRAWAL_FEE_PERCENT / 100);
     const expectedRefund = amountSol - withdrawalFee;
 
-    // Process refund from burner wallet to user's main wallet
-    console.log(`Processing withdrawal from burner wallet: ${amountSol} SOL - ${WITHDRAWAL_FEE_PERCENT}% fee to ${backer_wallet}`);
-    const refundResult = await refundFromBurnerWallet(
-      backing.encrypted_private_key,
-      backing.burner_wallet,
+    // Process refund from the pool wallet to the backer's main wallet.
+    // refundFromPool only sends back this backer's share — other backers'
+    // funds in the pool are untouched.
+    console.log(`Processing pool withdrawal: ${amountSol} SOL - ${WITHDRAWAL_FEE_PERCENT}% fee to ${backer_wallet}`);
+    const refundResult = await refundFromPool(
+      meme.encrypted_pool_key,
+      meme.pool_wallet,
       backer_wallet,
       amountSol,
       WITHDRAWAL_FEE_PERCENT

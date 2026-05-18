@@ -9,9 +9,11 @@ import { createLaunchLogger } from '@/lib/launchLog';
 // Without this the platform default would kill it mid-launch.
 export const maxDuration = 300;
 
-// POST /api/launch - Launch a funded meme token via batched RPC buys
-// Creates token on pump.fun, then executes buys from each backer's burner wallet
-// Genesis (slots 1-4) buy first at best prices, Wave 2 (slots 5-8) follow in second wave
+// POST /api/launch - Launch a funded meme via the pooled-atomic path.
+// The meme's pool wallet (funded by all backers) does ONE atomic
+// createV2+buy on pump.fun: same price for every backer, dev holds 0%,
+// zero sniper gap. Token distribution to backers is a separate step
+// (/api/claim).
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient();

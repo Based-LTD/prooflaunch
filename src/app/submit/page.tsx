@@ -748,13 +748,13 @@ export default function SubmitPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 bg-[var(--background)] border-2 border-[var(--border)] focus:border-[var(--accent)] focus:outline-none"
                 >
-                  <option value={2}>2 slots (2 Genesis)</option>
-                  <option value={3}>3 slots (3 Genesis)</option>
-                  <option value={4}>4 slots (4 Genesis)</option>
-                  <option value={5}>5 slots (4 Genesis + 1 Wave 2)</option>
-                  <option value={6}>6 slots (4 Genesis + 2 Wave 2)</option>
-                  <option value={7}>7 slots (4 Genesis + 3 Wave 2)</option>
-                  <option value={8}>8 slots (4 Genesis + 4 Wave 2)</option>
+                  <option value={2}>2 slots (2 backers)</option>
+                  <option value={3}>3 slots (3 backers)</option>
+                  <option value={4}>4 slots (4 backers)</option>
+                  <option value={5}>5 slots (5 backers)</option>
+                  <option value={6}>6 slots (6 backers)</option>
+                  <option value={7}>7 slots (7 backers)</option>
+                  <option value={8}>8 slots (8 backers)</option>
                 </select>
                 <span className="text-xs text-[var(--muted)]">Token launches when all slots are filled</span>
               </div>
@@ -781,33 +781,18 @@ export default function SubmitPage() {
             <div className="mt-4 p-4 bg-[var(--background)] border border-[var(--border)]">
               <div className="text-sm font-bold uppercase tracking-wide mb-3">Launch Preview</div>
               <div className="flex gap-2 flex-wrap mb-3">
-                {Array.from({ length: formData.totalSlots }).map((_, i) => {
-                  const isGenesis = i < 4;
-                  return (
-                    <div
-                      key={i}
-                      className={`w-10 h-10 flex items-center justify-center text-xs font-bold border-2 ${
-                        isGenesis
-                          ? 'border-[var(--accent-gold)] bg-[var(--accent-gold)]/10 text-[var(--accent-gold)]'
-                          : 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                      }`}
-                    >
-                      {i + 1}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-4 text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-[var(--accent-gold)]/20 border border-[var(--accent-gold)]" />
-                  <span className="text-[var(--muted)]">Genesis (first to buy)</span>
-                </div>
-                {formData.totalSlots > 4 && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-[var(--accent)]/20 border border-[var(--accent)]" />
-                    <span className="text-[var(--muted)]">Wave 2 (fast follow-up)</span>
+                {Array.from({ length: formData.totalSlots }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="w-10 h-10 flex items-center justify-center text-xs font-bold border-2 border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                  >
+                    {i + 1}
                   </div>
-                )}
+                ))}
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 bg-[var(--accent)]/20 border border-[var(--accent)]" />
+                <span className="text-[var(--muted)]">Every slot is equal — all backers buy at the same price</span>
               </div>
               <div className="mt-3 text-sm text-[var(--muted)]">
                 Minimum raise: <span className="font-bold text-[var(--foreground)]">{(formData.totalSlots * formData.minBackingSol).toFixed(2)} SOL</span>
@@ -839,8 +824,8 @@ export default function SubmitPage() {
             <div className="p-4">
               <div className="text-xs font-mono text-[var(--muted)] leading-relaxed space-y-2">
                 <p>&gt; Once all backer slots are filled, the token launches on Pump.fun.</p>
-                <p>&gt; <strong className="text-[var(--accent-gold)]">GENESIS</strong> backers (slots 1-4) buy first at the best prices on the bonding curve.</p>
-                <p>&gt; <strong className="text-[var(--accent)]">WAVE 2</strong> backers (slots 5-8) buy immediately after.</p>
+                <p>&gt; The pool makes <strong className="text-[var(--accent)]">ONE atomic buy</strong> — every backer gets in at the exact same price, with no dev allocation and no sniper gap.</p>
+                <p>&gt; Each backer&apos;s proportional share of tokens is sent straight to their wallet.</p>
                 <p>&gt; 3-day deadline. If slots don&apos;t fill, backers get refunds.</p>
               </div>
             </div>

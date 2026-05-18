@@ -2,6 +2,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { refundFromBurnerWallet, getMintTokenProgram } from './pumpfun';
+import { settlePoolDistribution } from './distribution';
 import { createLaunchLogger } from '@/lib/launchLog';
 
 // Reconciliation + auto-recovery.
@@ -54,7 +55,10 @@ interface MemeRow {
   mint_address: string | null;
   launched_at: string | null;
   updated_at: string;
+  pool_wallet: string | null;
 }
+
+const MEME_COLS = 'id, name, status, mint_address, launched_at, updated_at, pool_wallet';
 
 export interface ReconcileActionResult {
   memeId: string;
@@ -119,6 +123,45 @@ async function reconcileMeme(
     }
   } else {
     result.skipped = `status ${meme.status} not reconcilable`;
+    return result;
+  }
+
+  // --- Pooled model: one pool wallet per meme, no per-backer burners ---
+  // The on-chain truth for a pooled meme is the pool's token balance, not
+  // 30 burners. The honest "make it right with no human" action for a
+  // 'live' pooled meme is to FINISH distribution: settlePoolDistribution
+  // is idempotent and only sends to backers without a claim_tx, so this
+  // safely completes a launch whose creator never hit Distribute.
+  if (meme.pool_wallet) {
+    if (meme.status === 'live') {
+      result.mint = meme.mint_address;
+      const s = await settlePoolDistribution(supabase, meme.id, log);
+      if (s.error) {
+        result.skipped = `pooled live, not settleable: ${s.error}`;
+      } else if (s.alreadyComplete) {
+        result.skipped = 'pooled live, all backers already distributed';
+      } else {
+        // Treat completed sends as "recovered" (DB now matches chain).
+        for (let i = 0; i < s.distributed; i++) result.recovered.push('pool-distributed');
+        for (const f of s.failures) result.errors.push(`${f.backerWallet}: ${f.error}`);
+      }
+      return result;
+    }
+    // status 'launching', past the stuck window. If a token was never
+    // created, bounce back to 'funded' so the creator can retry — the
+    // pool's funds are untouched. If a mint DID get created the launch
+    // likely landed but the DB write crashed: don't guess on money,
+    // surface for targeted manual reconcile.
+    const launchingMint = await resolveMint(supabase, meme);
+    result.mint = launchingMint;
+    if (!launchingMint) {
+      await supabase.from('memes').update({ status: 'funded' }).eq('id', meme.id);
+      log('reconcile_error', { ok: false, detail: { reason: 'pooled launching, no mint — reverted to funded' } });
+      result.skipped = 'pooled launching, no mint (reverted -> funded)';
+    } else {
+      result.needsManual.push('pool');
+      log('reconcile_needs_manual', { ok: false, detail: { reason: 'pooled launching with mint — verify pool then settle', mint: launchingMint } });
+    }
     return result;
   }
 
@@ -267,7 +310,7 @@ export async function reconcileMemeById(
 ): Promise<ReconcileActionResult | { error: string }> {
   const { data: meme, error } = await supabase
     .from('memes')
-    .select('id, name, status, mint_address, launched_at, updated_at')
+    .select(MEME_COLS)
     .eq('id', memeId)
     .single();
 
@@ -285,7 +328,7 @@ export async function reconcileAll(
 
   const { data: memes, error } = await supabase
     .from('memes')
-    .select('id, name, status, mint_address, launched_at, updated_at')
+    .select(MEME_COLS)
     .in('status', ['live', 'launching'])
     .order('updated_at', { ascending: false })
     .limit(100);

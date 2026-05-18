@@ -2732,6 +2732,74 @@ export async function refundFromBurnerWallet(
   }
 }
 
+// Voluntary withdrawal in the POOLED model. The pool wallet holds every
+// backer's deposit commingled, so — unlike a burner — we must NOT drain
+// it. We send back exactly this backer's amount (minus the withdrawal
+// fee, which stays in the pool) and leave every other backer's funds
+// untouched. The pool pays the flat base fee as fee payer.
+export async function refundFromPool(
+  poolEncryptedKey: string,
+  poolWalletAddress: string,
+  backerWalletAddress: string,
+  amountSol: number,
+  feePercent: number = 2
+): Promise<RefundResult> {
+  try {
+    const poolKp = decryptBurnerKey(poolEncryptedKey);
+    // Safety gate: never move funds with a key that doesn't match the
+    // wallet of record.
+    if (poolKp.publicKey.toBase58() !== poolWalletAddress) {
+      return { success: false, error: 'Pool key mismatch' };
+    }
+
+    const connection = new Connection(RPC_URL, 'confirmed');
+    const backerPubkey = new PublicKey(backerWalletAddress);
+
+    const BASE_FEE = 5000;
+    const backingLamports = Math.round(amountSol * LAMPORTS_PER_SOL);
+    const feeLamports = Math.floor(backingLamports * (feePercent / 100));
+    const refundLamports = backingLamports - feeLamports - BASE_FEE;
+
+    if (refundLamports <= 0) {
+      return { success: false, error: 'Amount too small to withdraw after fees' };
+    }
+
+    // Pool must still cover this refund + the tx fee. The withdrawal fee
+    // stays behind in the pool (it is not swept anywhere) so other
+    // backers' balances are never reduced by one backer leaving.
+    const poolBalance = await connection.getBalance(poolKp.publicKey);
+    if (poolBalance < refundLamports + BASE_FEE) {
+      return { success: false, error: 'Pool has insufficient balance for this withdrawal' };
+    }
+
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: poolKp.publicKey,
+        toPubkey: backerPubkey,
+        lamports: refundLamports,
+      })
+    );
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = poolKp.publicKey;
+
+    const signature = await connection.sendTransaction(transaction, [poolKp]);
+    await connection.confirmTransaction(signature, 'confirmed');
+
+    return {
+      success: true,
+      signature,
+      amountRefunded: refundLamports / LAMPORTS_PER_SOL,
+    };
+  } catch (error) {
+    console.error('Refund from pool failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
 // Distribution result for a single backer
 export interface DistributionResult {
   wallet: string;

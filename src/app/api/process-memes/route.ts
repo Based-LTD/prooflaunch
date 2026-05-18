@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { refundFromBurnerWallet } from '@/services/pumpfun';
+import { refundMemePool } from '@/services/distribution';
 
 // This endpoint should be called by a cron job or manually to process memes
 // It handles both launching funded memes and refunding failed ones
@@ -21,11 +22,14 @@ async function runProcessor() {
       .eq('status', 'backing')
       .gte('current_backing_sol', supabase.rpc('get_backing_goal_sol')); // This won't work directly
 
-    // Actually, let's do a simpler query
+    // Memes that can still need a deadline-driven refund:
+    //  - 'backing': slots never filled by the deadline
+    //  - 'funded' : slots filled but the creator never launched by the
+    //               deadline (abandoned launch) — backers must get out
     const { data: backingMemes, error: backingError } = await supabase
       .from('memes')
       .select('*')
-      .eq('status', 'backing');
+      .in('status', ['backing', 'funded']);
 
     if (backingError) {
       console.error('Failed to fetch memes:', backingError);
@@ -49,9 +53,33 @@ async function runProcessor() {
       //   funds would stay trapped in burners and the token would launch
       //   with no holders. Removed entirely; only refund logic remains here.
 
-      // Case 2: Deadline passed without reaching goal - Process refunds
+      // Case 2: Deadline passed and the meme never launched - refund.
       if (isPastDeadline && meme.auto_refund) {
-        console.log(`Processing refunds for failed meme ${meme.id}: ${meme.name}`);
+        console.log(`Processing refunds for failed meme ${meme.id}: ${meme.name} (status ${meme.status})`);
+
+        // Pooled model: one shared pool wallet per meme. The shared,
+        // idempotent settler refunds every confirmed backer at 0% fee
+        // and flips the meme to 'failed' itself. Legacy burner memes
+        // fall through to the per-burner loop below.
+        if (meme.pool_wallet) {
+          try {
+            const pooled = await refundMemePool(supabase, meme.id);
+            if (pooled.ok) {
+              if (pooled.refunded > 0 || pooled.markedFailed) results.refunded.push(meme.id);
+            } else if (!pooled.legacy) {
+              for (const f of pooled.failures) {
+                results.errors.push({ memeId: meme.id, error: `Pool refund failed for ${f.backerWallet}: ${f.error}` });
+              }
+              if (pooled.error) results.errors.push({ memeId: meme.id, error: pooled.error });
+            }
+            // Pooled meme handled (or hard-failed for retry next run) —
+            // never also run the burner path on it.
+            if (!pooled.legacy) continue;
+          } catch (err) {
+            results.errors.push({ memeId: meme.id, error: `Pool refund error: ${err instanceof Error ? err.message : 'Unknown'}` });
+            continue;
+          }
+        }
 
         // Get all confirmed backings for this meme
         const { data: backings, error: backingsError } = await supabase

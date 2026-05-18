@@ -148,7 +148,7 @@ export default function MemeDetailPage() {
     }
 
     setBacking(true);
-    setBackingStatus('Creating token wallet...');
+    setBackingStatus('Preparing backing...');
 
     try {
       // Pooled model: the backer simply sends their backing SOL to this
@@ -789,7 +789,7 @@ export default function MemeDetailPage() {
                     SLOTS [{filledSlots}/{totalSlots}]
                   </span>
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                    NEXT: {filledSlots < 4 ? 'GENESIS' : 'WAVE 2'}
+                    {slotsRemaining > 0 ? `${slotsRemaining} OPEN` : 'FULL'}
                   </span>
                 </div>
                 <div className="flex gap-1">
@@ -935,8 +935,8 @@ export default function MemeDetailPage() {
               {amount && Number(amount) > 0 && (
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] bg-[var(--background)] p-3">
                   <span className="text-[var(--muted)]">
-                    Total: <span className="text-[var(--foreground)]">{(Number(amount) * 1.02).toFixed(4)} SOL</span>
-                    <span className="text-[var(--muted)]/70 ml-1">(inc 2%)</span>
+                    To pool: <span className="text-[var(--foreground)]">{Number(amount).toFixed(4)} SOL</span>
+                    <span className="text-[var(--muted)]/70 ml-1">(no fee)</span>
                   </span>
                   <span className="text-[var(--muted)] sm:ml-auto">
                     Share: <span className="text-[var(--success)]">~{getProjectedPercent(Number(amount)).toFixed(1)}%</span>
@@ -990,16 +990,13 @@ export default function MemeDetailPage() {
               <div className="flex gap-2">
                 {Array.from({ length: totalSlots }).map((_, i) => {
                   const isFilled = i < filledSlots;
-                  const isGenesis = i < 4;
                   const slotBacking = backings[i];
                   return (
                     <div
                       key={i}
                       className={`flex-1 h-12 flex flex-col items-center justify-center text-xs font-bold border-2 transition-all ${
                         isFilled
-                          ? isGenesis
-                            ? 'border-[var(--accent-gold)] bg-[var(--accent-gold)]/20 text-[var(--accent-gold)]'
-                            : 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
                           : 'border-[var(--border)] bg-[var(--background)] text-[var(--muted)]'
                       }`}
                       title={isFilled && slotBacking ? `${Number(slotBacking.amount_sol).toFixed(2)} SOL` : `Slot ${i + 1}`}
@@ -1012,17 +1009,9 @@ export default function MemeDetailPage() {
                   );
                 })}
               </div>
-              <div className="flex gap-4 text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-[var(--accent-gold)]/20 border border-[var(--accent-gold)]" />
-                  <span className="text-[var(--muted)]">Genesis (first to buy)</span>
-                </div>
-                {totalSlots > 4 && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-[var(--accent)]/20 border border-[var(--accent)]" />
-                    <span className="text-[var(--muted)]">Wave 2 (fast follow)</span>
-                  </div>
-                )}
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-3 h-3 bg-[var(--accent)]/20 border border-[var(--accent)]" />
+                <span className="text-[var(--muted)]">Every slot is equal — all backers buy at the same price</span>
               </div>
             </div>
           )}
@@ -1041,11 +1030,11 @@ export default function MemeDetailPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-[var(--accent-gold)] font-bold">3.</span>
-                <span>Your wallet buys automatically — Genesis first, Wave 2 follows</span>
+                <span>The pool does ONE atomic buy — same price for everyone, no sniper gap</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-[var(--accent-gold)] font-bold">4.</span>
-                <span>Claim tokens to your main wallet after launch</span>
+                <span>Your proportional token share is sent to your wallet</span>
               </li>
             </ul>
             <div className="mt-3 pt-3 border-t border-[var(--border)] flex gap-4 text-xs text-[var(--muted)]">
@@ -1079,7 +1068,7 @@ export default function MemeDetailPage() {
         onClose={() => setShowBackConfirm(false)}
         onConfirm={confirmBack}
         title="Confirm Backing"
-        message={`You are backing ${name} with ${amount} SOL.\n\nA secure token wallet will be created for you. When ${name} launches, this wallet will automatically acquire tokens on your behalf — keeping your position organic and hidden.\n\nAfter launch, you'll be able to:\n• Liquidate tokens instantly for SOL\n• Transfer tokens to your main wallet\n• Export the private key for full control`}
+        message={`You are backing ${name} with ${amount} SOL.\n\nYour SOL goes into this meme's shared pool. When all slots fill, the pool makes ONE atomic launch buy on pump.fun — every backer gets in at the exact same price, with no dev allocation and no sniper gap.\n\nAfter launch, your proportional share of tokens is sent straight to this wallet.\n\nChanged your mind? You can withdraw while slots are still filling (2% fee). Once the pool is full it's committed — but if the creator never launches, every backer is auto-refunded in full after the deadline.`}
         confirmText={`Back with ${amount} SOL`}
         variant="info"
         isLoading={backing}
