@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Keypair } from '@solana/web3.js';
+import bs58 from 'bs58';
 import { createServerClient } from '@/lib/supabase';
 import { verifyDeposit } from '@/services/pumpfun';
+import { encryptPrivateKey } from '@/lib/crypto';
+import { consumeVanityWallet } from '@/lib/vanity';
 
 // GET /api/memes - List all memes with optional filters
 export async function GET(request: NextRequest) {
@@ -218,6 +222,35 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Provision this meme's POOL wallet — the wallet backers fund and
+    // that does the atomic createV2+buy at launch. Prefer a pre-ground
+    // `...pooL` vanity (so scanners/humans read the "Developer"-tagged
+    // wallet as the transparent Proof pool); fall back to a random
+    // keypair if the vanity pool is empty (never block submission).
+    let poolWallet: string;
+    let encryptedPoolKey: string;
+    const vanity = await consumeVanityWallet('pool', data.id);
+    if (vanity) {
+      poolWallet = vanity.publicKey;
+      encryptedPoolKey = vanity.encryptedPrivateKey;
+    } else {
+      const kp = Keypair.generate();
+      poolWallet = kp.publicKey.toBase58();
+      encryptedPoolKey = encryptPrivateKey(bs58.encode(kp.secretKey));
+      console.warn(`[memes] vanity pool empty — meme ${data.id} got a random pool wallet`);
+    }
+    const { error: poolErr } = await supabase
+      .from('memes')
+      .update({ pool_wallet: poolWallet, encrypted_pool_key: encryptedPoolKey })
+      .eq('id', data.id);
+    if (poolErr) {
+      // Pool wallet is essential — fail the submission cleanly rather
+      // than leave a meme that can never launch.
+      await supabase.from('memes').delete().eq('id', data.id);
+      return NextResponse.json({ error: `Pool wallet provisioning failed: ${poolErr.message}` }, { status: 500 });
+    }
+    (data as { pool_wallet?: string }).pool_wallet = poolWallet;
 
     // Note: Creation fee goes to escrow, not recorded as a backing
     // The creator's token wallet is stored on the meme itself, not as a backing record

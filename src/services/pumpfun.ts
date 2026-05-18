@@ -782,6 +782,44 @@ function verifyTransactionDetails(tx: any, expectedAmount: number, fromWallet: s
   return isValid;
 }
 
+// Pooled model: a backing deposit sends `expectedAmount` SOL from the
+// backer straight to the meme's pool wallet. Verify on-chain that the
+// sender spent >= the amount AND the pool wallet received ~that amount.
+export async function verifyPoolDeposit(
+  signature: string,
+  expectedAmount: number,
+  fromWallet: string,
+  poolWallet: string
+): Promise<boolean> {
+  try {
+    const connection = new Connection(RPC_URL, { commitment: 'confirmed', confirmTransactionInitialTimeout: 60000 });
+    let tx = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise((r) => setTimeout(r, (attempt + 1) * 2000));
+      tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0 });
+      if (tx && tx.meta) break;
+    }
+    if (!tx || !tx.meta) { console.log('verifyPoolDeposit: tx not found'); return false; }
+
+    const accountKeys = tx.transaction.message.getAccountKeys();
+    const allKeys = accountKeys.staticAccountKeys.map((k: PublicKey) => k.toBase58());
+    const sIdx = allKeys.findIndex((k: string) => k === fromWallet);
+    const pIdx = allKeys.findIndex((k: string) => k === poolWallet);
+    if (sIdx === -1) { console.log('verifyPoolDeposit: sender not in tx'); return false; }
+    if (pIdx === -1) { console.log('verifyPoolDeposit: pool wallet not in tx'); return false; }
+
+    const senderSpent = (tx.meta.preBalances[sIdx] - tx.meta.postBalances[sIdx]) / LAMPORTS_PER_SOL;
+    const poolReceived = (tx.meta.postBalances[pIdx] - tx.meta.preBalances[pIdx]) / LAMPORTS_PER_SOL;
+    const senderValid = senderSpent >= expectedAmount * 0.99; // sender also pays tx fee
+    const poolValid = poolReceived >= expectedAmount * 0.97;   // rounding tolerance
+    console.log(`verifyPoolDeposit: sender spent ${senderSpent} (>=${expectedAmount}?${senderValid}), pool got ${poolReceived} (${poolValid})`);
+    return senderValid && poolValid;
+  } catch (e) {
+    console.error('verifyPoolDeposit failed:', e);
+    return false;
+  }
+}
+
 // Refund SOL to a backer (if meme fails to launch)
 export async function refundBacker(
   backerWallet: string,

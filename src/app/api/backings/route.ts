@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyDeposit, getEscrowAddress } from '@/services/pumpfun';
-import { encryptPrivateKey } from '@/lib/crypto';
+import { verifyPoolDeposit, getEscrowAddress } from '@/services/pumpfun';
 import { rateLimiters } from '@/lib/rateLimit';
 
 // GET /api/backings - Get backings for a user or meme
@@ -69,10 +68,7 @@ export async function POST(request: NextRequest) {
       meme_id,
       backer_wallet,
       amount_sol,
-      deposit_tx,
-      // Burner wallet fields (new flow)
-      burner_wallet,
-      burner_private_key,
+      deposit_tx, // tx that sent amount_sol from backer -> meme's pool wallet
     } = body;
 
     // Validation
@@ -82,17 +78,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // Require burner wallet for new backings
-    if (!burner_wallet || !burner_private_key) {
-      return NextResponse.json(
-        { error: 'Missing burner wallet fields. Please update your client.' },
-        { status: 400 }
-      );
-    }
-
-    // Encrypt the private key with AES-256-GCM before storing
-    const storedPrivateKey = encryptPrivateKey(burner_private_key);
 
     // Rate limiting - 5 backing requests per minute per wallet
     const rateLimitResult = rateLimiters.backing(backer_wallet);
@@ -119,6 +104,15 @@ export async function POST(request: NextRequest) {
 
     if (memeError || !meme) {
       return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
+    }
+
+    // Pooled model: backers fund the meme's pool wallet. New memes are
+    // provisioned with one at submission; reject if somehow missing.
+    if (!meme.pool_wallet) {
+      return NextResponse.json(
+        { error: 'This meme has no pool wallet (legacy or misprovisioned) and cannot accept pooled backings' },
+        { status: 400 }
+      );
     }
 
     if (meme.status !== 'backing') {
@@ -190,10 +184,10 @@ export async function POST(request: NextRequest) {
 
     const slotTier = slotNumber <= 4 ? 'Genesis' : 'Wave 2';
 
-    // Verify the deposit transaction on-chain
+    // Verify on-chain: backer sent amount_sol to THIS meme's pool wallet
     let isValid = false;
     try {
-      isValid = await verifyDeposit(deposit_tx, amount_sol, backer_wallet);
+      isValid = await verifyPoolDeposit(deposit_tx, amount_sol, backer_wallet, meme.pool_wallet);
     } catch (verifyError) {
       console.error('Verification error:', verifyError);
     }
@@ -210,7 +204,8 @@ export async function POST(request: NextRequest) {
       .from('users')
       .upsert({ wallet_address: backer_wallet }, { onConflict: 'wallet_address' });
 
-    // Create new backing with burner wallet info and slot number
+    // Create the backing (pooled model — no per-backer burner; the
+    // backer's SOL is already in the meme's pool wallet, verified above)
     const { data, error } = await supabase
       .from('backings')
       .insert({
@@ -219,8 +214,6 @@ export async function POST(request: NextRequest) {
         amount_sol,
         deposit_tx,
         status: 'confirmed',
-        burner_wallet,
-        encrypted_private_key: storedPrivateKey,
         slot_number: slotNumber,
       })
       .select()

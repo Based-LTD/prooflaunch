@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { launchViaCreateV2Bundle, LaunchConfig, BurnerBackerInfo } from '@/services/pumpfun';
+import { launchPooledAtomic, LaunchConfig } from '@/services/pumpfun';
 import { verifySignedAuthMessage } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 import { createLaunchLogger } from '@/lib/launchLog';
@@ -78,37 +78,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get all backers for this meme with burner wallet info
-    const { data: backings, error: backingsError } = await supabase
-      .from('backings')
-      .select('backer_wallet, amount_sol, created_at, burner_wallet, encrypted_private_key')
-      .eq('meme_id', meme_id)
-      .eq('status', 'confirmed')
-      .order('created_at', { ascending: true }); // Earliest backers first
+    // Pooled model: the meme's pool wallet (funded by backers) does ONE
+    // atomic createV2+buy. No per-backer burners.
+    if (!meme.pool_wallet || !meme.encrypted_pool_key) {
+      return NextResponse.json(
+        { error: 'Meme has no pool wallet — cannot launch (legacy/misprovisioned)' },
+        { status: 400 }
+      );
+    }
 
-    if (backingsError || !backings || backings.length === 0) {
+    // Need at least one confirmed backing (the pool must have funds)
+    const { data: backings } = await supabase
+      .from('backings')
+      .select('backer_wallet, amount_sol')
+      .eq('meme_id', meme_id)
+      .eq('status', 'confirmed');
+
+    if (!backings || backings.length === 0) {
       return NextResponse.json(
         { error: 'No confirmed backings found for this meme' },
         { status: 400 }
       );
     }
 
-    // Check that all backings have burner wallets
-    const backingsWithBurners = backings.filter(b => b.burner_wallet && b.encrypted_private_key);
-    if (backingsWithBurners.length === 0) {
-      return NextResponse.json(
-        { error: 'No backings with burner wallets found. Backings may be from old system.' },
-        { status: 400 }
-      );
-    }
-
     // Update status to launching
-    await supabase
-      .from('memes')
-      .update({ status: 'launching' })
-      .eq('id', meme_id);
+    await supabase.from('memes').update({ status: 'launching' }).eq('id', meme_id);
 
-    // Prepare launch config
     const config: LaunchConfig = {
       name: meme.name,
       symbol: meme.symbol,
@@ -122,45 +117,27 @@ export async function POST(request: NextRequest) {
       creatorWallet: meme.creator_wallet,
     };
 
-    // Map backings to BurnerBackerInfo format
-    const burnerBackers: BurnerBackerInfo[] = backingsWithBurners.map((b) => ({
-      mainWallet: b.backer_wallet,
-      burnerWallet: b.burner_wallet,
-      encryptedPrivateKey: b.encrypted_private_key,
-      amountSol: Number(b.amount_sol),
-      backedAt: new Date(b.created_at),
-    }));
+    console.log(`Launching ${config.name} via pooled-atomic from pool ${meme.pool_wallet}`);
 
-    console.log(`Launching ${config.name} with ${burnerBackers.length} burner wallets...`);
-    console.log('Burner wallets will buy in order of backing time (earliest first = best price)');
-
-    // Atomic Jito bundle launch: create + 4 Genesis buys in one block
-    // (no sniper/create->buy gap), slots 5-8 via RPC, with layered RPC
-    // fallback. Logger persists every step to launch_events; the
-    // reconcile/auto-refund net is the final backstop.
+    // ONE atomic createV2+buy from the pool wallet (zero sniper gap,
+    // dev holds 0%). Logger persists every step to launch_events.
     const launchLog = createLaunchLogger(meme_id);
-    const result = await launchViaCreateV2Bundle(config, burnerBackers, launchLog);
+    const result = await launchPooledAtomic(
+      config, meme.encrypted_pool_key, meme.pool_wallet, launchLog
+    );
 
-    if (!result.success || !result.mintAddress) {
-      // Revert status on failure
-      await supabase
-        .from('memes')
-        .update({ status: 'funded' })
-        .eq('id', meme_id);
-
-      console.error('Launch failed:', result.error);
-      console.error('Buy results:', JSON.stringify(result.buyResults, null, 2));
-
+    if (!result.success || !result.mintAddress || !result.tokensReceived) {
+      await supabase.from('memes').update({ status: 'funded' }).eq('id', meme_id);
+      console.error('Pooled launch failed:', result.error);
       return NextResponse.json(
-        {
-          error: result.error || 'Launch failed',
-          buyResults: result.buyResults,
-        },
+        { error: result.error || 'Launch failed' },
         { status: 500 }
       );
     }
 
-    // Update meme with launch info
+    // Live. Record the pool's token balance — backers' proportional
+    // claims are computed from this. Distribution is a SEPARATE step
+    // (/api/claim); backings stay 'confirmed' until claimed.
     await supabase
       .from('memes')
       .update({
@@ -168,81 +145,22 @@ export async function POST(request: NextRequest) {
         mint_address: result.mintAddress,
         pump_fun_url: result.pumpFunUrl,
         launched_at: new Date().toISOString(),
+        pool_token_balance: result.tokensReceived,
       })
       .eq('id', meme_id);
 
-    // Update creator's successful launches count
-    await supabase.rpc('increment_successful_launches', {
-      wallet: meme.creator_wallet,
-    });
+    await supabase.rpc('increment_successful_launches', { wallet: meme.creator_wallet });
 
-    // Update backing records with buy results
-    for (const buyResult of result.buyResults) {
-      // A buy only counts as successful if tokens were actually received, or a
-      // confirmed buy signature exists. Absence of an error string is NOT proof
-      // of success — a silently-dropped buy returns no sig, no tokens, no error,
-      // and must NOT be marked distributed (that would freeze the backer's SOL
-      // in the burner while telling them they got tokens).
-      const hasSignature = !!buyResult.buySignature;
-      const hasTokens = (buyResult.tokensReceived || 0) > 0;
-      const wasSuccessful = hasTokens || hasSignature;
-
-      console.log(`Updating backing for ${buyResult.mainWallet}:`, {
-        hasSignature,
-        hasTokens,
-        wasSuccessful,
-        buySignature: buyResult.buySignature,
-        tokensReceived: buyResult.tokensReceived,
-        error: buyResult.error,
-      });
-
-      const updateResult = await supabase
-        .from('backings')
-        .update({
-          status: wasSuccessful ? 'distributed' : 'confirmed',
-          tokens_received: buyResult.tokensReceived || 0,
-          burner_buy_executed: wasSuccessful,
-          burner_buy_signature: buyResult.buySignature || null,
-        })
-        .eq('meme_id', meme_id)
-        .eq('backer_wallet', buyResult.mainWallet)
-        .select();
-
-      if (updateResult.error) {
-        console.error(`Failed to update backing for ${buyResult.mainWallet}:`, updateResult.error);
-      } else {
-        const rowsUpdated = updateResult.data?.length || 0;
-        console.log(`Updated backing for ${buyResult.mainWallet}: ${rowsUpdated} rows affected`);
-        if (rowsUpdated === 0) {
-          console.error(`WARNING: No rows updated! meme_id=${meme_id}, backer_wallet=${buyResult.mainWallet}`);
-          // Debug: check what backings exist for this meme
-          const { data: existingBackings } = await supabase
-            .from('backings')
-            .select('backer_wallet, status')
-            .eq('meme_id', meme_id);
-          console.log('Existing backings for this meme:', existingBackings);
-        }
-      }
-    }
-
-    const successfulBuys = result.buyResults.filter(r => r.buySignature).length;
-    console.log(`Launch complete! ${successfulBuys}/${burnerBackers.length} burner buys successful`);
+    console.log(`Pooled launch complete: ${result.tokensReceived} tokens in pool ${meme.pool_wallet}`);
 
     return NextResponse.json({
       success: true,
       mint_address: result.mintAddress,
       pump_fun_url: result.pumpFunUrl,
       create_signature: result.createSignature,
-      buy_results: result.buyResults.map(r => ({
-        main_wallet: r.mainWallet,
-        burner_wallet: r.burnerWallet,
-        amount_sol: r.amountSol,
-        tokens_received: r.tokensReceived,
-        success: !!r.buySignature,
-        error: r.error,
-      })),
-      total_backers: burnerBackers.length,
-      successful_buys: successfulBuys,
+      pool_wallet: result.poolWallet,
+      pool_token_balance: result.tokensReceived,
+      total_backers: backings.length,
     });
   } catch (error) {
     console.error('Launch error:', error);
