@@ -44,3 +44,6 @@ next-env.d.ts
 # Solana vanity keypair files — PRIVATE KEYS, never commit
 vanity-pool/
 *.json.keypair
+
+# Local-only admin ops tool (drains burners) — never commit
+tools/recover-meme.mjs
