@@ -8,7 +8,12 @@ const PUMP_FUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 
 export interface FeeTransaction {
   signature: string;
-  mintAddress: string;
+  // Every 44-char base58 account key in the tx. The caller resolves the
+  // real mint by matching these against KNOWN live-meme mint addresses
+  // in our DB — deterministic and suffix-agnostic. The old code assumed
+  // pump.fun mints end in "pump"; our pooled vanity mints end in "pooL",
+  // so that assumption silently dropped every pooled coin's fees.
+  candidateMints: string[];
   amountSol: number;
   timestamp: number;
 }
@@ -45,7 +50,7 @@ export async function getRecentFeeTransactions(
       if (feeInfo) {
         feeTransactions.push({
           signature: sig.signature,
-          mintAddress: feeInfo.mintAddress,
+          candidateMints: feeInfo.candidateMints,
           amountSol: feeInfo.amountSol,
           timestamp: sig.blockTime || Date.now() / 1000,
         });
@@ -59,80 +64,56 @@ export async function getRecentFeeTransactions(
 }
 
 /**
- * Extract pump.fun fee info from a transaction
- * Returns the mint address and fee amount if this is a creator fee tx
+ * Extract a pump.fun creator-fee inflow to escrow.
+ *
+ * Returns the SOL amount plus EVERY 44-char base58 pubkey referenced by
+ * the tx (account keys + anything that shape-matches in the logs). The
+ * caller resolves the real mint by intersecting these candidates with
+ * our DB's known live-meme mint addresses — deterministic, can't
+ * mis-attribute, and works regardless of vanity suffix. (The old code
+ * hard-required a "pump" suffix and silently dropped every "pooL" coin.)
  */
+const BASE58_44 = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 function extractPumpFunFee(
   tx: ParsedTransactionWithMeta,
   escrowWallet: string
-): { mintAddress: string; amountSol: number } | null {
+): { candidateMints: string[]; amountSol: number } | null {
   const instructions = tx.transaction.message.instructions;
   const innerInstructions = tx.meta?.innerInstructions || [];
 
-  // Look for transfers to escrow
   let transferAmount = 0;
-  let mintAddress: string | null = null;
 
-  // Check account keys for token mint (pump.fun includes mint in the accounts)
-  const accountKeys = tx.transaction.message.accountKeys;
-
-  // Look through all instructions for SOL transfer to escrow
   for (const ix of instructions) {
     if ('parsed' in ix && ix.parsed?.type === 'transfer') {
       const info = ix.parsed.info;
-      if (info.destination === escrowWallet) {
-        transferAmount = info.lamports / 1e9;
-      }
+      if (info.destination === escrowWallet) transferAmount = info.lamports / 1e9;
     }
   }
-
-  // Also check inner instructions
   for (const inner of innerInstructions) {
     for (const ix of inner.instructions) {
       if ('parsed' in ix && ix.parsed?.type === 'transfer') {
         const info = ix.parsed.info;
-        if (info.destination === escrowWallet) {
-          transferAmount += info.lamports / 1e9;
-        }
+        if (info.destination === escrowWallet) transferAmount += info.lamports / 1e9;
       }
     }
   }
 
-  // Try to find the token mint from the transaction
-  // Pump.fun transactions typically have the mint as one of the accounts
-  for (const account of accountKeys) {
-    const pubkey = typeof account === 'string' ? account : account.pubkey.toBase58();
-    // Token mints on pump.fun end with "pump"
-    if (pubkey.endsWith('pump') && pubkey.length === 44) {
-      mintAddress = pubkey;
-      break;
+  if (transferAmount <= 0) return null;
+
+  // Collect ALL plausible pubkeys (no suffix assumption). The caller
+  // matches these against known live mints, so over-collecting is safe.
+  const candidates = new Set<string>();
+  for (const account of tx.transaction.message.accountKeys) {
+    const pk = typeof account === 'string' ? account : account.pubkey.toBase58();
+    if (BASE58_44.test(pk)) candidates.add(pk);
+  }
+  for (const log of tx.meta?.logMessages || []) {
+    for (const m of log.matchAll(/[1-9A-HJ-NP-Za-km-z]{43,44}/g)) {
+      if (BASE58_44.test(m[0])) candidates.add(m[0]);
     }
   }
 
-  // If we found a transfer and a mint, this is likely a fee transaction
-  if (transferAmount > 0 && mintAddress) {
-    return { mintAddress, amountSol: transferAmount };
-  }
-
-  // Small SOL amounts (< 0.1 SOL) going to escrow are likely fees, not backings
-  if (transferAmount > 0 && transferAmount < 0.1) {
-    // Try to identify mint from logs or other means
-    const logs = tx.meta?.logMessages || [];
-    for (const log of logs) {
-      // Look for mint address in logs
-      const match = log.match(/([A-HJ-NP-Za-km-z1-9]{32,44}pump)/);
-      if (match) {
-        mintAddress = match[1];
-        break;
-      }
-    }
-
-    if (mintAddress) {
-      return { mintAddress, amountSol: transferAmount };
-    }
-  }
-
-  return null;
+  return { candidateMints: [...candidates], amountSol: transferAmount };
 }
 
 // Platform takes 10% of trading fees for sustainability

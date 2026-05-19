@@ -35,19 +35,22 @@ async function processFees() {
 
     if (existing) continue;
 
-    // Find the meme by mint address
-    const { data: meme } = await supabase
+    // Resolve the meme by intersecting the tx's candidate pubkeys with
+    // our own live-meme mints — authoritative, suffix-agnostic, and
+    // cannot mis-attribute (only exact matches to a known live mint).
+    const { data: memeMatches } = await supabase
       .from('memes')
-      .select('id, backer_share_pct, creator_fee_pct, creator_wallet')
-      .eq('mint_address', feeTx.mintAddress)
-      .eq('status', 'live')
-      .single();
+      .select('id, backer_share_pct, creator_fee_pct, creator_wallet, mint_address')
+      .in('mint_address', feeTx.candidateMints)
+      .eq('status', 'live');
+    const meme = memeMatches && memeMatches.length === 1 ? memeMatches[0] : null;
 
     if (!meme) {
-      console.log(`No meme found for mint ${feeTx.mintAddress}`);
-      // Still record the transaction for audit
+      const why = memeMatches && memeMatches.length > 1 ? 'ambiguous (multiple live mints in tx)' : 'no live meme mint among candidates';
+      console.log(`Fee tx ${feeTx.signature}: ${why} — recording unattributed for reprocessing`);
+      // Funds are safe in escrow; record so a later pass can credit it.
       await supabase.from('fee_transactions').insert({
-        mint_address: feeTx.mintAddress,
+        mint_address: null,
         tx_signature: feeTx.signature,
         amount_sol: feeTx.amountSol,
         processed: false,
@@ -113,7 +116,7 @@ async function processFees() {
     } else {
       await supabase.from('token_fees').insert({
         meme_id: meme.id,
-        mint_address: feeTx.mintAddress,
+        mint_address: meme.mint_address,
         total_fees_sol: feeTx.amountSol,
       });
     }
@@ -121,7 +124,7 @@ async function processFees() {
     // Record the processed transaction
     await supabase.from('fee_transactions').insert({
       meme_id: meme.id,
-      mint_address: feeTx.mintAddress,
+      mint_address: meme.mint_address,
       tx_signature: feeTx.signature,
       amount_sol: feeTx.amountSol,
       processed: true,
