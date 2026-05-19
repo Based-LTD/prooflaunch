@@ -50,8 +50,17 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  // Vercel cron trigger — run the full sweep.
-  if (request.headers.get('x-vercel-cron') === '1') {
+  // Vercel cron auth: accept either `x-vercel-cron: 1` OR
+  // `Authorization: Bearer CRON_SECRET` (Vercel uses Authorization
+  // when CRON_SECRET is in env — old gate only checked x-vercel-cron
+  // so every cron silently fell into the status branch). TEMP log
+  // captures the actual headers so we can verify post-deploy.
+  const xCron = request.headers.get('x-vercel-cron');
+  const auth = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+  const isCron = xCron === '1' || (!!cronSecret && auth === `Bearer ${cronSecret}`);
+  console.log(`[cron-get reconcile] x-vercel-cron=${xCron} auth=${auth ? 'bearer-present' : '(none)'} -> isCron=${isCron}`);
+  if (isCron) {
     try {
       const supabase = createServerClient();
       const { scanned, results } = await reconcileAll(supabase);

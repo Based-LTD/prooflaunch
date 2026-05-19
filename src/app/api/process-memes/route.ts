@@ -197,8 +197,19 @@ export async function POST(request: NextRequest) {
 
 // GET /api/process-memes - Vercel cron trigger OR status check
 export async function GET(request: NextRequest) {
-  // Vercel cron jobs send x-vercel-cron: 1 — run the processor
-  if (request.headers.get('x-vercel-cron') === '1') {
+  // Vercel cron auth: when CRON_SECRET is set as an env var, Vercel
+  // sends `Authorization: Bearer <CRON_SECRET>` on cron invocations
+  // (and may or may not also send `x-vercel-cron: 1`). The old gate
+  // only checked the latter, so every cron request silently fell into
+  // the status branch and never ran the refund processor. Accept
+  // either signal. TEMP log captures what Vercel actually sends so we
+  // can verify post-deploy and tighten the gate later if needed.
+  const xCron = request.headers.get('x-vercel-cron');
+  const auth = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+  const isCron = xCron === '1' || (!!cronSecret && auth === `Bearer ${cronSecret}`);
+  console.log(`[cron-get process-memes] x-vercel-cron=${xCron} auth=${auth ? 'bearer-present' : '(none)'} -> isCron=${isCron}`);
+  if (isCron) {
     try {
       const result = await runProcessor();
       return NextResponse.json(result);
