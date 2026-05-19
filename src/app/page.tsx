@@ -39,6 +39,14 @@ export default function Home() {
     );
 
     result.sort((a, b) => {
+      // When ALL is selected, float funded memes (slots filled, launch-
+      // ready) to the top — they're the most actionable. The chosen
+      // sortBy still orders within each group.
+      if (filter === 'all') {
+        const af = a.status === 'funded' ? 0 : 1;
+        const bf = b.status === 'funded' ? 0 : 1;
+        if (af !== bf) return af - bf;
+      }
       switch (sortBy) {
         case 'progress':
           const aSlots = Number(a.total_slots) || 8;
@@ -55,7 +63,7 @@ export default function Home() {
     });
 
     return result;
-  }, [memes, search, sortBy]);
+  }, [memes, search, sortBy, filter]);
 
   const totalPages = Math.ceil(filteredMemes.length / ITEMS_PER_PAGE);
   const paginatedMemes = useMemo(() => {
