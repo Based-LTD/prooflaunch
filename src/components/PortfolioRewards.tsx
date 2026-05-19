@@ -147,8 +147,23 @@ export const PortfolioRewards: FC = () => {
     ...(rewards?.creator_rewards.tokens || []).map(t => ({ ...t, type: 'creator' as const })),
   ].filter(t => t.claimable > 0 || t.claimed > 0);
 
+  // Connected but nothing accrued yet — still show the section so backers
+  // KNOW fee-sharing exists and where to claim it (don't hide it to null).
   if (!hasAnyRewards) {
-    return null;
+    return (
+      <div className="card p-5 space-y-2">
+        <div className="flex items-center gap-2">
+          <Coins className="w-5 h-5 text-[var(--accent)]" />
+          <h2 className="text-lg font-semibold">Trading Fee Rewards</h2>
+        </div>
+        <p className="text-sm text-[var(--muted)]">
+          You earn a share of pump.fun trading fees on every token you back.
+          Nothing to claim yet — rewards appear here automatically once your
+          backed tokens start trading, and a <span className="text-[var(--foreground)]">Claim</span> button
+          shows up the moment you have a balance.
+        </p>
+      </div>
+    );
   }
 
   return (

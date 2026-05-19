@@ -47,3 +47,4 @@ vanity-pool/
 
 # Local-only admin ops tool (drains burners) — never commit
 tools/recover-meme.mjs
+tools/migrate-proof-to-pool.mjs
