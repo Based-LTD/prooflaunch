@@ -672,6 +672,70 @@ export default function MemeDetailPage() {
         )}
       </div>
 
+      {/* Verify on-chain — the pool wallet is the whole trust story:
+          backers fund it, it makes ONE launch buy, it distributes out.
+          Shown during backing too, so funds can be verified BEFORE
+          committing. Don't trust — verify. */}
+      {(() => {
+        const poolWallet = (meme as { pool_wallet?: string }).pool_wallet;
+        if (!poolWallet) return null;
+        return (
+          <div className="border border-[var(--border)] bg-[var(--card)]">
+            <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                // VERIFY_ON_CHAIN
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                Don&apos;t trust — verify
+              </span>
+            </div>
+            <div className="divide-y divide-[var(--border)]">
+              <div className="px-4 py-3">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5">
+                  Pool wallet · backers fund here → one launch buy → distributed out
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono break-all">{poolWallet}</code>
+                  <button
+                    onClick={() => handleCopy(poolWallet)}
+                    className="text-[var(--muted)] hover:text-[var(--accent)] transition-colors flex-shrink-0"
+                    aria-label="Copy pool wallet"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-[var(--success)]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                  <a
+                    href={`https://solscan.io/account/${poolWallet}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2 py-1 border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] text-[10px] font-mono uppercase tracking-widest transition-colors flex-shrink-0"
+                  >
+                    Solscan <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+              {isLaunched && meme.mint_address && (
+                <div className="px-4 py-3">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5">
+                    Contract · open Holders — spread across backers, no dev bag
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs font-mono break-all">{meme.mint_address}</code>
+                    <a
+                      href={`https://solscan.io/account/${meme.mint_address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-1 border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] text-[10px] font-mono uppercase tracking-widest transition-colors flex-shrink-0"
+                    >
+                      Solscan <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Distribution is automatic at launch (and a reconcile cron is the
           backstop). This manual control only appears as a fallback when
           some backers are still pending — never the primary path. */}
