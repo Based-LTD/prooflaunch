@@ -22,14 +22,17 @@ async function runProcessor() {
       .eq('status', 'backing')
       .gte('current_backing_sol', supabase.rpc('get_backing_goal_sol')); // This won't work directly
 
-    // Memes that can still need a deadline-driven refund:
-    //  - 'backing': slots never filled by the deadline
-    //  - 'funded' : slots filled but the creator never launched by the
-    //               deadline (abandoned launch) — backers must get out
+    // Deadline-driven refund applies ONLY to memes that never filled.
+    // Product rule: once a meme is fully backed ('funded') it is a
+    // committed pool and does NOT expire — it waits for the creator to
+    // launch, indefinitely. Only 'backing' memes (slots still open) that
+    // pass their deadline without filling get auto-refunded. A meme that
+    // filled would already be 'funded', so scanning 'backing' alone is
+    // exactly "did not fill by the deadline".
     const { data: backingMemes, error: backingError } = await supabase
       .from('memes')
       .select('*')
-      .in('status', ['backing', 'funded']);
+      .eq('status', 'backing');
 
     if (backingError) {
       console.error('Failed to fetch memes:', backingError);
@@ -53,9 +56,10 @@ async function runProcessor() {
       //   funds would stay trapped in burners and the token would launch
       //   with no holders. Removed entirely; only refund logic remains here.
 
-      // Case 2: Deadline passed and the meme never launched - refund.
+      // Case 2: 'backing' meme passed its deadline WITHOUT filling - refund.
+      // (Funded memes are excluded by the query above and never expire.)
       if (isPastDeadline && meme.auto_refund) {
-        console.log(`Processing refunds for failed meme ${meme.id}: ${meme.name} (status ${meme.status})`);
+        console.log(`Auto-refunding unfilled expired meme ${meme.id}: ${meme.name}`);
 
         // Pooled model: one shared pool wallet per meme. The shared,
         // idempotent settler refunds every confirmed backer at 0% fee
