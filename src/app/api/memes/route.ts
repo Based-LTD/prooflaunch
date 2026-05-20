@@ -230,17 +230,38 @@ export async function POST(request: NextRequest) {
     const poolKp = Keypair.generate();
     const poolWallet = poolKp.publicKey.toBase58();
     const encryptedPoolKey = encryptPrivateKey(bs58.encode(poolKp.secretKey));
+
+    // Also provision this meme's per-coin CREATOR sub-escrow keypair.
+    // It will be passed as the `creator` arg to createV2 at launch
+    // (instead of the shared platform escrow), so pump.fun's
+    // creator-vault PDA is keyed per-meme — isolating this coin's
+    // trading fees in its own vault we can collect from independently.
+    // Holds 0% tokens, never buys, signs only at fee-distribution time.
+    // Backwards compatible: launchPooledAtomic falls back to shared
+    // escrow when this column is NULL (i.e. for pre-Phase-2 memes).
+    const subKp = Keypair.generate();
+    const subPub = subKp.publicKey.toBase58();
+    const encryptedSubKey = encryptPrivateKey(bs58.encode(subKp.secretKey));
+
     const { error: poolErr } = await supabase
       .from('memes')
-      .update({ pool_wallet: poolWallet, encrypted_pool_key: encryptedPoolKey })
+      .update({
+        pool_wallet: poolWallet,
+        encrypted_pool_key: encryptedPoolKey,
+        creator_subescrow_pubkey: subPub,
+        encrypted_creator_subescrow_key: encryptedSubKey,
+      })
       .eq('id', data.id);
     if (poolErr) {
-      // Pool wallet is essential — fail the submission cleanly rather
-      // than leave a meme that can never launch.
+      // Pool/sub-escrow are essential — fail the submission cleanly
+      // rather than leave a meme that can never launch or share fees.
+      // (The co-presence CHECK constraint also guarantees we never end
+      // up with one sub-escrow column set without the other.)
       await supabase.from('memes').delete().eq('id', data.id);
-      return NextResponse.json({ error: `Pool wallet provisioning failed: ${poolErr.message}` }, { status: 500 });
+      return NextResponse.json({ error: `Wallet provisioning failed: ${poolErr.message}` }, { status: 500 });
     }
-    (data as { pool_wallet?: string }).pool_wallet = poolWallet;
+    (data as { pool_wallet?: string; creator_subescrow_pubkey?: string }).pool_wallet = poolWallet;
+    (data as { creator_subescrow_pubkey?: string }).creator_subescrow_pubkey = subPub;
 
     // Note: Creation fee goes to escrow, not recorded as a backing
     // The creator's token wallet is stored on the meme itself, not as a backing record
