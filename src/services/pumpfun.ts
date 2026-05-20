@@ -2756,9 +2756,14 @@ export async function refundFromPool(
     const backerPubkey = new PublicKey(backerWalletAddress);
 
     const BASE_FEE = 5000;
+    // Solana rejects any tx that leaves a system account with a NON-ZERO
+    // non-rent-exempt balance. For a 0-byte system account this is
+    // 890,880 lamports. Same class of bug refundFromBurnerWallet was
+    // written to avoid by draining to exactly 0.
+    const RENT_EXEMPT_MIN = 890_880;
     const backingLamports = Math.round(amountSol * LAMPORTS_PER_SOL);
     const feeLamports = Math.floor(backingLamports * (feePercent / 100));
-    const refundLamports = backingLamports - feeLamports - BASE_FEE;
+    let refundLamports = backingLamports - feeLamports - BASE_FEE;
 
     if (refundLamports <= 0) {
       return { success: false, error: 'Amount too small to withdraw after fees' };
@@ -2770,6 +2775,20 @@ export async function refundFromPool(
     const poolBalance = await connection.getBalance(poolKp.publicKey);
     if (poolBalance < refundLamports + BASE_FEE) {
       return { success: false, error: 'Pool has insufficient balance for this withdrawal' };
+    }
+
+    // Drain-to-zero rescue: if completing the standard refund would leave
+    // the pool with non-zero dust below rent-exempt, Solana rejects the
+    // tx. This bites the LAST refund of any multi-backer failed-meme
+    // (each prior refund shrinks the pool; the final one trips the rent
+    // floor) and any single-backer pool. Fix: when post-balance would be
+    // dust, send pool-minus-fee instead (pool ends at 0 — system
+    // accounts can hold any non-negative balance, including 0). The
+    // backer gets up to ~feeLamports + 5000 more than computed, never
+    // less than the backing amount — never under-refunded, never failed.
+    const postBalance = poolBalance - refundLamports - BASE_FEE;
+    if (postBalance > 0 && postBalance < RENT_EXEMPT_MIN) {
+      refundLamports = poolBalance - BASE_FEE;
     }
 
     const transaction = new Transaction().add(
