@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getRecentFeeTransactions, calculateFeeDistribution } from '@/services/feeTracker';
+import { collectAndCreditFees } from '@/services/distribution';
 
 // Shared fee processing logic
 async function processFees() {
@@ -136,11 +137,42 @@ async function processFees() {
     console.log(`Processed fee tx ${feeTx.signature}: ${feeTx.amountSol} SOL for ${meme.id} (platform: ${distribution.platformAmount.toFixed(4)} SOL)`);
   }
 
+  // === Per-coin sub-escrow fee collection (P5: the new model) ===
+  // For each LIVE meme with a sub-escrow (i.e. submitted post-P2):
+  // proactively collect from its creator-vault into shared escrow and
+  // credit backers' claimable_fees_sol per-coin. Legacy memes (no
+  // sub-escrow, like PROOF) are skipped — their fees route to shared
+  // escrow as platform revenue via the older path above, unchanged.
+  const subescrowResults: Array<{ memeId: string; result: Awaited<ReturnType<typeof collectAndCreditFees>> }> = [];
+  const { data: subEscrowMemes } = await supabase
+    .from('memes')
+    .select('id, symbol')
+    .eq('status', 'live')
+    .not('creator_subescrow_pubkey', 'is', null);
+  for (const m of subEscrowMemes || []) {
+    try {
+      const r = await collectAndCreditFees(supabase, m.id);
+      subescrowResults.push({ memeId: m.id, result: r });
+      if (r.ok && !r.skipped) {
+        console.log(`[fee-collect] ${m.symbol} (${m.id}): collected ${r.collectedLamports} lamports, credited ${r.backerCount} backers, platform ${r.platformLamports}`);
+      } else if (r.skipped) {
+        console.log(`[fee-collect] ${m.symbol} (${m.id}) skipped: ${r.skipped}`);
+      } else {
+        console.log(`[fee-collect] ${m.symbol} (${m.id}) ERROR: ${r.error}`);
+      }
+    } catch (e) {
+      console.error(`[fee-collect] ${m.id} exception:`, e);
+      subescrowResults.push({ memeId: m.id, result: { ok: false, error: e instanceof Error ? e.message : String(e) } });
+    }
+  }
+
   return {
     success: true,
     transactionsFound: feeTransactions.length,
     transactionsProcessed: processedCount,
     totalFeesProcessed,
+    subescrowMemesScanned: subEscrowMemes?.length || 0,
+    subescrowResults,
   };
 }
 
