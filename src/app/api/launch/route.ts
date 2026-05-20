@@ -118,6 +118,10 @@ export async function POST(request: NextRequest) {
       website: meme.website,
       totalBackingSol: meme.current_backing_sol,
       creatorWallet: meme.creator_wallet,
+      // Per-coin sub-escrow (P2 set this at submission); if null/legacy
+      // (pre-P2 memes like PROOF/TEST), launchPooledAtomic falls back
+      // to shared escrow as creator → behavior identical to today.
+      creatorPubkey: meme.creator_subescrow_pubkey || undefined,
     };
 
     console.log(`Launching ${config.name} via pooled-atomic from pool ${meme.pool_wallet}`);

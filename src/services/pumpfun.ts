@@ -270,6 +270,12 @@ export interface LaunchConfig {
   website?: string;
   totalBackingSol: number;
   creatorWallet: string;
+  // Optional per-coin creator override (the "sub-escrow" pubkey
+  // generated at submission). When set, pump.fun's coin_creator =
+  // this pubkey, so creator-vault fees isolate per-coin. When not
+  // set (legacy/pre-P2 memes), launchPooledAtomic falls back to the
+  // shared platform escrow — preserves existing behavior exactly.
+  creatorPubkey?: string;
 }
 
 // Backer with timestamp for ordered execution
@@ -3318,9 +3324,15 @@ export async function launchPooledAtomic(
     // on-chain creator => "dev holds 0%"); user=pool (createV2 payer +
     // buyer). Returns [createV2, idempotent ATA, buy] as one coherent,
     // SDK-validated instruction set — not hand-assembled.
+    // Per-coin creator if provided (sub-escrow → fees isolate per-coin
+    // in its own creator-vault), else shared escrow (legacy behavior).
+    // creator is a pump IDL ARG (not an account/signer) — verified —
+    // so this is purely a pubkey value change; tx accounts + signers
+    // (poolKp, mintKp) are unchanged either way.
+    const creatorPub = config.creatorPubkey ? new PublicKey(config.creatorPubkey) : escrow.publicKey;
     const builtIxs = await sdk.createV2AndBuyInstructions({
       global, mint, name: config.name, symbol: config.symbol, uri: metadataUri,
-      creator: escrow.publicKey, user: poolKp.publicKey,
+      creator: creatorPub, user: poolKp.publicKey,
       amount: wantTokens, solAmount: new BN(spend.toString()),
       mayhemMode: false, cashback: false,
     });
