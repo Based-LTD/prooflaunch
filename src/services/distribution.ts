@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { distributeFromPool, refundFromPool } from './pumpfun';
 import { createLaunchLogger, type LaunchLogger } from '@/lib/launchLog';
+import { Connection, PublicKey, Keypair, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { OnlinePumpSdk } from '@pump-fun/pump-sdk';
+import bs58 from 'bs58';
+import { decryptPrivateKey } from '@/lib/crypto';
 
 // Shared, idempotent pooled-token distribution.
 //
@@ -214,5 +218,190 @@ export async function refundMemePool(
     remaining: failures.length,
     failures,
     markedFailed,
+  };
+}
+
+// =============================================================
+// Per-coin trading-fee collection + per-backer accrual (Phase 4)
+// =============================================================
+//
+// For coins launched with a per-meme sub-escrow as `coin_creator`
+// (Phase 2+3): pump auto-routes trading creator fees into the
+// sub-escrow's `creator-vault` PDA. This function:
+//
+//   1) Collects the vault (anyone can poke; escrow pays gas)
+//   2) Drains the sub-escrow into the shared escrow (drain-to-zero —
+//      same lesson refundFromPool just learned)
+//   3) Credits each distributed backer's `claimable_fees_sol` by their
+//      proportional share of 90% of what landed in escrow; 10% is
+//      retained as platform revenue (just by NOT crediting it)
+//
+// Idempotent in the only way it needs to be: the on-chain vault is
+// the source of truth. If a tick already collected (vault=0 now),
+// next tick sees nothing to do and skips. The window where Step C's
+// per-backer credit loop could crash mid-iteration is tiny in
+// practice (DB writes are fast, cron is non-parallel) and detectable
+// via on-chain↔DB delta. Audit log table can come later.
+//
+// Two separate txs (collect, then drain) rather than one combined
+// tx — slight extra gas (~5k lamports) vs greatly simpler retry
+// semantics if either step fails.
+
+const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const PLATFORM_FEE_CUT = 0.10; // 10% platform / 90% backers (same ratio old feeTracker used)
+const COLLECT_THRESHOLD_LAMPORTS = 50_000; // skip if vault < this (~$0.0075) — amortizes 2 × 5k tx fees with safety margin
+
+function loadEscrow(): Keypair {
+  const k = process.env.ESCROW_WALLET_PRIVATE_KEY;
+  if (!k) throw new Error('ESCROW_WALLET_PRIVATE_KEY not set');
+  return Keypair.fromSecretKey(bs58.decode(k));
+}
+function decryptKeypair(enc: string): Keypair {
+  return Keypair.fromSecretKey(bs58.decode(decryptPrivateKey(enc)));
+}
+
+export interface CollectAndCreditResult {
+  ok: boolean;
+  skipped?: string;
+  collectedLamports?: number;
+  platformLamports?: number;
+  backerLamports?: number;
+  backerCount?: number;
+  collectSig?: string;
+  drainSig?: string;
+  error?: string;
+}
+
+export async function collectAndCreditFees(
+  supabase: SupabaseClient,
+  memeId: string,
+  log: LaunchLogger = createLaunchLogger(memeId)
+): Promise<CollectAndCreditResult> {
+  const { data: meme, error: memeErr } = await supabase
+    .from('memes')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key')
+    .eq('id', memeId)
+    .single();
+  if (memeErr || !meme) return { ok: false, error: 'meme not found' };
+  if (meme.status !== 'live') return { ok: true, skipped: `not live (status=${meme.status})` };
+  if (!meme.creator_subescrow_pubkey || !meme.encrypted_creator_subescrow_key) {
+    return { ok: true, skipped: 'legacy meme (no sub-escrow; trading fees route to shared escrow as platform revenue)' };
+  }
+
+  // Decrypt sub-escrow keypair + pubkey-match safety gate
+  let subKp: Keypair;
+  try { subKp = decryptKeypair(meme.encrypted_creator_subescrow_key); }
+  catch (e) { return { ok: false, error: `sub-escrow decrypt failed: ${e instanceof Error ? e.message : String(e)}` }; }
+  if (subKp.publicKey.toBase58() !== meme.creator_subescrow_pubkey) {
+    return { ok: false, error: 'sub-escrow key mismatch — refusing to touch' };
+  }
+
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const sdk = new OnlinePumpSdk(conn);
+
+  // Vault balance check (skip if dust)
+  const vaultBN = await sdk.getCreatorVaultBalance(subKp.publicKey);
+  const vaultLamports = Number(vaultBN.toString());
+  if (vaultLamports < COLLECT_THRESHOLD_LAMPORTS) {
+    return { ok: true, skipped: `vault ${vaultLamports} lamports below threshold ${COLLECT_THRESHOLD_LAMPORTS}` };
+  }
+
+  const escrow = loadEscrow();
+
+  // Step A: collect_creator_fee. creator is NOT a signer (verified in
+  // IDL); anyone can poke. Escrow as feePayer (~5k lamports).
+  let collectSig: string;
+  try {
+    const collectIxs = await sdk.collectCoinCreatorFeeInstructions(subKp.publicKey, escrow.publicKey);
+    const tx = new Transaction().add(...collectIxs);
+    tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    tx.feePayer = escrow.publicKey;
+    collectSig = await conn.sendTransaction(tx, [escrow]);
+    await conn.confirmTransaction(collectSig, 'confirmed');
+    log('reconcile_recovered', { detail: { stage: 'collect_creator_fee', sig: collectSig, vaultLamports } });
+  } catch (e) {
+    return { ok: false, error: `collect failed: ${e instanceof Error ? e.message : String(e)}` };
+  }
+
+  // Step B: drain sub-escrow → shared escrow, drain-to-zero (sub-escrow
+  // ends at exactly 0; same Solana-rent-floor rule that bit refundFromPool).
+  const BASE_FEE = 5000;
+  const subBalance = await conn.getBalance(subKp.publicKey);
+  const transferLamports = subBalance - BASE_FEE;
+  if (transferLamports <= 0) {
+    return { ok: false, error: `sub-escrow balance ${subBalance} too low for drain (collectSig ${collectSig}; investigate manually)` };
+  }
+
+  let drainSig: string;
+  try {
+    const tx = new Transaction().add(
+      SystemProgram.transfer({ fromPubkey: subKp.publicKey, toPubkey: escrow.publicKey, lamports: transferLamports })
+    );
+    tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    tx.feePayer = subKp.publicKey;
+    drainSig = await conn.sendTransaction(tx, [subKp]);
+    await conn.confirmTransaction(drainSig, 'confirmed');
+    log('reconcile_recovered', { detail: { stage: 'drain_subescrow_to_escrow', sig: drainSig, lamports: transferLamports } });
+  } catch (e) {
+    // Collect succeeded but drain failed — SOL is in sub-escrow safely.
+    // Next cron tick: vault=0 (nothing to collect) but sub-escrow still
+    // has it; would need a recovery path. For v1: surface as error so
+    // it's visible; manual sweep recoverable via the same primitive.
+    return {
+      ok: false,
+      error: `drain failed after collect: ${e instanceof Error ? e.message : String(e)} — sub-escrow holds ${subBalance} lamports (collectSig ${collectSig})`,
+    };
+  }
+
+  // Step C: credit backers proportionally (10% platform / 90% backers)
+  const collectedLamports = transferLamports;
+  const platformLamports = Math.floor(collectedLamports * PLATFORM_FEE_CUT);
+  const backerLamports = collectedLamports - platformLamports;
+
+  const { data: backings } = await supabase
+    .from('backings')
+    .select('id, backer_wallet, amount_sol, claimable_fees_sol')
+    .eq('meme_id', meme.id)
+    .eq('status', 'distributed');
+
+  if (!backings || backings.length === 0) {
+    return {
+      ok: true,
+      skipped: 'no distributed backings to credit — full amount retained as platform revenue',
+      collectedLamports, platformLamports: collectedLamports, backerLamports: 0, backerCount: 0,
+      collectSig, drainSig,
+    };
+  }
+
+  const totalBacking = backings.reduce((s, b) => s + Number(b.amount_sol), 0);
+  if (totalBacking <= 0) return { ok: false, error: 'totalBacking <= 0 — cannot split' };
+
+  const backerSol = backerLamports / LAMPORTS_PER_SOL;
+  const errors: string[] = [];
+  let credited = 0;
+  for (const b of backings) {
+    const share = (Number(b.amount_sol) / totalBacking) * backerSol;
+    const newClaimable = (Number(b.claimable_fees_sol) || 0) + share;
+    const { error: upErr } = await supabase
+      .from('backings')
+      .update({ claimable_fees_sol: newClaimable })
+      .eq('id', b.id);
+    if (upErr) errors.push(`${b.backer_wallet.slice(0, 8)}: ${upErr.message}`);
+    else credited++;
+  }
+
+  if (errors.length > 0) {
+    log('reconcile_error', { ok: false, detail: { stage: 'credit_backers', errors, credited } });
+    return {
+      ok: false,
+      error: `${errors.length} backer credit(s) failed: ${errors.slice(0, 3).join('; ')}`,
+      collectedLamports, platformLamports, backerLamports, backerCount: credited, collectSig, drainSig,
+    };
+  }
+
+  return {
+    ok: true,
+    collectedLamports, platformLamports, backerLamports, backerCount: credited,
+    collectSig, drainSig,
   };
 }
