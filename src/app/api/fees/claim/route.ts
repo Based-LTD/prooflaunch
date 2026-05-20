@@ -36,9 +36,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Get all claimable fees for this wallet
+    // Get all claimable fees for this wallet.
+    // Track meme_id per source so the audit row in fee_claims (which has
+    // a NOT NULL FK to memes) can be written per-source — this is what
+    // makes claim:all (no meme_id in the body) work across multiple memes.
     let totalClaimable = 0;
-    const claimSources: Array<{ type: 'backer' | 'creator'; id: string; amount: number }> = [];
+    const claimSources: Array<{ type: 'backer' | 'creator'; id: string; memeId: string; amount: number }> = [];
 
     // Check backer rewards
     const backingsQuery = supabase
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
         const amount = Number(backing.claimable_fees_sol);
         if (amount > 0) {
           totalClaimable += amount;
-          claimSources.push({ type: 'backer', id: backing.id, amount });
+          claimSources.push({ type: 'backer', id: backing.id, memeId: backing.meme_id, amount });
         }
       }
     }
@@ -81,7 +84,7 @@ export async function POST(request: NextRequest) {
         const amount = Number(meme.creator_claimable_fees_sol);
         if (amount > 0) {
           totalClaimable += amount;
-          claimSources.push({ type: 'creator', id: meme.id, amount });
+          claimSources.push({ type: 'creator', id: meme.id, memeId: meme.id, amount });
         }
       }
     }
@@ -99,21 +102,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create claim record
-    const { data: claim, error: claimError } = await supabase
+    // Create one fee_claims audit row per source (each row carries its
+    // own meme_id — fee_claims.meme_id is NOT NULL). All rows share the
+    // same eventual claim_tx, so a single SOL transfer pays them all.
+    const { data: claimRows, error: claimError } = await supabase
       .from('fee_claims')
-      .insert({
-        meme_id: meme_id || null,
-        wallet_address,
-        amount_sol: totalClaimable,
-        status: 'processing',
-      })
-      .select()
-      .single();
+      .insert(
+        claimSources.map((s) => ({
+          meme_id: s.memeId,
+          wallet_address,
+          amount_sol: s.amount,
+          status: 'processing',
+        }))
+      )
+      .select();
 
-    if (claimError) {
-      throw new Error(`Failed to create claim: ${claimError.message}`);
+    if (claimError || !claimRows || claimRows.length === 0) {
+      throw new Error(`Failed to create claim: ${claimError?.message || 'no rows inserted'}`);
     }
+    const claimRowIds = claimRows.map((r) => r.id);
 
     // Send SOL from escrow to claimer
     const connection = new Connection(RPC_URL, 'confirmed');
@@ -136,9 +143,19 @@ export async function POST(request: NextRequest) {
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = escrowWallet.publicKey;
 
-    const txSignature = await connection.sendTransaction(transaction, [escrowWallet]);
+    let txSignature: string;
+    try {
+      txSignature = await connection.sendTransaction(transaction, [escrowWallet]);
+    } catch (e) {
+      // Mark all audit rows failed so we don't leave stale 'processing' state
+      await supabase
+        .from('fee_claims')
+        .update({ status: 'failed' })
+        .in('id', claimRowIds);
+      throw e;
+    }
 
-    // Update claim record with signature
+    // Mark all audit rows completed under the same claim_tx
     await supabase
       .from('fee_claims')
       .update({
@@ -146,7 +163,7 @@ export async function POST(request: NextRequest) {
         status: 'completed',
         completed_at: new Date().toISOString(),
       })
-      .eq('id', claim.id);
+      .in('id', claimRowIds);
 
     // Zero out the claimed amounts
     for (const source of claimSources) {
@@ -186,7 +203,8 @@ export async function POST(request: NextRequest) {
       amount_claimed: totalClaimable,
       amount_sent: amountToSend,
       tx_signature: txSignature,
-      claim_id: claim.id,
+      claim_ids: claimRowIds,
+      claim_id: claimRowIds[0], // back-compat: callers reading the singular field
     });
   } catch (error) {
     console.error('Claim error:', error);
