@@ -244,10 +244,13 @@ export async function POST(request: NextRequest) {
     if (allSlotsFilled && meme.status === 'backing') {
       console.log(`All ${totalSlots} slots filled for ${meme.name}! Updating to funded status.`);
 
-      // Update status to funded - creator will launch via the launch button
+      // Set funded_at NOW so the 24h launch-deadline cron can start
+      // its countdown. If the creator doesn't launch within 24h,
+      // process-memes auto-refunds every backer. Pre-019 funded memes
+      // (PROOF) keep funded_at NULL and are exempt forever.
       await supabase
         .from('memes')
-        .update({ status: 'funded' })
+        .update({ status: 'funded', funded_at: new Date().toISOString() })
         .eq('id', meme_id);
 
       return NextResponse.json({

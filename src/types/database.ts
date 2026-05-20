@@ -30,6 +30,7 @@ export interface Meme {
   min_backing_sol: number;       // Minimum SOL per backer (set by creator)
   current_backing_sol: number;   // Total amount backed (sum of all backings)
   backing_deadline: string;      // ISO date - when backing period ends (3 days default)
+  funded_at?: string;            // ISO date - when status flipped to funded; null = pre-019 grandfathered (no 24h launch deadline)
 
   // Legacy field (deprecated, kept for backward compatibility)
   backing_goal_sol?: number;     // Old goal-based system - no longer used

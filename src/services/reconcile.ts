@@ -155,7 +155,11 @@ async function reconcileMeme(
     const launchingMint = await resolveMint(supabase, meme);
     result.mint = launchingMint;
     if (!launchingMint) {
-      await supabase.from('memes').update({ status: 'funded' }).eq('id', meme.id);
+      // Reset funded_at on revert: the original 24h countdown might
+      // have nearly elapsed during the stalled launch attempt; give
+      // the creator a fair fresh window to retry. (Not exploitable —
+      // each launch attempt costs the creator gas + Jito fees.)
+      await supabase.from('memes').update({ status: 'funded', funded_at: new Date().toISOString() }).eq('id', meme.id);
       log('reconcile_error', { ok: false, detail: { reason: 'pooled launching, no mint — reverted to funded' } });
       result.skipped = 'pooled launching, no mint (reverted -> funded)';
     } else {
@@ -173,7 +177,8 @@ async function reconcileMeme(
     // ran). Bounce a stuck 'launching' meme back to 'funded' so the
     // creator can safely retry — funds are untouched in burners.
     if (meme.status === 'launching') {
-      await supabase.from('memes').update({ status: 'funded' }).eq('id', meme.id);
+      // Reset funded_at — see comment above on the other revert path.
+      await supabase.from('memes').update({ status: 'funded', funded_at: new Date().toISOString() }).eq('id', meme.id);
       log('reconcile_error', { ok: false, detail: { reason: 'no mint found, reverted launching -> funded' } });
       result.skipped = 'no mint (reverted launching -> funded)';
     } else {

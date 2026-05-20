@@ -134,7 +134,13 @@ export async function POST(request: NextRequest) {
     );
 
     if (!result.success || !result.mintAddress || !result.tokensReceived) {
-      await supabase.from('memes').update({ status: 'funded' }).eq('id', meme_id);
+      // Reset funded_at: the 24h launch countdown shouldn't penalize
+      // the creator for a Jito/RPC-side failure outside their control.
+      // (Re-attempt costs gas + tip, so this isn't a free extension.)
+      await supabase
+        .from('memes')
+        .update({ status: 'funded', funded_at: new Date().toISOString() })
+        .eq('id', meme_id);
       console.error('Pooled launch failed:', result.error);
       return NextResponse.json(
         { error: result.error || 'Launch failed' },
