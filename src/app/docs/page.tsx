@@ -239,6 +239,32 @@ export default function DocsPage() {
                 );
               })}
             </div>
+
+            {/* Phantom token-visibility heads-up — common confusion post-distribution */}
+            <div className="mt-6 border-l-4 border-[var(--warning)] bg-[var(--background)] p-4 space-y-2">
+              <h3 className="font-bold text-[var(--warning)] uppercase tracking-wide flex items-center gap-2">
+                <HelpCircle className="w-4 h-4" />
+                After Launch — Finding Your Tokens in Phantom
+              </h3>
+              <p className="text-sm text-[var(--muted)] leading-relaxed">
+                Your tokens are sent to your connected wallet automatically when the meme launches.
+                But Phantom (and most Solana wallets) hide brand-new tokens by default — a spam
+                filter that protects users from random airdrop scams. <strong className="text-[var(--foreground)]">Your tokens are there,
+                they&apos;re just hidden until the wallet recognizes them.</strong>
+              </p>
+              <p className="text-sm text-[var(--muted)] leading-relaxed">
+                Three ways to make them visible:
+              </p>
+              <ul className="text-sm text-[var(--muted)] space-y-1 pl-4">
+                <li>· Open Phantom &rarr; Settings &rarr; <strong className="text-[var(--foreground)]">enable &quot;Show all tokens&quot;</strong> (or &quot;Show tokens with low value&quot;)</li>
+                <li>· Trade the coin once on pump.fun — visibility usually triggers within a few minutes of any activity</li>
+                <li>· Paste the contract address (CA) into Phantom&apos;s &quot;Manage Tokens&quot; search to manually un-hide it</li>
+              </ul>
+              <p className="text-xs font-mono text-[var(--muted)]/80 leading-relaxed pt-1">
+                &gt; This is a Phantom UX behavior, not a Proof Launch bug. The on-chain transfer is real and verifiable —
+                check Solscan with your wallet + the token mint to see the balance.
+              </p>
+            </div>
           </section>
         )}
 
