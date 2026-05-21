@@ -470,7 +470,6 @@ export default function MemeDetailPage() {
     backing_goal_sol,
     current_backing_sol,
     backing_deadline,
-    funded_at,
     creator_wallet,
     image_url,
     backer_count = 0,
@@ -500,15 +499,6 @@ export default function MemeDetailPage() {
   const isProving = status === 'backing';
   const isFunded = status === 'funded';
   const isLaunching = status === 'launching';
-
-  // 24h launch-deadline countdown (migration 019). Only memes funded
-  // post-019 have a non-null funded_at — legacy funded memes (PROOF)
-  // are grandfathered and never show a countdown.
-  const LAUNCH_DEADLINE_MS = 24 * 60 * 60 * 1000;
-  const launchDeadlineMs = funded_at ? new Date(funded_at).getTime() + LAUNCH_DEADLINE_MS : null;
-  const launchTimeRemaining = launchDeadlineMs
-    ? getTimeRemaining(new Date(launchDeadlineMs).toISOString())
-    : null;
   const isLaunched = status === 'live';
   const isCreator = connected && publicKey?.toBase58() === creator_wallet;
   const isBacker = connected && backings.some(
@@ -815,19 +805,6 @@ export default function MemeDetailPage() {
                 All backer slots are filled. The token is ready to launch on pump.fun.
               </p>
             </div>
-            {/* 24h launch-deadline countdown — only present for memes
-                funded post-migration 019 (legacy memes are grandfathered) */}
-            {launchTimeRemaining && (
-              <div className="border border-[var(--warning)] bg-[var(--background)] p-4">
-                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)] mb-2">
-                  LAUNCH WINDOW · {launchTimeRemaining} REMAINING
-                </div>
-                <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">
-                  The creator has 24 hours from funding to launch. If the launch
-                  window expires, every backer is automatically refunded in full.
-                </p>
-              </div>
-            )}
             {isCreator ? (
               <button
                 onClick={requestLaunch}
@@ -1178,7 +1155,7 @@ export default function MemeDetailPage() {
         onClose={() => setShowBackConfirm(false)}
         onConfirm={confirmBack}
         title="Confirm Backing"
-        message={`You are backing ${name} with ${amount} SOL.\n\nYour SOL goes into this meme's shared pool. When all slots fill, the pool makes ONE atomic launch buy on pump.fun — every backer gets in at the exact same price, with no dev allocation and no sniper gap.\n\nAfter launch, your proportional share of tokens is sent straight to this wallet.\n\nChanged your mind? You can withdraw while slots are still filling (2% fee). Once the pool is full it's committed — but if the creator doesn't launch within 24 hours, every backer is auto-refunded in full.`}
+        message={`You are backing ${name} with ${amount} SOL.\n\nYour SOL goes into this meme's shared pool. When all slots fill, the pool makes ONE atomic launch buy on pump.fun — every backer gets in at the exact same price, with no dev allocation and no sniper gap.\n\nAfter launch, your proportional share of tokens is sent straight to this wallet.\n\nChanged your mind? You can withdraw while slots are still filling (2% fee). Once the pool is full it's committed and waits for the creator to launch on their schedule.`}
         confirmText={`Back with ${amount} SOL`}
         variant="info"
         isLoading={backing}

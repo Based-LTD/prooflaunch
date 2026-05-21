@@ -170,48 +170,17 @@ async function runProcessor() {
       }
     }
 
-    // === Funded-but-unlaunched 24h countdown (migration 019) ===
-    // Closes the abandonment hole: a creator can no longer self-back,
-    // get the meme to funded via other backers, then never launch and
-    // leave everyone's SOL locked in the pool wallet.
-    //
-    // Grandfathering: pre-019 funded memes (PROOF, TEST) have funded_at
-    // = NULL and are skipped by the IS NOT NULL filter — they retain
-    // the original "funded never expires" behavior forever. Only memes
-    // funded post-019 are subject to the 24h rule.
-    const LAUNCH_DEADLINE_HOURS = 24;
-    const cutoffIso = new Date(Date.now() - LAUNCH_DEADLINE_HOURS * 3600 * 1000).toISOString();
-    const { data: staleFunded, error: staleErr } = await supabase
-      .from('memes')
-      .select('id, name')
-      .eq('status', 'funded')
-      .is('launched_at', null)
-      .not('funded_at', 'is', null)
-      .lt('funded_at', cutoffIso);
-    if (staleErr) {
-      results.errors.push({ memeId: 'funded-scan', error: staleErr.message });
-    }
-    for (const stale of staleFunded || []) {
-      console.log(`Funded launch-deadline expired for ${stale.name} (${stale.id}) — auto-refunding all backers`);
-      try {
-        const pooled = await refundMemePool(supabase, stale.id);
-        if (pooled.ok) {
-          results.refunded.push(stale.id);
-        } else {
-          for (const f of pooled.failures || []) {
-            results.errors.push({ memeId: stale.id, error: `Funded-expiry refund failed for ${f.backerWallet}: ${f.error}` });
-          }
-          if (pooled.error) results.errors.push({ memeId: stale.id, error: pooled.error });
-        }
-      } catch (err) {
-        results.errors.push({ memeId: stale.id, error: `Funded-expiry refund error: ${err instanceof Error ? err.message : 'Unknown'}` });
-      }
-    }
+    // NOTE: funded memes have no auto-refund expiry. The funded_at
+    // timestamp is still captured at funded-flip (column lives in
+    // migration 019) but nothing consumes it here — preserved for
+    // potential v2 features (e.g. torch-passing launch authority).
+    // Product rule restored: funded never expires; creator launches
+    // when ready. Pre-launch withdrawal during 'backing' status is
+    // the backer's only voluntary exit.
 
     return {
       success: true,
       processed: backingMemes?.length || 0,
-      fundedExpiredScanned: staleFunded?.length || 0,
       launched: results.launched.length,
       refunded: results.refunded.length,
       errors: results.errors,

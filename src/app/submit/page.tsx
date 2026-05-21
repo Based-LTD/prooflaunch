@@ -827,7 +827,6 @@ export default function SubmitPage() {
                 <p>&gt; The pool makes <strong className="text-[var(--accent)]">ONE atomic buy</strong> — every backer gets in at the exact same price, with no dev allocation and no sniper gap.</p>
                 <p>&gt; Each backer&apos;s proportional share of tokens is sent straight to their wallet.</p>
                 <p>&gt; 3-day deadline. If slots don&apos;t fill, backers get refunds.</p>
-                <p>&gt; <strong className="text-[var(--warning)]">24h launch window:</strong> once funded you have 24 hours to launch. If you don&apos;t, every backer is auto-refunded.</p>
               </div>
             </div>
           </div>

@@ -194,7 +194,7 @@ export default function DocsPage() {
                   { title: 'Back the pool', desc: 'Send at least the creator\'s minimum to claim one of 2-8 slots. No maximum — back as much as you want! Your SOL joins the meme\'s transparent pool.' },
                   { title: 'Same price for everyone', desc: 'At launch the pool makes ONE buy — every backer enters at the identical price. No slot is favored, no one is front-run.' },
                   { title: 'Proportional share', desc: 'You receive tokens proportional to how much you backed, sent straight to your wallet.' },
-                  { title: 'Withdraw anytime', desc: 'Changed your mind? Withdraw before slots fill (2% fee). Once filled, no withdrawals — but see Refund Protection below for the two ways you still get your SOL back if the meme doesn\'t launch.' },
+                  { title: 'Withdraw anytime', desc: 'Changed your mind? Withdraw before launch. If slots don\'t fill in 3 days, claim a refund from Portfolio.' },
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 p-3 bg-[var(--background)] border-l-4 border-[var(--success)]">
                     <CheckCircle className="w-5 h-5 text-[var(--success)] mt-0.5 flex-shrink-0" />
@@ -204,37 +204,6 @@ export default function DocsPage() {
                   </li>
                 ))}
               </ul>
-            </section>
-
-            {/* Refund Protection — both safety nets backers get */}
-            <section className="relative border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-6 h-6 text-[var(--success)]" />
-                <h2 className="text-2xl font-black uppercase tracking-tight">Refund Protection</h2>
-              </div>
-              <p className="text-[var(--foreground)]/80 leading-relaxed">
-                A backer's SOL is never stuck. There are two automatic refund rules — both run on-chain, no support tickets, no human in the loop.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3 p-3 bg-[var(--background)] border-l-4 border-[var(--success)]">
-                  <Clock className="w-5 h-5 text-[var(--success)] mt-0.5 flex-shrink-0" />
-                  <span className="text-[var(--muted)]">
-                    <strong className="text-[var(--foreground)]">3-day backing deadline.</strong> If the meme doesn't fill all its slots within the creator's chosen window (3 days by default), every backer is automatically refunded 100% — no fee.
-                  </span>
-                </li>
-                <li className="flex items-start gap-3 p-3 bg-[var(--background)] border-l-4 border-[var(--success)]">
-                  <AlertTriangle className="w-5 h-5 text-[var(--success)] mt-0.5 flex-shrink-0" />
-                  <span className="text-[var(--muted)]">
-                    <strong className="text-[var(--foreground)]">24-hour launch window.</strong> Once the meme is fully funded, the creator has 24 hours to launch. If they don't, every backer is automatically refunded 100% — no fee. This closes the only path where a creator could leave backers waiting indefinitely.
-                  </span>
-                </li>
-              </ul>
-              <div className="border-l-4 border-[var(--accent-gold)] bg-[var(--background)] p-4">
-                <h3 className="font-bold text-[var(--accent-gold)] mb-2 uppercase tracking-wide">Why the 24h rule exists</h3>
-                <p className="text-sm text-[var(--muted)] leading-relaxed">
-                  Backers commit real SOL the moment they back a meme. Once the slots are full, that SOL sits in the meme's pool wallet waiting for the creator to push the launch button. Without a deadline, a creator who lost interest — or worse, a creator who self-backed to seed signal then withdrew before the meme filled — could leave everyone's SOL parked there indefinitely. The 24-hour clock turns that risk into a bounded one: worst case is a one-day wait followed by a full refund.
-                </p>
-              </div>
             </section>
           </>
         )}
@@ -255,8 +224,7 @@ export default function DocsPage() {
                 { icon: Key, color: 'text-[var(--warning)]', title: 'Dev Holds 0%', desc: 'The creator never holds the supply. The pool buys at launch and distributes to backers — nothing for a dev to rug.' },
                 { icon: Zap, color: 'text-[var(--success)]', title: 'Same Price For Everyone', desc: 'One atomic pool buy at launch — every backer enters at the identical price. No front-running, no favored slot.' },
                 { icon: Wallet, color: 'text-[var(--accent-gold)]', title: 'Tokens Sent To You', desc: 'After launch, your proportional share is distributed straight to your connected wallet. Trade anywhere instantly.' },
-                { icon: Undo2, color: 'text-[var(--error)]', title: 'Withdraw Anytime', desc: 'Changed your mind? Withdraw before slots fill. Your SOL returns to your wallet (minus 2% fee).' },
-                { icon: Shield, color: 'text-[var(--success)]', title: 'Auto-Refund If Stuck', desc: 'Two automatic safety nets: if slots don\'t fill in 3 days, full refund. If they do fill but the creator doesn\'t launch within 24 hours, full refund. Backers are never left waiting indefinitely.' },
+                { icon: Undo2, color: 'text-[var(--error)]', title: 'Withdraw Anytime', desc: 'Changed your mind? Withdraw before launch. Your SOL returns to your wallet (minus 2% fee).' },
                 { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Earn Trading Fees', desc: 'Genesis backers earn 90% of all trading fees proportional to contribution. Platform takes 10%.' },
               ].map((item, i) => {
                 const Icon = item.icon;
@@ -288,7 +256,7 @@ export default function DocsPage() {
               {[
                 { num: '1', title: 'Submit Your Meme (0.02 SOL)', desc: 'Create your meme with name, symbol, description, and image. Set 2-8 backer slots and a minimum backing amount.' },
                 { num: '2', title: 'Fill the Slots', desc: 'Share your meme page, engage in the community chat, and rally backers to fill all slots within 3 days.' },
-                { num: '3', title: 'Launch on Pump.fun (within 24h)', desc: 'Once all slots fill, you have 24 hours to click Launch. Hit it on your timing — coordinate with whales, time the market, give yourself a runway. But if 24 hours pass without a launch, every backer is automatically refunded in full. Don\'t submit unless you\'re ready to launch when the meme funds.' },
+                { num: '3', title: 'Launch on Pump.fun', desc: 'Once all slots are filled, click "Launch" when you\'re ready. Coordinate with whales, time the market, give yourself a runway. The pool waits for you — funded memes don\'t expire.' },
               ].map((step) => (
                 <div key={step.num} className="flex items-start gap-4 p-4 bg-[var(--background)] border-l-4 border-[var(--accent-gold)]">
                   <div className="w-8 h-8 bg-[var(--accent-gold)] text-black flex items-center justify-center text-sm font-black flex-shrink-0">
