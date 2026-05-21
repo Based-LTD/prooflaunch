@@ -116,7 +116,7 @@ export default function Home() {
             </h1>
             <p className="text-sm sm:text-base text-[var(--muted)] max-w-2xl font-mono leading-relaxed pt-3">
               Communities form BEFORE tokens launch. Back memes you believe in,
-              get in early when they go live on Pump.fun.
+              get the first tokens when they go live on Pump.fun.
             </p>
           </div>
 
