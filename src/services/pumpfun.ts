@@ -1258,11 +1258,8 @@ async function executeBurnerBuy(
   amountSol: number
 ): Promise<{ signature?: string; tokensReceived: number; error?: string }> {
   try {
-    console.log('=== executeBurnerBuy V8 - divide by 1.05 for fees ===');
-
     // Get actual burner wallet balance
     const burnerBalance = await connection.getBalance(burnerKeypair.publicKey);
-    console.log('>>> Burner balance:', burnerBalance, 'lamports =', burnerBalance / LAMPORTS_PER_SOL, 'SOL');
 
     // Check if user's token account already exists
     const associatedUserCheck = await getAssociatedTokenAddress(
@@ -1270,7 +1267,6 @@ async function executeBurnerBuy(
       burnerKeypair.publicKey
     );
     const userTokenAccountExists = await connection.getAccountInfo(associatedUserCheck) !== null;
-    console.log('>>> ATA exists:', userTokenAccountExists);
 
     // Instead of estimating fees, use a percentage-based approach
     // After ATA creation + fees, we typically have about 60% of balance left for 0.01 SOL
@@ -1318,16 +1314,11 @@ async function executeBurnerBuy(
     // buy path — gives ~5% headroom for price movement while maximizing SOL usage.
     const availableForBuy = Math.floor(afterFixedCosts / 1.05);
 
-    console.log('>>> Balance:', burnerBalance);
-    console.log('>>> Fixed costs: ATA', ataRent, '+ rentExempt', walletRentExempt, '+ reserveForTransfer', reserveForTransfer, '+ fees', baseTxFee + priorityFee, '=', ataRent + walletRentExempt + reserveForTransfer + baseTxFee + priorityFee);
-    console.log('>>> After fixed:', afterFixedCosts, '| Available (÷1.05):', availableForBuy, '=', availableForBuy / 1e9, 'SOL');
-
     if (availableForBuy <= 0) {
       return { tokensReceived: 0, error: `Insufficient balance: ${burnerBalance / LAMPORTS_PER_SOL} SOL` };
     }
 
     const buyAmountLamports = BigInt(availableForBuy);
-    console.log('>>> Buy amount:', availableForBuy, 'lamports =', Number(buyAmountLamports) / LAMPORTS_PER_SOL, 'SOL');
 
     // Get bonding curve account to read creator and calculate token amount
     const bondingCurvePda = deriveBondingCurve(mintPubkey);
@@ -1347,11 +1338,9 @@ async function executeBurnerBuy(
 
     // Calculate expected token amount based on available SOL (not original backing amount)
     const expectedTokens = calculateBuyTokenAmount(bondingCurveData, buyAmountLamports);
-    console.log('>>> Expected tokens for', Number(buyAmountLamports) / LAMPORTS_PER_SOL, 'SOL:', expectedTokens.toString());
 
     // maxSolCost = full afterFixedCosts (matches batched buy path)
     const maxSolCost = BigInt(afterFixedCosts);
-    console.log('>>> Max SOL cost:', Number(maxSolCost) / LAMPORTS_PER_SOL, 'SOL');
 
     // Get associated token accounts
     const associatedBondingCurve = await getAssociatedTokenAddress(

@@ -1,6 +1,16 @@
 {
-  "name": "app",
+  "name": "proof-launch",
   "version": "0.1.0",
+  "description": "The proving grounds for Solana meme coins. A pre-launch commitment layer on top of Pump.fun — communities form before tokens exist, the pool launches atomically, dev holds 0%, backers earn fees.",
+  "homepage": "https://prooflaunch.fun",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Based-LTD/prooflaunch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Based-LTD/prooflaunch/issues"
+  },
+  "license": "AGPL-3.0-or-later",
   "private": true,
   "scripts": {
     "dev": "next dev",
