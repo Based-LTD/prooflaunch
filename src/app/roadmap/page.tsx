@@ -33,13 +33,13 @@ const SHIPPED = [
 ];
 
 const BUILDING = [
+  { icon: Coins, title: 'PROOF staking → revenue share', desc: 'Stake PROOF, earn a portion of the platform\'s 10% cut from every meme launched on Proof Launch. Funded entirely by real platform fees (no inflation). Reflexive flywheel: more launches → more yield → more reasons to hold PROOF → more eyes on the platform.' },
+  { icon: Award, title: 'PROOF holder perks', desc: 'Tier-based platform fee discounts for PROOF holders: submission fee waived/reduced, lower withdrawal fee, and a holder badge in meme chat. Loyalty rewarded without ever gating the permissionless submission path — non-holders still launch normally, holders just pay less.' },
   { icon: Activity, title: 'Live activity feed per meme', desc: 'See backing events, launch milestones, fee distributions, and refund activity in real-time on each meme page. Transparency by default.' },
   { icon: Users, title: 'Genesis backer roster', desc: 'Every launched meme shows all of its original backers (2–8 depending on slot count), their stakes, their current hold percentages, and their realized + unrealized fees. Public proof of who showed up early.' },
   { icon: Bell, title: 'Live fee accrual counter', desc: 'On your portfolio page, watch your trading fee earnings tick up in real-time as the cron credits new fees. The data is already in the database — just needs prominent UI.' },
   { icon: Award, title: 'Creator profile pages', desc: 'Surface each creator\'s lifetime stats (submissions, successful launches, reputation score) from the database tracking that\'s already in place. Backers can vet creators on their on-platform record before committing.' },
   { icon: Coins, title: 'Lower minimum backing', desc: 'Reduce the floor below 0.1 SOL after launch traffic stabilizes, so smaller backers can participate in any pool.' },
-  { icon: Award, title: 'PROOF holder perks', desc: 'Tier-based platform fee discounts for PROOF holders: submission fee waived/reduced, lower withdrawal fee, and a holder badge in meme chat. Loyalty rewarded without ever gating the permissionless submission path — non-holders still launch normally, holders just pay less.' },
-  { icon: Coins, title: 'PROOF staking → revenue share', desc: 'Stake PROOF, earn a portion of the platform\'s 10% cut from every meme launched on Proof Launch. Funded entirely by real platform fees (no inflation). Reflexive flywheel: more launches → more yield → more reasons to hold PROOF → more eyes on the platform.' },
 ];
 
 const EXPLORING = [
