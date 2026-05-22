@@ -184,7 +184,8 @@ export const PortfolioRewards: FC = () => {
 
   const hasClaimable = rewards && rewards.total_claimable > 0;
   const hasClaimed = rewards && rewards.total_claimed > 0;
-  const hasAnyRewards = hasClaimable || hasClaimed;
+  const hasPending = rewards && (rewards.total_pending || 0) > 0;
+  const hasAnyRewards = hasClaimable || hasClaimed || hasPending;
 
   // Get all tokens with rewards
   const allTokens = [
@@ -192,20 +193,54 @@ export const PortfolioRewards: FC = () => {
     ...(rewards?.creator_rewards.tokens || []).map(t => ({ ...t, type: 'creator' as const })),
   ].filter(t => t.claimable > 0 || t.claimed > 0);
 
-  // Connected but nothing accrued yet — still show the section so backers
-  // KNOW fee-sharing exists and where to claim it (don't hide it to null).
+  // Connected but nothing accrued yet — still render the full Claimable/Pending/
+  // Claimed grid so backers SEE the live counter is online and waiting. This
+  // is the pre-launch state for users who only have 'backing'/'confirmed'
+  // backings (memes that haven't launched yet), so there are no DB-tracked
+  // rewards AND no on-chain vault accrual — but the UI should still display
+  // the system existing instead of an empty state that hides the feature.
   if (!hasAnyRewards) {
     return (
-      <div className="card p-5 space-y-2">
+      <div className="card p-5 space-y-3">
         <div className="flex items-center gap-2">
           <Coins className="w-5 h-5 text-[var(--accent)]" />
           <h2 className="text-lg font-semibold">Trading Fee Rewards</h2>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-[var(--background)] rounded-lg p-4">
+            <div className="text-sm text-[var(--muted)] mb-1">Claimable</div>
+            <div className="text-2xl font-bold text-[var(--muted)]">0.000000 SOL</div>
+          </div>
+          <div className="bg-[var(--background)] rounded-lg p-4">
+            <div className="text-sm text-[var(--muted)] mb-1 flex items-center gap-2">
+              Pending
+              <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-[var(--success)]">
+                <span className="relative inline-flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--success)] opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[var(--success)]" />
+                </span>
+                Live
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-[var(--muted)]">0.000000 SOL</div>
+            <div className="text-[10px] font-mono text-[var(--muted)]/80 mt-1">
+              on-chain accrual, lands at next cron tick
+            </div>
+          </div>
+          <div className="bg-[var(--background)] rounded-lg p-4">
+            <div className="text-sm text-[var(--muted)] mb-1">Total Claimed</div>
+            <div className="text-2xl font-bold text-[var(--muted)]">0.000000 SOL</div>
+          </div>
+        </div>
+
         <p className="text-sm text-[var(--muted)]">
-          You earn a share of pump.fun trading fees on every token you back.
-          Nothing to claim yet — rewards appear here automatically once your
-          backed tokens start trading, and a <span className="text-[var(--foreground)]">Claim</span> button
-          shows up the moment you have a balance.
+          You earn 90% of pump.fun trading fees on every token you back.
+          Rewards appear here automatically once your backed memes launch
+          and start trading — the <span className="text-[var(--success)] font-medium">Pending</span> counter
+          updates in near-real-time as trades hit the on-chain creator vault,
+          and the hourly cron sweeps it into <span className="text-[var(--foreground)] font-medium">Claimable</span> for
+          one-click payout.
         </p>
       </div>
     );
