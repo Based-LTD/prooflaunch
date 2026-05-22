@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
+import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
@@ -92,6 +93,8 @@ export async function GET(
       claimable_fees_sol: number | null;
       total_claimed_sol: number | null;
       slot_number: number;
+      current_tokens?: string;
+      locked_tokens?: string;
     };
     const { data: rawBackings, error: backingsError } = await supabase
       .from('backings')
@@ -151,15 +154,65 @@ export async function GET(
         }
       });
 
-      const [ataResults, vaultLamportsResult] = await Promise.all([
+      // Streamflow detection: for each distributed backer, find streams
+      // where they're the sender of a lock for this mint, and sum the
+      // current escrow-vault balance of each. Counts as part of their
+      // "hold" so a creator who locked tokens (Streamflow self-vest)
+      // doesn't read as "dumped" in the Genesis Backer Roster.
+      const streamClient = new SolanaStreamClient(
+        RPC_URL,
+        ICluster.Mainnet,
+        'confirmed',
+      );
+      const lockedPromises = distributedBackings.map(async (b) => {
+        try {
+          const streams = await streamClient.searchStreams({
+            mint: mintAddress,
+            sender: b.backer_wallet,
+          });
+          if (!streams || streams.length === 0) return { id: b.id, locked_tokens: '0' };
+          // For each stream, the live "still locked" amount = the
+          // escrow-vault token-account balance. Withdrawn tokens
+          // decrement this balance automatically when claimed.
+          const vaultBalances = await Promise.all(
+            streams.map(async (s) => {
+              try {
+                // escrowTokens may be PublicKey or string — normalize
+                const escrowTokensRaw = (s.account as any)?.escrowTokens;
+                if (!escrowTokensRaw) return BigInt(0);
+                const escrowPk = typeof escrowTokensRaw === 'string'
+                  ? new PublicKey(escrowTokensRaw)
+                  : new PublicKey(escrowTokensRaw.toBase58 ? escrowTokensRaw.toBase58() : escrowTokensRaw);
+                const info = await conn.getAccountInfo(escrowPk);
+                if (!info) return BigInt(0);
+                return info.data.readBigUInt64LE(64);
+              } catch {
+                return BigInt(0);
+              }
+            }),
+          );
+          const totalLocked = vaultBalances.reduce((s, x) => s + x, BigInt(0));
+          return { id: b.id, locked_tokens: totalLocked.toString() };
+        } catch {
+          return { id: b.id, locked_tokens: '0' };
+        }
+      });
+
+      const [ataResults, lockedResults, vaultLamportsResult] = await Promise.all([
         Promise.all(ataPromises),
+        Promise.all(lockedPromises),
         readVaultLamports(conn, poolFields?.creator_subescrow_pubkey ?? null),
       ]);
 
       const currentByBackingId = new Map(ataResults.map(r => [r.id, r.current_tokens]));
+      const lockedByBackingId = new Map(lockedResults.map(r => [r.id, r.locked_tokens]));
       enrichedBackings = backings.map((b) =>
         b.status === 'distributed'
-          ? { ...b, current_tokens: currentByBackingId.get(b.id) ?? '0' }
+          ? {
+              ...b,
+              current_tokens: currentByBackingId.get(b.id) ?? '0',
+              locked_tokens: lockedByBackingId.get(b.id) ?? '0',
+            }
           : b
       );
       vaultLamports = vaultLamportsResult;

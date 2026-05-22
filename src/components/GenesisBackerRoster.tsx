@@ -14,6 +14,7 @@ interface Backing {
   status: string;
   tokens_received: string | number | null;
   current_tokens?: string;
+  locked_tokens?: string; // Streamflow-locked balance (counts toward hold)
   claimable_fees_sol: number | null;
   total_claimed_sol: number | null;
   claim_tx?: string | null;
@@ -119,8 +120,11 @@ export const GenesisBackerRoster: FC<Props> = ({ memeId }) => {
                 const stakeSol = Number(b.amount_sol);
                 const poolShare = totalBackingSol > 0 ? stakeSol / totalBackingSol : 0;
                 const received = BigInt(b.tokens_received || 0);
-                const current = BigInt(b.current_tokens || 0);
-                const holdPct = received > BigInt(0) ? Number((current * BigInt(10000)) / received) / 100 : 0;
+                const inWallet = BigInt(b.current_tokens || 0);
+                const locked = BigInt(b.locked_tokens || 0);
+                const effective = inWallet + locked;
+                const holdPct = received > BigInt(0) ? Number((effective * BigInt(10000)) / received) / 100 : 0;
+                const isLocked = locked > BigInt(0);
                 const claimable = Number(b.claimable_fees_sol || 0);
                 const claimed = Number(b.total_claimed_sol || 0);
                 const realizedFees = claimable + claimed;
@@ -149,6 +153,14 @@ export const GenesisBackerRoster: FC<Props> = ({ memeId }) => {
                         {holdPct.toFixed(1)}%
                       </span>
                       {holdPct >= 80 && <span className="ml-1" title="Diamond hands — holds ≥80% of original">💎</span>}
+                      {isLocked && (
+                        <span
+                          className="ml-1"
+                          title={`Locked via Streamflow: ${(Number(locked) / Number(received) * 100).toFixed(1)}% of allocation`}
+                        >
+                          🔒
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 px-2 text-right">
                       {realizedFees > 0 ? `${realizedFees.toFixed(6)} SOL` : <span className="text-[var(--muted)]">—</span>}
@@ -171,8 +183,11 @@ export const GenesisBackerRoster: FC<Props> = ({ memeId }) => {
             const stakeSol = Number(b.amount_sol);
             const poolShare = totalBackingSol > 0 ? stakeSol / totalBackingSol : 0;
             const received = BigInt(b.tokens_received || 0);
-            const current = BigInt(b.current_tokens || 0);
-            const holdPct = received > BigInt(0) ? Number((current * BigInt(10000)) / received) / 100 : 0;
+            const inWallet = BigInt(b.current_tokens || 0);
+            const locked = BigInt(b.locked_tokens || 0);
+            const effective = inWallet + locked;
+            const holdPct = received > BigInt(0) ? Number((effective * BigInt(10000)) / received) / 100 : 0;
+            const isLocked = locked > BigInt(0);
             const claimable = Number(b.claimable_fees_sol || 0);
             const claimed = Number(b.total_claimed_sol || 0);
             const realizedFees = claimable + claimed;
@@ -196,7 +211,11 @@ export const GenesisBackerRoster: FC<Props> = ({ memeId }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
                   <div className="text-[var(--muted)]">Stake: <span className="text-[var(--foreground)]">{stakeSol.toFixed(2)} SOL ({(poolShare*100).toFixed(1)}%)</span></div>
-                  <div className="text-[var(--muted)]">Hold: <span className={holdPct >= 80 ? 'text-[var(--success)]' : holdPct >= 50 ? 'text-[var(--accent-gold)]' : 'text-[var(--foreground)]'}>{holdPct.toFixed(1)}%{holdPct >= 80 ? ' 💎' : ''}</span></div>
+                  <div className="text-[var(--muted)]">
+                    Hold: <span className={holdPct >= 80 ? 'text-[var(--success)]' : holdPct >= 50 ? 'text-[var(--accent-gold)]' : 'text-[var(--foreground)]'}>
+                      {holdPct.toFixed(1)}%{holdPct >= 80 ? ' 💎' : ''}{isLocked ? ' 🔒' : ''}
+                    </span>
+                  </div>
                   <div className="text-[var(--muted)]">Fees: <span className="text-[var(--foreground)]">{realizedFees > 0 ? `${realizedFees.toFixed(4)} SOL` : '—'}</span></div>
                   {hasSubEscrow && (
                     <div className="text-[var(--muted)]">
@@ -213,8 +232,9 @@ export const GenesisBackerRoster: FC<Props> = ({ memeId }) => {
         </div>
 
         <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]/60 pt-1">
-          &gt; hold % = current on-chain balance / tokens received at launch ·{' '}
-          fees = claimed + claimable{hasSubEscrow ? ' · pending = live on-chain share' : ''}
+          &gt; hold % = (wallet balance + streamflow-locked balance) / tokens received at launch ·{' '}
+          🔒 = portion locked via streamflow · fees = claimed + claimable
+          {hasSubEscrow ? ' · pending = live on-chain share' : ''}
         </p>
       </div>
     </div>
