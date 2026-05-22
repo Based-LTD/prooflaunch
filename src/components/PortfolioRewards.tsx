@@ -1,10 +1,40 @@
 'use client';
 
-import { FC, useState, useEffect, useCallback } from 'react';
+import { FC, useState, useEffect, useCallback, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import bs58 from 'bs58';
 import { Coins, Loader2, Check, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
+
+// Smooth-rolling number that animates between value changes over ~800ms.
+// Renders to 6 decimals, matching the SOL display elsewhere in the
+// component. Used for both Claimable and Pending so backers actually
+// SEE the value change instead of it jumping on each poll.
+const TickingNumber: FC<{ value: number; decimals?: number }> = ({ value, decimals = 6 }) => {
+  const [display, setDisplay] = useState(value);
+  const fromRef = useRef(value);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = value;
+    if (from === to) return;
+    const start = performance.now();
+    const duration = 800;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      // Ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(from + (to - from) * eased);
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+      else fromRef.current = to;
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [value]);
+
+  return <>{display.toFixed(decimals)}</>;
+};
 
 interface TokenReward {
   meme_id: string;
@@ -12,12 +42,14 @@ interface TokenReward {
   symbol: string;
   claimable: number;
   claimed: number;
+  pending?: number; // on-chain creator-vault share, next-cron-tick credit
 }
 
 interface RewardsData {
   wallet: string;
   backer_rewards: {
     claimable: number;
+    pending?: number;
     total_claimed: number;
     tokens: TokenReward[];
   };
@@ -27,6 +59,7 @@ interface RewardsData {
     tokens: TokenReward[];
   };
   total_claimable: number;
+  total_pending?: number;
   total_claimed: number;
 }
 
@@ -38,22 +71,16 @@ export const PortfolioRewards: FC = () => {
   const [claimResult, setClaimResult] = useState<{ success: boolean; message: string; tx?: string } | null>(null);
   const [expanded, setExpanded] = useState(false);
 
+  // Fetch user-specific rewards (claimable + on-chain pending). Polled
+  // frequently (15s) so backers see their share of new pump trades tick
+  // up into "Pending" in near-real-time.
   const fetchRewards = useCallback(async () => {
     if (!connected || !publicKey) {
       setRewards(null);
       setLoading(false);
       return;
     }
-
     try {
-      // Trigger fee processing in background (fire and forget)
-      fetch('/api/fees/process', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer prooflaunch-fees',
-        },
-      }).catch(() => {}); // Ignore errors
-
       const response = await fetch(`/api/fees/claim?wallet=${publicKey.toBase58()}`);
       if (response.ok) {
         const data = await response.json();
@@ -66,12 +93,30 @@ export const PortfolioRewards: FC = () => {
     }
   }, [connected, publicKey]);
 
+  // Slow side-channel: trigger the fee-process cron on a separate, slower
+  // cadence (60s) so we don't hammer the money-path endpoint every poll.
+  // The hourly Vercel cron handles routine collection — this is just a
+  // 'user is looking right now, freshen the credits' nudge.
+  const triggerFeeProcess = useCallback(async () => {
+    if (!connected) return;
+    try {
+      await fetch('/api/fees/process', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer prooflaunch-fees' },
+      });
+    } catch {}
+  }, [connected]);
+
   useEffect(() => {
     fetchRewards();
-    // Poll every 60 seconds
-    const interval = setInterval(fetchRewards, 60000);
-    return () => clearInterval(interval);
-  }, [fetchRewards]);
+    triggerFeeProcess();
+    const fastPoll = setInterval(fetchRewards, 15000);
+    const slowTrigger = setInterval(triggerFeeProcess, 60000);
+    return () => {
+      clearInterval(fastPoll);
+      clearInterval(slowTrigger);
+    };
+  }, [fetchRewards, triggerFeeProcess]);
 
   const handleClaimAll = async () => {
     if (!connected || !publicKey || !signMessage || !rewards?.total_claimable) return;
@@ -184,18 +229,36 @@ export const PortfolioRewards: FC = () => {
         )}
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Summary — Claimable (ready now) + Pending (live on-chain accrual) + Total Claimed */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-[var(--background)] rounded-lg p-4">
           <div className="text-sm text-[var(--muted)] mb-1">Claimable</div>
           <div className={`text-2xl font-bold ${hasClaimable ? 'text-[var(--success)]' : ''}`}>
-            {rewards?.total_claimable.toFixed(6) || '0.000000'} SOL
+            <TickingNumber value={rewards?.total_claimable || 0} /> SOL
+          </div>
+        </div>
+        <div className="bg-[var(--background)] rounded-lg p-4">
+          <div className="text-sm text-[var(--muted)] mb-1 flex items-center gap-2">
+            Pending
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-[var(--success)]">
+              <span className="relative inline-flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--success)] opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[var(--success)]" />
+              </span>
+              Live
+            </span>
+          </div>
+          <div className={`text-2xl font-bold ${(rewards?.total_pending || 0) > 0 ? 'text-[var(--accent)]' : 'text-[var(--muted)]'}`}>
+            <TickingNumber value={rewards?.total_pending || 0} /> SOL
+          </div>
+          <div className="text-[10px] font-mono text-[var(--muted)]/80 mt-1">
+            on-chain accrual, lands at next cron tick
           </div>
         </div>
         <div className="bg-[var(--background)] rounded-lg p-4">
           <div className="text-sm text-[var(--muted)] mb-1">Total Claimed</div>
           <div className="text-2xl font-bold">
-            {rewards?.total_claimed.toFixed(6) || '0.000000'} SOL
+            {(rewards?.total_claimed || 0).toFixed(6)} SOL
           </div>
         </div>
       </div>

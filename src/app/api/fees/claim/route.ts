@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 import bs58 from 'bs58';
 import { verifySignedAuthMessage } from '@/lib/crypto';
 
@@ -215,7 +216,69 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET to check claimable rewards for a wallet
+// PumpFun + PumpSwap PDAs needed to compute "pending" (uncollected
+// on-chain creator fees that will be credited at the next cron tick).
+// Kept inline rather than reaching into services/distribution.ts so this
+// route stays read-only with no shared mutable state.
+const PUMP_PROGRAM_ID = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
+const PUMP_AMM_PROGRAM_ID = new PublicKey('pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA');
+const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+
+const LAMPORTS_TO_SOL = 1 / LAMPORTS_PER_SOL;
+
+// PROOF's brand promise: 90% of creator fees to backers. Mirrors
+// PLATFORM_FEE_CUT = 0.10 in services/distribution.ts.
+const BACKER_SHARE = 0.90;
+
+/**
+ * Compute the total uncollected creator fees (BC creator-vault + AMM
+ * wSOL vault) for a meme's sub-escrow. Returns lamports. Pre-P2 memes
+ * (NULL sub-escrow) return 0 — their fees are shared-escrow platform
+ * revenue, not backer-distributable.
+ */
+async function computeMemePendingLamports(
+  conn: Connection,
+  subEscrowPubkey: string | null,
+): Promise<number> {
+  if (!subEscrowPubkey) return 0;
+  try {
+    const subPk = new PublicKey(subEscrowPubkey);
+    // BC creator-vault PDA
+    const [bcVault] = PublicKey.findProgramAddressSync(
+      [Buffer.from('creator-vault'), subPk.toBuffer()],
+      PUMP_PROGRAM_ID,
+    );
+    // AMM creator_vault authority PDA + its wSOL ATA
+    const [ammAuthority] = PublicKey.findProgramAddressSync(
+      [Buffer.from('creator_vault'), subPk.toBuffer()],
+      PUMP_AMM_PROGRAM_ID,
+    );
+    const ammWsolAta = await getAssociatedTokenAddress(
+      WSOL_MINT,
+      ammAuthority,
+      true,
+    );
+
+    // Read both balances in parallel
+    const [bcBal, ammAtaInfo] = await Promise.all([
+      conn.getBalance(bcVault),
+      conn.getAccountInfo(ammWsolAta),
+    ]);
+
+    let ammWsolLamports = 0;
+    if (ammAtaInfo) {
+      // Token account amount lives at bytes 64..72 in SPL Token v1 + Token-2022
+      ammWsolLamports = Number(ammAtaInfo.data.readBigUInt64LE(64));
+    }
+
+    return bcBal + ammWsolLamports;
+  } catch {
+    // RPC hiccup on one meme should not fail the whole portfolio request
+    return 0;
+  }
+}
+
+// GET to check claimable + pending rewards for a wallet
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -228,7 +291,9 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Get backer rewards
+    // Get backer rewards. Pull each backing's meme's sub-escrow pubkey
+    // and current_backing_sol so we can compute the wallet's pro-rata
+    // share of on-chain pending fees.
     const backingsQuery = supabase
       .from('backings')
       .select(`
@@ -241,7 +306,9 @@ export async function GET(request: NextRequest) {
           name,
           symbol,
           mint_address,
-          backer_share_pct
+          backer_share_pct,
+          current_backing_sol,
+          creator_subescrow_pubkey
         )
       `)
       .eq('backer_wallet', wallet)
@@ -266,9 +333,51 @@ export async function GET(request: NextRequest) {
 
     const { data: creatorMemes } = await creatorQuery;
 
+    // Compute on-chain pending fees per backing, parallelized across
+    // distinct sub-escrows so a wallet with N backed memes makes N+1
+    // RPC reads (1 batch). Pre-P2 backings (no sub-escrow) get 0.
+    const conn = new Connection(RPC_URL, 'confirmed');
+    const uniqueSubEscrows = Array.from(
+      new Set(
+        (backings || [])
+          .map((b) => (b.memes as any)?.creator_subescrow_pubkey as string | null)
+          .filter((pk): pk is string => !!pk),
+      ),
+    );
+    const pendingByMeme = new Map<string, number>(); // sub-escrow pubkey -> lamports
+    await Promise.all(
+      uniqueSubEscrows.map(async (pk) => {
+        const lamports = await computeMemePendingLamports(conn, pk);
+        pendingByMeme.set(pk, lamports);
+      }),
+    );
+
+    // Per-backing pending = (user.amount_sol / meme.current_backing_sol) * meme_total_pending * BACKER_SHARE
+    const backingsWithPending = (backings || []).map((b) => {
+      const meme = b.memes as any;
+      const subPk = meme?.creator_subescrow_pubkey as string | null;
+      const totalLamports = subPk ? pendingByMeme.get(subPk) ?? 0 : 0;
+      const totalSol = totalLamports * LAMPORTS_TO_SOL;
+      const memeTotalBacking = Number(meme?.current_backing_sol || 0);
+      const userShareFrac = memeTotalBacking > 0
+        ? Number(b.amount_sol || 0) / memeTotalBacking
+        : 0;
+      const pending = totalSol * BACKER_SHARE * userShareFrac;
+      return {
+        meme_id: b.meme_id,
+        name: meme?.name,
+        symbol: meme?.symbol,
+        backing_amount: b.amount_sol,
+        claimable: Number(b.claimable_fees_sol || 0),
+        claimed: Number(b.total_claimed_sol || 0),
+        pending,
+      };
+    });
+
     // Calculate totals
     const backerClaimable = backings?.reduce((sum, b) => sum + Number(b.claimable_fees_sol || 0), 0) || 0;
     const backerClaimed = backings?.reduce((sum, b) => sum + Number(b.total_claimed_sol || 0), 0) || 0;
+    const backerPending = backingsWithPending.reduce((sum, b) => sum + b.pending, 0);
     const creatorClaimable = creatorMemes?.reduce((sum, m) => sum + Number(m.creator_claimable_fees_sol || 0), 0) || 0;
     const creatorClaimed = creatorMemes?.reduce((sum, m) => sum + Number(m.creator_total_claimed_sol || 0), 0) || 0;
 
@@ -276,15 +385,9 @@ export async function GET(request: NextRequest) {
       wallet,
       backer_rewards: {
         claimable: backerClaimable,
+        pending: backerPending,
         total_claimed: backerClaimed,
-        tokens: backings?.map((b) => ({
-          meme_id: b.meme_id,
-          name: (b.memes as any)?.name,
-          symbol: (b.memes as any)?.symbol,
-          backing_amount: b.amount_sol,
-          claimable: Number(b.claimable_fees_sol || 0),
-          claimed: Number(b.total_claimed_sol || 0),
-        })) || [],
+        tokens: backingsWithPending,
       },
       creator_rewards: {
         claimable: creatorClaimable,
@@ -298,6 +401,7 @@ export async function GET(request: NextRequest) {
         })) || [],
       },
       total_claimable: backerClaimable + creatorClaimable,
+      total_pending: backerPending,
       total_claimed: backerClaimed + creatorClaimed,
     });
   } catch (error) {
