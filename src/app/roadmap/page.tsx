@@ -27,6 +27,7 @@ import {
 const SHIPPED = [
   { icon: Rocket, title: 'Pooled atomic launches', desc: 'createV2 + buy in a single transaction. Dev holds 0%. No sniper gap. Every backer enters at the identical price. Contract address ends in "…pooL" so anyone can verify it\'s a real Proof launch.' },
   { icon: Coins, title: 'Per-coin trading fee distribution', desc: 'Every new meme gets its own on-chain creator vault. The platform collects creator fees hourly, splits 10% / 90%, and credits each backer\'s share to their wallet — automatic, on-chain verifiable, no claim window pressure.' },
+  { icon: Bell, title: 'Live fee accrual counter', desc: 'Watch your share of every pump trade tick into "Pending" in near-real-time, before the hourly cron has even moved the SOL. Pending → Claimable on each cron tick → one-click claim to your wallet as native SOL. The whole fee flow, transparent and animated on your Portfolio.' },
   { icon: Shield, title: 'Refund protection', desc: '3-day backing deadline: if a meme\'s slots don\'t fill within the creator\'s window, every backer is automatically refunded 100% — no fee, no support tickets, no human in the loop.' },
   { icon: TrendingUp, title: 'Proving Grounds', desc: 'Browse every meme currently in the backing or funded phase. Funded memes surface first so backers can see what\'s about to launch.' },
   { icon: MessageSquare, title: 'Per-meme community chat', desc: 'Every meme has its own real-time chat room where backers and the creator coordinate before launch.' },
@@ -37,7 +38,6 @@ const BUILDING = [
   { icon: Award, title: 'PROOF holder perks', desc: 'Tier-based platform fee discounts for PROOF holders: submission fee waived/reduced, lower withdrawal fee, and a holder badge in meme chat. Loyalty rewarded without ever gating the permissionless submission path — non-holders still launch normally, holders just pay less.' },
   { icon: Activity, title: 'Live activity feed per meme', desc: 'See backing events, launch milestones, fee distributions, and refund activity in real-time on each meme page. Transparency by default.' },
   { icon: Users, title: 'Genesis backer roster', desc: 'Every launched meme shows all of its original backers (2–8 depending on slot count), their stakes, their current hold percentages, and their realized + unrealized fees. Public proof of who showed up early.' },
-  { icon: Bell, title: 'Live fee accrual counter', desc: 'On your portfolio page, watch your trading fee earnings tick up in real-time as the cron credits new fees. The data is already in the database — just needs prominent UI.' },
   { icon: Award, title: 'Creator profile pages', desc: 'Surface each creator\'s lifetime stats (submissions, successful launches, reputation score) from the database tracking that\'s already in place. Backers can vet creators on their on-platform record before committing.' },
   { icon: Coins, title: 'Lower minimum backing', desc: 'Reduce the floor below 0.1 SOL after launch traffic stabilizes, so smaller backers can participate in any pool.' },
 ];
