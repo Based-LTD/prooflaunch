@@ -26,7 +26,7 @@ export interface Meme {
   website?: string;
 
   // Backing config (slot-based system)
-  total_slots: number;           // 2-8 backer slots
+  total_slots: number;           // 2-24 backer slots (raised from 8 in migration 021)
   min_backing_sol: number;       // Minimum SOL per backer (set by creator)
   current_backing_sol: number;   // Total amount backed (sum of all backings)
   backing_deadline: string;      // ISO date - when backing period ends (3 days default)
@@ -106,7 +106,7 @@ export interface SubmitMemeRequest {
   telegram?: string;
   discord?: string;
   website?: string;
-  total_slots: number;       // 2-8 backer slots
+  total_slots: number;       // 2-24 backer slots (raised from 8 in migration 021)
   min_backing_sol: number;   // Minimum SOL per backer
   // Trust score parameters (legacy, mostly unused now)
   creator_fee_pct: number;

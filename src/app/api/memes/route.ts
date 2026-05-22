@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       discord,
       website,
       // New slot-based backing system
-      total_slots,         // 2-8 backer slots
+      total_slots,         // 2-24 backer slots
       min_backing_sol,     // Minimum SOL per backer
       // Legacy field (unused, kept for old client compatibility)
       backing_days,
@@ -151,10 +151,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate slot-based backing system
-    if (!total_slots || total_slots < 2 || total_slots > 8) {
+    // Validate slot-based backing system (max raised 8 → 24 in migration 021)
+    if (!total_slots || total_slots < 2 || total_slots > 24) {
       return NextResponse.json(
-        { error: 'Total slots must be between 2 and 8' },
+        { error: 'Total slots must be between 2 and 24' },
         { status: 400 }
       );
     }

@@ -32,7 +32,7 @@ interface Props {
 }
 
 /**
- * Public roster of every Genesis Backer (the wallets that filled
+ * Public roster of every Genesis Backer (the 2-24 wallets that filled
  * a meme's backing slots pre-launch). Shows their stake, slot order,
  * current hold %, realized fees, and live Pending fees.
  *

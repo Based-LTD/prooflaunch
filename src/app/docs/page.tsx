@@ -119,7 +119,7 @@ export default function DocsPage() {
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
                   <div className="text-3xl font-black text-[var(--accent)]">1</div>
                   <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Submit a Meme</div>
-                  <div className="text-xs text-[var(--muted)] mt-1">Set 2-8 slots + minimum</div>
+                  <div className="text-xs text-[var(--muted)] mt-1">Set 2-24 slots + minimum</div>
                 </div>
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
                   <div className="text-3xl font-black text-[var(--accent)]">2</div>
@@ -191,7 +191,7 @@ export default function DocsPage() {
               </p>
               <ul className="space-y-3">
                 {[
-                  { title: 'Back the pool', desc: 'Send at least the creator\'s minimum to claim one of 2-8 slots. No maximum — back as much as you want! Your SOL joins the meme\'s transparent pool.' },
+                  { title: 'Back the pool', desc: 'Send at least the creator\'s minimum to claim one of up to 24 slots. No maximum — back as much as you want! Your SOL joins the meme\'s transparent pool.' },
                   { title: 'Same price for everyone', desc: 'At launch the pool makes ONE buy — every backer enters at the identical price. No slot is favored, no one is front-run.' },
                   { title: 'Proportional share', desc: 'You receive tokens proportional to how much you backed, sent straight to your wallet.' },
                   { title: 'Withdraw anytime', desc: 'Changed your mind? Withdraw before launch. If slots don\'t fill in 3 days, claim a refund from Portfolio.' },
@@ -220,7 +220,7 @@ export default function DocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { icon: Coins, color: 'text-[var(--accent)]', title: 'Back the Pool', desc: 'Browse the Proving Grounds and claim one of 2-8 backer slots. Your SOL joins the meme\'s transparent on-chain pool.' },
+                { icon: Coins, color: 'text-[var(--accent)]', title: 'Back the Pool', desc: 'Browse the Proving Grounds and claim one of up to 24 backer slots. Your SOL joins the meme\'s transparent on-chain pool.' },
                 { icon: Key, color: 'text-[var(--warning)]', title: 'Dev Holds 0%', desc: 'The creator never holds the supply. The pool buys at launch and distributes to backers — nothing for a dev to rug.' },
                 { icon: Zap, color: 'text-[var(--success)]', title: 'Same Price For Everyone', desc: 'One atomic pool buy at launch — every backer enters at the identical price. No front-running, no favored slot.' },
                 { icon: Wallet, color: 'text-[var(--accent-gold)]', title: 'Tokens Sent To You', desc: 'After launch, your proportional share is distributed straight to your connected wallet. Trade anywhere instantly.' },
@@ -280,7 +280,7 @@ export default function DocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { num: '1', title: 'Submit Your Meme (0.02 SOL)', desc: 'Create your meme with name, symbol, description, and image. Set 2-8 backer slots and a minimum backing amount.' },
+                { num: '1', title: 'Submit Your Meme (0.02 SOL)', desc: 'Create your meme with name, symbol, description, and image. Set 2-24 backer slots and a minimum backing amount.' },
                 { num: '2', title: 'Fill the Slots', desc: 'Share your meme page, engage in the community chat, and rally backers to fill all slots within 3 days.' },
                 { num: '3', title: 'Launch on Pump.fun', desc: 'Once all slots are filled, click "Launch" when you\'re ready. Coordinate with whales, time the market, give yourself a runway. The pool waits for you — funded memes don\'t expire.' },
               ].map((step) => (

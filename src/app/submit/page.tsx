@@ -74,7 +74,7 @@ export default function SubmitPage() {
     name: '',
     symbol: '',
     description: '',
-    totalSlots: 4,        // 2-8 backer slots
+    totalSlots: 4,        // 2-24 backer slots
     minBackingSol: 0.1,   // Minimum SOL per backer
     creatorTwitter: '', // Creator's personal X account (Proof Launch only)
     twitter: '',
@@ -755,6 +755,11 @@ export default function SubmitPage() {
                   <option value={6}>6 slots (6 backers)</option>
                   <option value={7}>7 slots (7 backers)</option>
                   <option value={8}>8 slots (8 backers)</option>
+                  <option value={10}>10 slots (10 backers)</option>
+                  <option value={12}>12 slots (12 backers)</option>
+                  <option value={16}>16 slots (16 backers)</option>
+                  <option value={20}>20 slots (20 backers)</option>
+                  <option value={24}>24 slots (24 backers)</option>
                 </select>
                 <span className="text-xs text-[var(--muted)]">Token launches when all slots are filled</span>
               </div>
