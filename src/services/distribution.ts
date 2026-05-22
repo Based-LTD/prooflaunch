@@ -418,13 +418,14 @@ export async function collectAndCreditFees(
     return {
       ok: false,
       error: `${errors.length} backer credit(s) failed: ${errors.slice(0, 3).join('; ')}`,
-      collectedLamports, platformLamports, backerLamports, backerCount: credited, collectSig, drainSig,
+      collectedLamports, platformLamports, backerLamports, backerCount: credited,
+      collectSig: collectSig ?? undefined, drainSig,
     };
   }
 
   return {
     ok: true,
     collectedLamports, platformLamports, backerLamports, backerCount: credited,
-    collectSig, drainSig,
+    collectSig: collectSig ?? undefined, drainSig,
   };
 }
