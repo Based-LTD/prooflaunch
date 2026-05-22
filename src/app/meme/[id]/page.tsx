@@ -1134,17 +1134,10 @@ export default function MemeDetailPage() {
       )}
 
       {/* Genesis Backer Roster — full-width above Backers/Chat for launched memes.
-          Shows post-launch holdings, hold %, realized fees, and live pending fees. */}
-      {isLaunched && (
-        <div className="mt-6">
-          <GenesisBackerRoster
-            backings={backings as any}
-            totalBackingSol={Number(current_backing_sol)}
-            vaultLamports={Number((meme as any).vault_lamports || 0)}
-            hasSubEscrow={!!(meme as any).creator_subescrow_pubkey}
-          />
-        </div>
-      )}
+          Self-contained: fetches /api/memes/[id] for the on-chain-enriched
+          backings (current_tokens, vault_lamports) every 30s. The page's
+          existing realtime backings subscription doesn't carry on-chain data. */}
+      {isLaunched && <div className="mt-6"><GenesisBackerRoster memeId={meme.id} /></div>}
 
       {/* Backers & Chat Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">

@@ -1,7 +1,6 @@
 'use client';
 
-import { FC, useMemo } from 'react';
-import Link from 'next/link';
+import { FC, useEffect, useMemo, useState } from 'react';
 import { Trophy, ExternalLink } from 'lucide-react';
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -20,34 +19,57 @@ interface Backing {
   claim_tx?: string | null;
 }
 
-interface Props {
+interface EnrichedMeme {
+  current_backing_sol: number;
+  vault_lamports: number;
+  creator_subescrow_pubkey: string | null;
   backings: Backing[];
-  totalBackingSol: number; // meme.current_backing_sol
-  vaultLamports: number;   // on-chain creator-vault total (BC + AMM wSOL)
-  hasSubEscrow: boolean;   // false for pre-P2 memes (fees not backer-distributable)
+}
+
+interface Props {
+  memeId: string;
 }
 
 /**
- * Public roster of every Genesis Backer (the 2-8 wallets that filled
+ * Public roster of every Genesis Backer (the wallets that filled
  * a meme's backing slots pre-launch). Shows their stake, slot order,
- * current hold %, realized fees, and live Pending fees. Powered by
- * the enriched /api/memes/[id] payload — no per-row RPC calls from
- * the client.
+ * current hold %, realized fees, and live Pending fees.
+ *
+ * Self-contained: fetches /api/memes/[id] for the enriched data
+ * (current on-chain token balance + vault lamports) every 30s.
+ * Doesn't rely on the page's realtime backings subscription, which
+ * doesn't carry the on-chain enrichment.
  */
-export const GenesisBackerRoster: FC<Props> = ({
-  backings,
-  totalBackingSol,
-  vaultLamports,
-  hasSubEscrow,
-}) => {
+export const GenesisBackerRoster: FC<Props> = ({ memeId }) => {
+  const [data, setData] = useState<EnrichedMeme | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/memes/${memeId}`);
+        if (!res.ok) return;
+        const j = await res.json();
+        if (!cancelled) setData(j.meme);
+      } catch {}
+    };
+    load();
+    const interval = setInterval(load, 30000); // refresh every 30s for live Pending
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [memeId]);
+
   // Only show distributed backings (post-launch holdings). If a meme
   // hasn't launched, this component should not be rendered.
   const distributed = useMemo(
-    () => backings.filter((b) => b.status === 'distributed').sort((a, b) => a.slot_number - b.slot_number),
-    [backings],
+    () => (data?.backings || []).filter((b) => b.status === 'distributed').sort((a, b) => a.slot_number - b.slot_number),
+    [data],
   );
 
-  if (distributed.length === 0) return null;
+  if (!data || distributed.length === 0) return null;
+
+  const totalBackingSol = Number(data.current_backing_sol);
+  const vaultLamports = Number(data.vault_lamports || 0);
+  const hasSubEscrow = !!data.creator_subescrow_pubkey;
 
   return (
     <div className="border border-[var(--border)] bg-[var(--card)]">
