@@ -1,7 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 
-// GET /api/memes/[id] - Get a single meme with backings
+const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+
+// Constants needed to compute the meme's current on-chain creator-vault
+// balance (powers the Genesis Backer Roster's "Pending" column).
+const PUMP_PROGRAM_ID = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
+const PUMP_AMM_PROGRAM_ID = new PublicKey('pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA');
+const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+
+/**
+ * Read the meme's current on-chain creator-vault balance in lamports
+ * (BC + AMM combined). Pre-P2 memes return 0 — their fees route to
+ * shared escrow as platform revenue, not backer-distributable.
+ */
+async function readVaultLamports(conn: Connection, subEscrowPubkey: string | null): Promise<number> {
+  if (!subEscrowPubkey) return 0;
+  try {
+    const subPk = new PublicKey(subEscrowPubkey);
+    const [bcVault] = PublicKey.findProgramAddressSync(
+      [Buffer.from('creator-vault'), subPk.toBuffer()],
+      PUMP_PROGRAM_ID,
+    );
+    const [ammAuthority] = PublicKey.findProgramAddressSync(
+      [Buffer.from('creator_vault'), subPk.toBuffer()],
+      PUMP_AMM_PROGRAM_ID,
+    );
+    const ammWsolAta = await getAssociatedTokenAddress(WSOL_MINT, ammAuthority, true);
+    const [bcBal, ammAtaInfo] = await Promise.all([
+      conn.getBalance(bcVault),
+      conn.getAccountInfo(ammWsolAta),
+    ]);
+    let ammWsolLamports = 0;
+    if (ammAtaInfo) {
+      ammWsolLamports = Number(ammAtaInfo.data.readBigUInt64LE(64));
+    }
+    return bcBal + ammWsolLamports;
+  } catch {
+    return 0;
+  }
+}
+
+// GET /api/memes/[id] - Get a single meme with backings + on-chain enrichment
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -28,25 +70,99 @@ export async function GET(
     // table (NOT encrypted_pool_key) and merge them in.
     const { data: poolFields } = await supabase
       .from('memes')
-      .select('pool_wallet, pool_token_balance')
+      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address')
       .eq('id', id)
       .single();
 
-    // Get backings for this meme. Select only client-safe columns so a
-    // legacy burner key column (if it still exists on the table) can
-    // never be serialized to the client.
-    const { data: backings, error: backingsError } = await supabase
+    // Get backings for this meme. Now includes both 'confirmed' (still
+    // pre-launch) AND 'distributed' (post-launch holdings) so the meme
+    // detail page can show its Genesis Backer Roster post-launch.
+    // Withdrawn/refunded backings are excluded.
+    type BackingRow = {
+      id: string;
+      meme_id: string;
+      backer_wallet: string;
+      amount_sol: number;
+      status: string;
+      created_at: string;
+      claim_tokens: string | number | null;
+      claim_tx: string | null;
+      claimed_at: string | null;
+      tokens_received: string | number | null;
+      claimable_fees_sol: number | null;
+      total_claimed_sol: number | null;
+      slot_number: number;
+    };
+    const { data: rawBackings, error: backingsError } = await supabase
       .from('backings')
       .select(
         'id, meme_id, backer_wallet, amount_sol, status, created_at, ' +
-          'claim_tokens, claim_tx, claimed_at, tokens_received'
+          'claim_tokens, claim_tx, claimed_at, tokens_received, ' +
+          'claimable_fees_sol, total_claimed_sol, slot_number'
       )
       .eq('meme_id', id)
-      .eq('status', 'confirmed')
-      .order('created_at', { ascending: false });
+      .in('status', ['confirmed', 'distributed'])
+      .order('slot_number', { ascending: true });
+    const backings = (rawBackings as unknown as BackingRow[] | null) ?? [];
 
     if (backingsError) {
       console.error('Backings fetch error:', backingsError);
+    }
+
+    // For launched memes: enrich distributed backings with their current
+    // on-chain token balance (so the UI can compute and show hold %).
+    // Also read the meme's current creator-vault balance so the client
+    // can compute each backer's live "Pending" share without making
+    // additional RPC calls.
+    let vaultLamports = 0;
+    let enrichedBackings = backings || [];
+    const mintAddress = poolFields?.mint_address;
+    if (meme.status === 'live' && mintAddress) {
+      const conn = new Connection(RPC_URL, 'confirmed');
+      const mintPk = new PublicKey(mintAddress);
+
+      // Determine token program (Token-2022 vs SPL)
+      let tokenProgram = TOKEN_PROGRAM_ID;
+      try {
+        const mintInfo = await conn.getAccountInfo(mintPk);
+        if (mintInfo?.owner?.equals(TOKEN_2022_PROGRAM_ID)) {
+          tokenProgram = TOKEN_2022_PROGRAM_ID;
+        }
+      } catch {}
+
+      // Read every distributed backer's current ATA balance in parallel,
+      // plus the meme-level vault balance. One Promise.all batch.
+      const distributedBackings = backings.filter(b => b.status === 'distributed');
+      const ataPromises = distributedBackings.map(async (b) => {
+        try {
+          const ata = await getAssociatedTokenAddress(
+            mintPk,
+            new PublicKey(b.backer_wallet),
+            true,
+            tokenProgram,
+          );
+          const info = await conn.getAccountInfo(ata);
+          if (!info) return { id: b.id, current_tokens: '0' };
+          // amount is at bytes 64..72 in both SPL Token and Token-2022 account layouts
+          const amount = info.data.readBigUInt64LE(64);
+          return { id: b.id, current_tokens: amount.toString() };
+        } catch {
+          return { id: b.id, current_tokens: '0' };
+        }
+      });
+
+      const [ataResults, vaultLamportsResult] = await Promise.all([
+        Promise.all(ataPromises),
+        readVaultLamports(conn, poolFields?.creator_subescrow_pubkey ?? null),
+      ]);
+
+      const currentByBackingId = new Map(ataResults.map(r => [r.id, r.current_tokens]));
+      enrichedBackings = backings.map((b) =>
+        b.status === 'distributed'
+          ? { ...b, current_tokens: currentByBackingId.get(b.id) ?? '0' }
+          : b
+      );
+      vaultLamports = vaultLamportsResult;
     }
 
     return NextResponse.json({
@@ -54,7 +170,9 @@ export async function GET(
         ...meme,
         pool_wallet: poolFields?.pool_wallet ?? null,
         pool_token_balance: poolFields?.pool_token_balance ?? null,
-        backings: backings || [],
+        creator_subescrow_pubkey: poolFields?.creator_subescrow_pubkey ?? null,
+        vault_lamports: vaultLamports,
+        backings: enrichedBackings,
       },
     });
   } catch (error) {

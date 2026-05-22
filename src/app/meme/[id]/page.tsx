@@ -23,6 +23,7 @@ import {
 import Link from 'next/link';
 import { MemeChat } from '@/components/MemeChat';
 import { BackersList } from '@/components/BackersList';
+import { GenesisBackerRoster } from '@/components/GenesisBackerRoster';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ClaimRewards } from '@/components/ClaimRewards';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
@@ -1132,21 +1133,39 @@ export default function MemeDetailPage() {
         </div>
       )}
 
+      {/* Genesis Backer Roster — full-width above Backers/Chat for launched memes.
+          Shows post-launch holdings, hold %, realized fees, and live pending fees. */}
+      {isLaunched && (
+        <div className="mt-6">
+          <GenesisBackerRoster
+            backings={backings as any}
+            totalBackingSol={Number(current_backing_sol)}
+            vaultLamports={Number((meme as any).vault_lamports || 0)}
+            hasSubEscrow={!!(meme as any).creator_subescrow_pubkey}
+          />
+        </div>
+      )}
+
       {/* Backers & Chat Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        {/* Backers List */}
-        <BackersList
-          backings={backings}
-          totalBacking={Number(current_backing_sol)}
-          currentWallet={publicKey?.toBase58()}
-          canWithdraw={isProving}
-          onWithdraw={requestWithdraw}
-          withdrawing={withdrawing}
-          withdrawStatus={withdrawStatus}
-        />
+        {/* Pre-launch BackersList (slot-filling UX) — hidden post-launch
+            since GenesisBackerRoster above shows the richer launched view. */}
+        {!isLaunched && (
+          <BackersList
+            backings={backings}
+            totalBacking={Number(current_backing_sol)}
+            currentWallet={publicKey?.toBase58()}
+            canWithdraw={isProving}
+            onWithdraw={requestWithdraw}
+            withdrawing={withdrawing}
+            withdrawStatus={withdrawStatus}
+          />
+        )}
 
-        {/* Chat */}
-        <MemeChat memeId={meme.id} />
+        {/* Chat — spans full width post-launch since roster moved up */}
+        <div className={isLaunched ? 'lg:col-span-2' : ''}>
+          <MemeChat memeId={meme.id} />
+        </div>
       </div>
 
       {/* Confirmation Dialogs */}
