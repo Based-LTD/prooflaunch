@@ -299,37 +299,61 @@ export async function collectAndCreditFees(
   const conn = new Connection(RPC_URL, 'confirmed');
   const sdk = new OnlinePumpSdk(conn);
 
-  // Vault balance check (skip if dust)
+  // Check BOTH the BC creator-vault AND the sub-escrow wallet itself.
+  // Normal case: vault has fresh fees, sub-escrow is empty → collect + drain.
+  // Recovery case: vault is empty (collect already happened), sub-escrow
+  //   has orphaned SOL from a previous half-completed run (drain failed,
+  //   or timing race made the immediate drain fail) → skip collect, just
+  //   drain + credit. Fixes the bug where a transient RPC propagation
+  //   delay between collect and drain leaves SOL stuck in sub-escrow
+  //   forever, because the next cron tick would see vault=empty and skip.
   const vaultBN = await sdk.getCreatorVaultBalance(subKp.publicKey);
   const vaultLamports = Number(vaultBN.toString());
-  if (vaultLamports < COLLECT_THRESHOLD_LAMPORTS) {
+  const escrow = loadEscrow();
+  const subBalancePre = await conn.getBalance(subKp.publicKey);
+  const ORPHANED_FLOOR = COLLECT_THRESHOLD_LAMPORTS; // same threshold
+
+  if (vaultLamports < COLLECT_THRESHOLD_LAMPORTS && subBalancePre < ORPHANED_FLOOR) {
     return { ok: true, skipped: `vault ${vaultLamports} lamports below threshold ${COLLECT_THRESHOLD_LAMPORTS}` };
   }
 
-  const escrow = loadEscrow();
-
-  // Step A: collect_creator_fee. creator is NOT a signer (verified in
-  // IDL); anyone can poke. Escrow as feePayer (~5k lamports).
-  let collectSig: string;
-  try {
-    const collectIxs = await sdk.collectCoinCreatorFeeInstructions(subKp.publicKey, escrow.publicKey);
-    const tx = new Transaction().add(...collectIxs);
-    tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-    tx.feePayer = escrow.publicKey;
-    collectSig = await conn.sendTransaction(tx, [escrow]);
-    await conn.confirmTransaction(collectSig, 'confirmed');
-    log('reconcile_recovered', { detail: { stage: 'collect_creator_fee', sig: collectSig, vaultLamports } });
-  } catch (e) {
-    return { ok: false, error: `collect failed: ${e instanceof Error ? e.message : String(e)}` };
+  // Step A: collect_creator_fee — ONLY if there's something in the vault.
+  // creator is NOT a signer (verified in IDL); anyone can poke. Escrow
+  // as feePayer (~5k lamports).
+  let collectSig: string | null = null;
+  if (vaultLamports >= COLLECT_THRESHOLD_LAMPORTS) {
+    try {
+      const collectIxs = await sdk.collectCoinCreatorFeeInstructions(subKp.publicKey, escrow.publicKey);
+      const tx = new Transaction().add(...collectIxs);
+      tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+      tx.feePayer = escrow.publicKey;
+      collectSig = await conn.sendTransaction(tx, [escrow]);
+      await conn.confirmTransaction(collectSig, 'confirmed');
+      log('reconcile_recovered', { detail: { stage: 'collect_creator_fee', sig: collectSig, vaultLamports } });
+    } catch (e) {
+      return { ok: false, error: `collect failed: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  } else {
+    log('reconcile_recovered', { detail: { stage: 'recovery_drain', subBalancePre, vaultLamports, note: 'orphaned sub-escrow SOL from prior run, draining without re-collect' } });
   }
 
   // Step B: drain sub-escrow → shared escrow, drain-to-zero (sub-escrow
   // ends at exactly 0; same Solana-rent-floor rule that bit refundFromPool).
+  // Retry the balance read up to 5 times with 1s delay to handle the
+  // collect→drain timing race where RPC nodes haven't yet propagated
+  // the new sub-escrow balance. Each loop iteration also re-reads the
+  // balance, so a slow-confirming collect won't trick us into thinking
+  // sub-escrow is empty.
   const BASE_FEE = 5000;
-  const subBalance = await conn.getBalance(subKp.publicKey);
+  let subBalance = 0;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    subBalance = await conn.getBalance(subKp.publicKey);
+    if (subBalance > BASE_FEE) break;
+    if (attempt < 4) await new Promise(r => setTimeout(r, 1000));
+  }
   const transferLamports = subBalance - BASE_FEE;
   if (transferLamports <= 0) {
-    return { ok: false, error: `sub-escrow balance ${subBalance} too low for drain (collectSig ${collectSig}; investigate manually)` };
+    return { ok: false, error: `sub-escrow balance ${subBalance} too low for drain (collectSig ${collectSig ?? 'none — recovery path'}; investigate manually)` };
   }
 
   let drainSig: string;
@@ -343,13 +367,12 @@ export async function collectAndCreditFees(
     await conn.confirmTransaction(drainSig, 'confirmed');
     log('reconcile_recovered', { detail: { stage: 'drain_subescrow_to_escrow', sig: drainSig, lamports: transferLamports } });
   } catch (e) {
-    // Collect succeeded but drain failed — SOL is in sub-escrow safely.
-    // Next cron tick: vault=0 (nothing to collect) but sub-escrow still
-    // has it; would need a recovery path. For v1: surface as error so
-    // it's visible; manual sweep recoverable via the same primitive.
+    // Drain failed but collect succeeded (or this was a recovery run).
+    // SOL is in sub-escrow safely. Next cron tick will catch it via the
+    // recovery branch above (vault empty + sub-escrow has SOL → drain).
     return {
       ok: false,
-      error: `drain failed after collect: ${e instanceof Error ? e.message : String(e)} — sub-escrow holds ${subBalance} lamports (collectSig ${collectSig})`,
+      error: `drain failed: ${e instanceof Error ? e.message : String(e)} — sub-escrow holds ${subBalance} lamports (collectSig ${collectSig ?? 'recovery'})`,
     };
   }
 
