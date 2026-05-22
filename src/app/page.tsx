@@ -127,6 +127,9 @@ export default function Home() {
             <Link href="/docs" className="btn-secondary inline-flex items-center justify-center gap-2">
               [?] Read Docs
             </Link>
+            <Link href="/roadmap" className="btn-secondary inline-flex items-center justify-center gap-2">
+              [→] Roadmap
+            </Link>
           </div>
         </div>
       </div>

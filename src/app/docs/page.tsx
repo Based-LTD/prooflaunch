@@ -509,6 +509,12 @@ export default function DocsPage() {
             Submit a Meme
           </Link>
         </div>
+        <p className="text-xs font-mono text-[var(--muted)] mt-6">
+          Curious what we&apos;re building next?{' '}
+          <Link href="/roadmap" className="text-[var(--accent)] hover:underline">
+            See the roadmap &rarr;
+          </Link>
+        </p>
       </div>
     </div>
   );

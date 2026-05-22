@@ -1,0 +1,192 @@
+'use client';
+
+import Link from 'next/link';
+import {
+  ArrowLeft,
+  CheckCircle,
+  Hammer,
+  Compass,
+  Rocket,
+  Shield,
+  Coins,
+  Users,
+  TrendingUp,
+  Award,
+  Activity,
+  Eye,
+  Trophy,
+  Signal,
+  MessageSquare,
+  Bell,
+} from 'lucide-react';
+
+// /roadmap — what's shipped, what's next, what we're exploring.
+// Deliberately no dates. The roadmap is a direction, not a contract.
+// Updated when reality changes, not on a schedule.
+
+const SHIPPED = [
+  { icon: Rocket, title: 'Pooled atomic launches', desc: 'createV2 + buy in a single transaction. Dev holds 0%. No sniper gap. Every backer enters at the identical price. Contract address ends in "…pooL" so anyone can verify it\'s a real Proof launch.' },
+  { icon: Coins, title: 'Per-coin trading fee distribution', desc: 'Every new meme gets its own on-chain creator vault. The platform collects creator fees hourly, splits 10% / 90%, and credits each backer\'s share to their wallet — automatic, on-chain verifiable, no claim window pressure.' },
+  { icon: Shield, title: 'Refund protection', desc: '3-day backing deadline: if a meme\'s slots don\'t fill within the creator\'s window, every backer is automatically refunded 100% — no fee, no support tickets, no human in the loop.' },
+  { icon: TrendingUp, title: 'Proving Grounds', desc: 'Browse every meme currently in the backing or funded phase. Funded memes surface first so backers can see what\'s about to launch.' },
+  { icon: MessageSquare, title: 'Per-meme community chat', desc: 'Every meme has its own real-time chat room where backers and the creator coordinate before launch.' },
+];
+
+const BUILDING = [
+  { icon: Activity, title: 'Live activity feed per meme', desc: 'See backing events, launch milestones, fee distributions, and refund activity in real-time on each meme page. Transparency by default.' },
+  { icon: Users, title: 'Genesis backer roster', desc: 'Every launched meme shows all of its original backers (2–8 depending on slot count), their stakes, their current hold percentages, and their realized + unrealized fees. Public proof of who showed up early.' },
+  { icon: Bell, title: 'Live fee accrual counter', desc: 'On your portfolio page, watch your trading fee earnings tick up in real-time as the cron credits new fees. The data is already in the database — just needs prominent UI.' },
+  { icon: Award, title: 'Creator profile pages', desc: 'Surface each creator\'s lifetime stats (submissions, successful launches, reputation score) from the database tracking that\'s already in place. Backers can vet creators on their on-platform record before committing.' },
+  { icon: Coins, title: 'Lower minimum backing', desc: 'Reduce the floor below 0.1 SOL after launch traffic stabilizes, so smaller backers can participate in any pool.' },
+  { icon: Award, title: 'PROOF holder perks', desc: 'Tier-based platform fee discounts for PROOF holders: submission fee waived/reduced, lower withdrawal fee, and a holder badge in meme chat. Loyalty rewarded without ever gating the permissionless submission path — non-holders still launch normally, holders just pay less.' },
+  { icon: Coins, title: 'PROOF staking → revenue share', desc: 'Stake PROOF, earn a portion of the platform\'s 10% cut from every meme launched on Proof Launch. Funded entirely by real platform fees (no inflation). Reflexive flywheel: more launches → more yield → more reasons to hold PROOF → more eyes on the platform.' },
+];
+
+const EXPLORING = [
+  { icon: Trophy, title: 'Conviction Score', desc: '% of original genesis backers still holding at any given moment. A signal nobody else can compute, because nobody else knows who the OG backers were.' },
+  { icon: Eye, title: 'Creator track record dashboard', desc: 'An analytics layer on top of the basic creator profile: peak market caps, current holder counts, reputation trends over time, time-to-launch averages. Helps backers vet repeat creators on the data, not just the vibe.' },
+  { icon: Trophy, title: 'Diamond Hands leaderboard', desc: 'Cross-meme reputation for backers who hold longest, biggest, across multiple successful launches. Soulbound on-chain reputation.' },
+  { icon: Shield, title: 'Pool atomicity proof badge', desc: 'Each launched coin\'s detail page links directly back to the on-chain createV2+buy bundle. Visual "verified Proof launch" stamp that traders can click to confirm authenticity.' },
+  { icon: Signal, title: 'Momentum signals (informational)', desc: 'Volume sparklines, recent trade size, holder count deltas on each launched meme. Information-only — never push notifications or alert sounds. We are not a trading terminal.' },
+  { icon: Users, title: 'Torch-passing launch authority', desc: 'If a funded meme isn\'t launched within a reasonable window, the right to launch passes sequentially to backers in commitment order. Means a meme can still launch even if the original creator vanishes — refund becomes a last-resort safety net rather than the only outcome. Reinforces the brand promise: the pool always becomes a token.' },
+  { icon: MessageSquare, title: 'Persistent post-launch chat', desc: 'Keep the meme chat alive after launch for the coin\'s lifetime — a permanent rallying point for holders.' },
+  { icon: Bell, title: 'Notification preferences', desc: 'Optional email or Telegram alerts for specific events you care about: fee credits crossing a threshold, momentum spikes on coins you back, refunds triggered. Opt-in only.' },
+];
+
+interface RowProps {
+  icon: React.ElementType;
+  title: string;
+  desc: string;
+  accentColor: string;
+}
+
+function Row({ icon: Icon, title, desc, accentColor }: RowProps) {
+  return (
+    <div className="flex items-start gap-4 p-4 bg-[var(--background)] border-2 border-[var(--border)] hover:border-[var(--accent)] transition-colors">
+      <Icon className={`w-6 h-6 ${accentColor} flex-shrink-0 mt-0.5`} />
+      <div>
+        <h3 className="font-bold mb-1 uppercase tracking-wide">{title}</h3>
+        <p className="text-sm text-[var(--muted)]">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+export default function RoadmapPage() {
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+      {/* Back link */}
+      <Link
+        href="/"
+        className="inline-flex items-center gap-2 text-[var(--muted)] hover:text-[var(--accent)] transition-colors text-xs font-mono uppercase tracking-widest"
+      >
+        <ArrowLeft className="w-3 h-3" />
+        [&lt;] Back
+      </Link>
+
+      {/* Header */}
+      <div className="border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <Compass className="w-7 h-7 text-[var(--accent)]" />
+          <h1 className="text-3xl font-black uppercase tracking-tight">Roadmap</h1>
+        </div>
+        <p className="text-[var(--foreground)]/80 leading-relaxed">
+          What we&apos;ve shipped, what we&apos;re building next, and the ideas we&apos;re considering.
+          No dates — this is a direction, not a contract. Reality changes the order more often than calendars do.
+        </p>
+        <div className="border-l-4 border-[var(--accent-gold)] bg-[var(--background)] p-4">
+          <h2 className="font-bold text-[var(--accent-gold)] mb-2 uppercase tracking-wide">
+            How we choose what to build
+          </h2>
+          <p className="text-sm text-[var(--muted)] leading-relaxed">
+            We build what only Proof Launch can build — features that flow from the pooled-atomic
+            model and that no trading terminal, screener, or copycat launchpad can replicate.
+            We don&apos;t try to be a trading terminal. We don&apos;t add casino-style alerts.
+            We don&apos;t ship features that contradict the brand: dev holds 0%, same price for everyone,
+            commitments are real.
+          </p>
+        </div>
+      </div>
+
+      {/* SHIPPED */}
+      <section className="border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <CheckCircle className="w-6 h-6 text-[var(--success)]" />
+          <h2 className="text-2xl font-black uppercase tracking-tight text-[var(--success)]">
+            Shipped
+          </h2>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] ml-auto">
+            // LIVE_TODAY
+          </span>
+        </div>
+        <p className="text-sm text-[var(--muted)] leading-relaxed">
+          Everything below is live in production, on Solana mainnet, verifiable on-chain.
+        </p>
+        <div className="space-y-3">
+          {SHIPPED.map((item) => (
+            <Row key={item.title} {...item} accentColor="text-[var(--success)]" />
+          ))}
+        </div>
+      </section>
+
+      {/* BUILDING NEXT */}
+      <section className="border-2 border-[var(--warning)] bg-[var(--card)] p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <Hammer className="w-6 h-6 text-[var(--warning)]" />
+          <h2 className="text-2xl font-black uppercase tracking-tight text-[var(--warning)]">
+            Building Next
+          </h2>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] ml-auto">
+            // COMMITTED
+          </span>
+        </div>
+        <p className="text-sm text-[var(--muted)] leading-relaxed">
+          Committed work. Order may shift based on what real launches reveal, but each item below is something we&apos;ve decided to build.
+        </p>
+        <div className="space-y-3">
+          {BUILDING.map((item) => (
+            <Row key={item.title} {...item} accentColor="text-[var(--warning)]" />
+          ))}
+        </div>
+      </section>
+
+      {/* EXPLORING */}
+      <section className="border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <Compass className="w-6 h-6 text-[var(--accent)]" />
+          <h2 className="text-2xl font-black uppercase tracking-tight text-[var(--accent)]">
+            Exploring
+          </h2>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] ml-auto">
+            // EVALUATING
+          </span>
+        </div>
+        <p className="text-sm text-[var(--muted)] leading-relaxed">
+          Ideas under consideration. Some came from the community, some from our own brainstorms.
+          We&apos;ll either commit them, refine them into something more on-brand, or set them aside.
+          Not promises — possibilities.
+        </p>
+        <div className="space-y-3">
+          {EXPLORING.map((item) => (
+            <Row key={item.title} {...item} accentColor="text-[var(--accent)]" />
+          ))}
+        </div>
+      </section>
+
+      {/* Community footer */}
+      <section className="border-2 border-[var(--accent-gold)] bg-[var(--card)] p-6 space-y-3">
+        <div className="flex items-center gap-3">
+          <Users className="w-6 h-6 text-[var(--accent-gold)]" />
+          <h2 className="text-2xl font-black uppercase tracking-tight">Suggest Something</h2>
+        </div>
+        <p className="text-sm text-[var(--muted)] leading-relaxed">
+          Got an idea that would make Proof Launch better? Drop it in the Telegram or tag us on X.
+          We read every suggestion. Not every one becomes a feature — but every one shapes how we think.
+        </p>
+        <p className="text-xs font-mono uppercase tracking-widest text-[var(--muted)]">
+          &gt; The community has shipped more roadmap items here than any single product manager could.
+        </p>
+      </section>
+    </div>
+  );
+}
