@@ -392,7 +392,7 @@ export async function collectAndCreditFees(
       ok: true,
       skipped: 'no distributed backings to credit — full amount retained as platform revenue',
       collectedLamports, platformLamports: collectedLamports, backerLamports: 0, backerCount: 0,
-      collectSig, drainSig,
+      collectSig: collectSig ?? undefined, drainSig,
     };
   }
 
