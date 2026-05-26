@@ -37,99 +37,135 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Get all claimable fees for this wallet.
-    // Track meme_id per source so the audit row in fee_claims (which has
-    // a NOT NULL FK to memes) can be written per-source — this is what
-    // makes claim:all (no meme_id in the body) work across multiple memes.
-    let totalClaimable = 0;
-    const claimSources: Array<{ type: 'backer' | 'creator'; id: string; memeId: string; amount: number }> = [];
+    // ── TOCTOU-safe claim flow ───────────────────────────────────────
+    // Previous flow read claimable, sent SOL, then zeroed out — concurrent
+    // requests could all observe the same pre-zero value and double-pay.
+    //
+    // New flow uses optimistic-lock atomic UPDATEs:
+    //   1. Read current claimable (just to find which rows exist)
+    //   2. Atomically zero each row WHERE claimable_fees_sol = observed value
+    //      → only ONE concurrent request's UPDATE matches; the rest see 0 rows
+    //   3. Send SOL only for the amount we actually claimed (not the read estimate)
+    //   4. On SOL failure: REVERT — credit the claimable back to each row
+    //
+    // The `.eq('claimable_fees_sol', oldClaimable)` clause is the lock. If a
+    // racing request beat us to zeroing, our UPDATE matches no rows and we
+    // skip that source. Net effect: each balance can only be claimed once,
+    // regardless of concurrency level.
 
-    // Check backer rewards
+    // Step 1: read what's available (this read can be stale; we re-check atomically below)
+    type Source = { type: 'backer' | 'creator'; id: string; memeId: string; observedAmount: number; oldTotalClaimed: number };
+    const observed: Source[] = [];
+
     const backingsQuery = supabase
       .from('backings')
-      .select('id, meme_id, claimable_fees_sol')
+      .select('id, meme_id, claimable_fees_sol, total_claimed_sol')
       .eq('backer_wallet', wallet_address)
       .gt('claimable_fees_sol', 0);
-
-    if (meme_id) {
-      backingsQuery.eq('meme_id', meme_id);
-    }
-
+    if (meme_id) backingsQuery.eq('meme_id', meme_id);
     const { data: backings } = await backingsQuery;
-
-    if (backings) {
-      for (const backing of backings) {
-        const amount = Number(backing.claimable_fees_sol);
-        if (amount > 0) {
-          totalClaimable += amount;
-          claimSources.push({ type: 'backer', id: backing.id, memeId: backing.meme_id, amount });
-        }
-      }
+    for (const b of backings || []) {
+      const amount = Number(b.claimable_fees_sol);
+      if (amount > 0) observed.push({
+        type: 'backer', id: b.id, memeId: b.meme_id, observedAmount: amount,
+        oldTotalClaimed: Number(b.total_claimed_sol || 0),
+      });
     }
 
-    // Check creator rewards (if this wallet is a creator)
     const creatorQuery = supabase
       .from('memes')
-      .select('id, creator_claimable_fees_sol')
+      .select('id, creator_claimable_fees_sol, creator_total_claimed_sol')
       .eq('creator_wallet', wallet_address)
       .gt('creator_claimable_fees_sol', 0);
-
-    if (meme_id) {
-      creatorQuery.eq('id', meme_id);
-    }
-
+    if (meme_id) creatorQuery.eq('id', meme_id);
     const { data: creatorMemes } = await creatorQuery;
-
-    if (creatorMemes) {
-      for (const meme of creatorMemes) {
-        const amount = Number(meme.creator_claimable_fees_sol);
-        if (amount > 0) {
-          totalClaimable += amount;
-          claimSources.push({ type: 'creator', id: meme.id, memeId: meme.id, amount });
-        }
-      }
+    for (const m of creatorMemes || []) {
+      const amount = Number(m.creator_claimable_fees_sol);
+      if (amount > 0) observed.push({
+        type: 'creator', id: m.id, memeId: m.id, observedAmount: amount,
+        oldTotalClaimed: Number(m.creator_total_claimed_sol || 0),
+      });
     }
 
-    if (totalClaimable <= 0) {
+    if (observed.length === 0) {
       return NextResponse.json({ error: 'No rewards to claim' }, { status: 400 });
     }
 
-    // Minimum claim amount (to cover tx fees)
-    const MIN_CLAIM = 0.001; // 0.001 SOL
+    // Step 2: atomically zero each source. Track what we actually won.
+    type Claimed = { type: 'backer' | 'creator'; id: string; memeId: string; amount: number; oldTotalClaimed: number };
+    const claimed: Claimed[] = [];
+
+    for (const src of observed) {
+      if (src.type === 'backer') {
+        const { data: updated } = await supabase
+          .from('backings')
+          .update({
+            claimable_fees_sol: 0,
+            total_claimed_sol: src.oldTotalClaimed + src.observedAmount,
+          })
+          .eq('id', src.id)
+          .eq('claimable_fees_sol', src.observedAmount)  // ← OPTIMISTIC LOCK
+          .select('id');
+        if (updated && updated.length > 0) {
+          claimed.push({ type: 'backer', id: src.id, memeId: src.memeId, amount: src.observedAmount, oldTotalClaimed: src.oldTotalClaimed });
+        }
+        // If no rows matched, another request already claimed this row; skip.
+      } else {
+        const { data: updated } = await supabase
+          .from('memes')
+          .update({
+            creator_claimable_fees_sol: 0,
+            creator_total_claimed_sol: src.oldTotalClaimed + src.observedAmount,
+          })
+          .eq('id', src.id)
+          .eq('creator_claimable_fees_sol', src.observedAmount)  // ← OPTIMISTIC LOCK
+          .select('id');
+        if (updated && updated.length > 0) {
+          claimed.push({ type: 'creator', id: src.id, memeId: src.memeId, amount: src.observedAmount, oldTotalClaimed: src.oldTotalClaimed });
+        }
+      }
+    }
+
+    const totalClaimable = claimed.reduce((sum, c) => sum + c.amount, 0);
+    if (totalClaimable <= 0) {
+      // Every source was claimed by a racing request between our read and our UPDATE.
+      return NextResponse.json({ error: 'Rewards already claimed (concurrent request)' }, { status: 409 });
+    }
+
+    const MIN_CLAIM = 0.001;
     if (totalClaimable < MIN_CLAIM) {
+      // Revert the atomic claims since we won't send the SOL
+      await revertClaims(supabase, claimed);
       return NextResponse.json(
         { error: `Minimum claim amount is ${MIN_CLAIM} SOL. Current: ${totalClaimable.toFixed(6)} SOL` },
         { status: 400 }
       );
     }
 
-    // Create one fee_claims audit row per source (each row carries its
-    // own meme_id — fee_claims.meme_id is NOT NULL). All rows share the
-    // same eventual claim_tx, so a single SOL transfer pays them all.
+    // Step 3: create fee_claims audit rows tied to the amounts we actually claimed
     const { data: claimRows, error: claimError } = await supabase
       .from('fee_claims')
       .insert(
-        claimSources.map((s) => ({
-          meme_id: s.memeId,
+        claimed.map((c) => ({
+          meme_id: c.memeId,
           wallet_address,
-          amount_sol: s.amount,
+          amount_sol: c.amount,
           status: 'processing',
         }))
       )
       .select();
-
     if (claimError || !claimRows || claimRows.length === 0) {
-      throw new Error(`Failed to create claim: ${claimError?.message || 'no rows inserted'}`);
+      await revertClaims(supabase, claimed);
+      throw new Error(`Failed to create claim row: ${claimError?.message || 'no rows inserted'}`);
     }
     const claimRowIds = claimRows.map((r) => r.id);
 
-    // Send SOL from escrow to claimer
+    // Step 4: send SOL
     const connection = new Connection(RPC_URL, 'confirmed');
     const escrowWallet = getEscrowWallet();
     const recipientPubkey = new PublicKey(wallet_address);
 
-    // Deduct small fee for transaction cost
-    const TX_FEE = 0.000005; // ~5000 lamports
+    const TX_FEE = 0.000005;
     const amountToSend = totalClaimable - TX_FEE;
 
     const transaction = new Transaction().add(
@@ -139,7 +175,6 @@ export async function POST(request: NextRequest) {
         lamports: Math.floor(amountToSend * LAMPORTS_PER_SOL),
       })
     );
-
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = escrowWallet.publicKey;
@@ -148,15 +183,14 @@ export async function POST(request: NextRequest) {
     try {
       txSignature = await connection.sendTransaction(transaction, [escrowWallet]);
     } catch (e) {
-      // Mark all audit rows failed so we don't leave stale 'processing' state
-      await supabase
-        .from('fee_claims')
-        .update({ status: 'failed' })
-        .in('id', claimRowIds);
+      // On-chain send failed — REVERT the atomic claims so the user can retry,
+      // and mark the audit rows failed.
+      await supabase.from('fee_claims').update({ status: 'failed' }).in('id', claimRowIds);
+      await revertClaims(supabase, claimed);
       throw e;
     }
 
-    // Mark all audit rows completed under the same claim_tx
+    // Step 5: mark audit rows completed
     await supabase
       .from('fee_claims')
       .update({
@@ -165,39 +199,6 @@ export async function POST(request: NextRequest) {
         completed_at: new Date().toISOString(),
       })
       .in('id', claimRowIds);
-
-    // Zero out the claimed amounts
-    for (const source of claimSources) {
-      if (source.type === 'backer') {
-        const { data: currentBacking } = await supabase
-          .from('backings')
-          .select('total_claimed_sol')
-          .eq('id', source.id)
-          .single();
-
-        await supabase
-          .from('backings')
-          .update({
-            claimable_fees_sol: 0,
-            total_claimed_sol: (Number(currentBacking?.total_claimed_sol) || 0) + source.amount,
-          })
-          .eq('id', source.id);
-      } else {
-        const { data: currentMeme } = await supabase
-          .from('memes')
-          .select('creator_total_claimed_sol')
-          .eq('id', source.id)
-          .single();
-
-        await supabase
-          .from('memes')
-          .update({
-            creator_claimable_fees_sol: 0,
-            creator_total_claimed_sol: (Number(currentMeme?.creator_total_claimed_sol) || 0) + source.amount,
-          })
-          .eq('id', source.id);
-      }
-    }
 
     return NextResponse.json({
       success: true,
@@ -213,6 +214,45 @@ export async function POST(request: NextRequest) {
       { error: error instanceof Error ? error.message : 'Claim failed' },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Revert atomic claim updates if the downstream SOL transfer (or audit
+ * row creation) fails. Restores the claimable_fees_sol balance on each
+ * source so the user can retry.
+ *
+ * NOTE: this is best-effort. If a revert UPDATE itself fails, the worst
+ * case is the user's claimable shows 0 but the SOL never landed — they'd
+ * need manual support. To stop that being silent, we log failures hard.
+ * Cron / reconcile should also detect and re-credit any orphans.
+ */
+async function revertClaims(
+  supabase: ReturnType<typeof createServerClient>,
+  claimed: Array<{ type: 'backer' | 'creator'; id: string; amount: number; oldTotalClaimed: number }>,
+) {
+  for (const c of claimed) {
+    try {
+      if (c.type === 'backer') {
+        await supabase
+          .from('backings')
+          .update({
+            claimable_fees_sol: c.amount,
+            total_claimed_sol: c.oldTotalClaimed,  // restore exact pre-claim value
+          })
+          .eq('id', c.id);
+      } else {
+        await supabase
+          .from('memes')
+          .update({
+            creator_claimable_fees_sol: c.amount,
+            creator_total_claimed_sol: c.oldTotalClaimed,
+          })
+          .eq('id', c.id);
+      }
+    } catch (e) {
+      console.error('[fees/claim] REVERT FAILED — orphan claimable:', c.type, c.id, c.amount, e);
+    }
   }
 }
 
