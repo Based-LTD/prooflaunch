@@ -1,128 +1,155 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { MemeCard } from '@/components/MemeCard';
-import { Flame, TrendingUp, Users, Search, Loader2, ArrowUpDown, SlidersHorizontal, ChevronLeft, ChevronRight, Rocket, Zap } from 'lucide-react';
+import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { useRealtimeMemes } from '@/hooks/useRealtimeMemes';
 import type { Meme } from '@/types/database';
 
-type SortOption = 'newest' | 'progress' | 'ending_soon';
+// Each column can sort independently. The option sets differ because
+// "ending soon" only matters for backing (the deadline is meaningful)
+// and "progress" only applies to columns where slots are still filling.
+type ProvingSort = 'ending_soon' | 'newest' | 'progress';
+type FundedSort = 'newest' | 'oldest';
+type LiveSort = 'newest' | 'oldest';
 
-const ITEMS_PER_PAGE = 20;
+interface MemeWithCount extends Meme {
+  backer_count?: number;
+  progress_percent?: number;
+}
+
+const newestFirst = (a: MemeWithCount, b: MemeWithCount) =>
+  new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+const oldestFirst = (a: MemeWithCount, b: MemeWithCount) =>
+  new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+const endingSoon = (a: MemeWithCount, b: MemeWithCount) =>
+  new Date(a.backing_deadline).getTime() - new Date(b.backing_deadline).getTime();
+const byProgress = (a: MemeWithCount, b: MemeWithCount) => {
+  const aSlots = Number(a.total_slots) || 8;
+  const bSlots = Number(b.total_slots) || 8;
+  const pa = aSlots > 0 ? (Number(a.backer_count) || 0) / aSlots : 0;
+  const pb = bSlots > 0 ? (Number(b.backer_count) || 0) / bSlots : 0;
+  return pb - pa;
+};
 
 export default function Home() {
-  const [filter, setFilter] = useState<'all' | 'backing' | 'live'>('all');
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [showFilters, setShowFilters] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [provingSort, setProvingSort] = useState<ProvingSort>('ending_soon');
+  const [fundedSort, setFundedSort] = useState<FundedSort>('newest');
+  const [liveSort, setLiveSort] = useState<LiveSort>('newest');
+  const [proofPaidOut, setProofPaidOut] = useState<number | null>(null);
 
-  const { memes, loading } = useRealtimeMemes({ status: filter });
+  // Pull every status in one query so the page renders all three columns
+  // in a single round-trip. The realtime hook already streams updates.
+  const { memes, loading } = useRealtimeMemes({ status: 'all' });
 
-  const stats = useMemo(() => {
-    const backingMemes = memes.filter((m: Meme) => m.status === 'backing');
-    const totalBacked = memes.reduce((sum: number, m: Meme) => sum + Number(m.current_backing_sol || 0), 0);
-    const totalBackers = memes.reduce((sum: number, m: any) => sum + (m.backer_count || 0), 0);
-
-    return {
-      activeProving: backingMemes.length,
-      totalBacked,
-      totalBackers,
+  // Fetch the live "PROOF airdropped to holders" total for the ticker.
+  // Quietly fails — if the API is down the chip is hidden rather than
+  // showing a dash that looks broken.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchPaidOut = async () => {
+      try {
+        const r = await fetch('/api/proof/paid-out');
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!cancelled && typeof j.totalPaidOutSol === 'number') {
+          setProofPaidOut(j.totalPaidOutSol);
+        }
+      } catch {}
     };
-  }, [memes]);
+    fetchPaidOut();
+    const id = setInterval(fetchPaidOut, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
-  const filteredMemes = useMemo(() => {
-    let result = memes.filter(meme =>
-      meme.name.toLowerCase().includes(search.toLowerCase()) ||
-       meme.symbol.toLowerCase().includes(search.toLowerCase())
-    );
+  const { proving, funded, live, totals } = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const matchesSearch = (m: Meme) =>
+      !term || m.name.toLowerCase().includes(term) || m.symbol.toLowerCase().includes(term);
 
-    result.sort((a, b) => {
-      // When ALL is selected, float funded memes (slots filled, launch-
-      // ready) to the top — they're the most actionable. The chosen
-      // sortBy still orders within each group.
-      if (filter === 'all') {
-        const af = a.status === 'funded' ? 0 : 1;
-        const bf = b.status === 'funded' ? 0 : 1;
-        if (af !== bf) return af - bf;
-      }
-      switch (sortBy) {
-        case 'progress':
-          const aSlots = Number(a.total_slots) || 8;
-          const bSlots = Number(b.total_slots) || 8;
-          const progressA = aSlots > 0 ? (Number((a as any).backer_count) || 0) / aSlots : 0;
-          const progressB = bSlots > 0 ? (Number((b as any).backer_count) || 0) / bSlots : 0;
-          return progressB - progressA;
-        case 'ending_soon':
-          return new Date(a.backing_deadline).getTime() - new Date(b.backing_deadline).getTime();
-        case 'newest':
-        default:
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
-    });
+    const all = (memes as MemeWithCount[]).filter(matchesSearch);
 
-    return result;
-  }, [memes, search, sortBy, filter]);
+    const provingFn =
+      provingSort === 'ending_soon' ? endingSoon :
+      provingSort === 'progress' ? byProgress :
+      newestFirst;
+    const fundedFn = fundedSort === 'oldest' ? oldestFirst : newestFirst;
+    const liveFn = liveSort === 'oldest' ? oldestFirst : newestFirst;
 
-  const totalPages = Math.ceil(filteredMemes.length / ITEMS_PER_PAGE);
-  const paginatedMemes = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredMemes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredMemes, currentPage]);
+    const proving = all.filter((m) => m.status === 'backing').sort(provingFn);
+    const funded = all.filter((m) => m.status === 'funded' || m.status === 'launching').sort(fundedFn);
+    const live = all.filter((m) => m.status === 'live').sort(liveFn);
 
-  const handleFilterChange = (newFilter: 'all' | 'backing' | 'live') => {
-    setFilter(newFilter);
-    setCurrentPage(1);
-  };
+    // Total counts use the pre-filter set so the hero strip reads the
+    // platform state, not the search results.
+    const allUnfiltered = memes as MemeWithCount[];
+    const totals = {
+      proving: allUnfiltered.filter((m) => m.status === 'backing').length,
+      funded: allUnfiltered.filter((m) => m.status === 'funded' || m.status === 'launching').length,
+      live: allUnfiltered.filter((m) => m.status === 'live').length,
+      backers: allUnfiltered.reduce((s, m) => s + (Number(m.backer_count) || 0), 0),
+      backed: allUnfiltered.reduce((s, m) => s + Number(m.current_backing_sol || 0), 0),
+    };
 
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    setCurrentPage(1);
-  };
-
-  const handleSortChange = (value: SortOption) => {
-    setSortBy(value);
-    setCurrentPage(1);
-  };
-
-  const statsDisplay = [
-    { label: 'Active in Proving', value: stats.activeProving.toString(), icon: Flame, color: 'text-[var(--accent)]' },
-    { label: 'Total Backed', value: `${stats.totalBacked.toFixed(1)} SOL`, icon: TrendingUp, color: 'text-[var(--success)]' },
-    { label: 'Genesis Backers', value: stats.totalBackers.toString(), icon: Users, color: 'text-[var(--warning)]' },
-  ];
+    return { proving, funded, live, totals };
+  }, [memes, search, provingSort, fundedSort, liveSort]);
 
   return (
-    <div className="space-y-6">
-      {/* Hero — terminal block */}
+    <div className="space-y-4 sm:space-y-5">
+      {/* Hero — headline + two-line mechanic + CTAs below + live counts. */}
       <div className="border border-[var(--border)] bg-[var(--card)]">
-        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            // PROOF_LAUNCH.SYS // PROVING_GROUNDS
+            {'// PROOF_LAUNCH.SYS // PROVING_GROUNDS'}
           </span>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-            [ACTIVE]
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+              LAUNCHES ON <span className="text-[var(--accent)]">pump.fun</span>
+            </span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+              [ACTIVE]
+            </span>
+          </div>
         </div>
+        <div className="p-5 sm:p-6">
+          <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-[var(--muted)] mb-2">
+            &gt; SYSTEM
+          </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-mono font-semibold uppercase leading-[1.1] tracking-tight">
+            Launch infrastructure for token teams.<span className="cursor-blink" />
+          </h1>
 
-        <div className="p-6 sm:p-10 space-y-6">
-          <div className="space-y-3">
-            <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-[var(--muted)]">
-              &gt; SYSTEM
-            </div>
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-mono font-semibold uppercase leading-[1.05] tracking-tight">
-              The Proving<br />
-              <span className="text-[var(--accent)]">Grounds<span className="cursor-blink" /></span>
-            </h1>
-            <p className="text-sm sm:text-base text-[var(--muted)] max-w-2xl font-mono leading-relaxed pt-3">
-              Communities form BEFORE tokens launch. Back memes you believe in,
-              get the first tokens when they go live on Pump.fun.
+          {/* Action layer — preserves the Prove/Launch/Earn brand DNA
+              beneath the positioning headline. Smaller + separated by
+              a rule so the hierarchy reads as "what we are" / "what
+              you do with it". */}
+          <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-[var(--border)]">
+            <p className="font-mono text-lg sm:text-xl md:text-2xl uppercase tracking-tight font-semibold">
+              <span className="text-[var(--accent)]">Prove</span>.{' '}
+              <span className="text-[var(--accent-gold)]">Launch</span>.{' '}
+              <span className="text-[var(--success)]">Earn</span>.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          {/* Two-line mechanic — arrows read as a system diagram */}
+          <div className="mt-4 sm:mt-5 space-y-1.5 font-mono text-sm sm:text-base text-[var(--foreground)]/85 leading-relaxed">
+            <p>
+              <span className="text-[var(--muted)]">&gt;</span> Back a token{' '}
+              <span className="text-[var(--accent)]">→</span> buy the first supply + earn from its trades.
+            </p>
+            <p>
+              <span className="text-[var(--muted)]">&gt;</span> Hold{' '}
+              <span className="text-[var(--accent-gold)]">$PROOF</span>{' '}
+              <span className="text-[var(--accent)]">→</span> earn from every launch on the platform.
+            </p>
+          </div>
+
+          {/* CTAs — full row beneath, full-width on mobile */}
+          <div className="mt-5 flex flex-col sm:flex-row gap-2 sm:gap-3">
             <Link href="/submit" className="btn-primary inline-flex items-center justify-center gap-2">
-              [&gt;] Submit Meme
+              [&gt;] Submit Token
             </Link>
             <Link href="/docs" className="btn-secondary inline-flex items-center justify-center gap-2">
               [?] Read Docs
@@ -132,224 +159,128 @@ export default function Home() {
             </Link>
           </div>
         </div>
-      </div>
 
-      {/* Stats — terminal readout */}
-      <div className="border border-[var(--border)] bg-[var(--card)]">
-        <div className="border-b border-[var(--border)] px-4 py-2">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            // LIVE_METRICS
-          </span>
-        </div>
-        <div className="grid grid-cols-3 divide-x divide-[var(--border)]">
-          {statsDisplay.map((stat) => (
-            <div key={stat.label} className="p-5">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">
-                {stat.label}
-              </div>
-              <div className="text-2xl sm:text-3xl font-mono font-semibold text-[var(--accent)]">
-                {stat.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Search and Filter — terminal command row */}
-      <div className="border border-[var(--border)] bg-[var(--card)]">
-        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            // QUERY
-          </span>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)]"
-          >
-            {showFilters ? '[−] HIDE_FILTERS' : '[+] FILTERS'}
-          </button>
-        </div>
-
-        <div className="flex flex-col sm:flex-row">
-          {/* Search input */}
-          <div className="flex items-center gap-2 flex-1 px-3 py-2 border-b sm:border-b-0 sm:border-r border-[var(--border)]">
-            <span className="text-[var(--accent)] font-mono">&gt;</span>
-            <input
-              type="text"
-              placeholder="search memes..."
-              value={search}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="flex-1 bg-transparent border-0 outline-none text-sm font-mono placeholder:text-[var(--muted)] focus:ring-0"
-              style={{ border: 'none', background: 'transparent' }}
-            />
-          </div>
-
-          {/* Filter buttons */}
-          <div className="flex">
-            {([
-              { key: 'all', label: 'ALL' },
-              { key: 'backing', label: 'PROVING' },
-              { key: 'live', label: 'LIVE' },
-            ] as const).map((f) => (
-              <button
-                key={f.key}
-                onClick={() => handleFilterChange(f.key)}
-                className={`px-4 py-2 text-[11px] font-mono uppercase tracking-widest border-l border-[var(--border)] first:border-l-0 sm:first:border-l transition-colors ${
-                  filter === f.key
-                    ? 'bg-[var(--accent)] text-[#0a0a0a]'
-                    : 'text-[var(--muted)] hover:text-[var(--foreground)]'
-                }`}
-              >
-                {filter === f.key && '> '}
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Advanced filters drawer */}
-        {showFilters && (
-          <div className="border-t border-[var(--border)] px-4 py-3 flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                SORT_BY:
+        {/* Live counts — terminal readout strip across the bottom */}
+        <div className="border-t border-[var(--border)] px-4 py-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+          <span><span className="text-[var(--accent)]">{totals.proving}</span> proving</span>
+          <span>·</span>
+          <span><span className="text-[var(--accent-gold)]">{totals.funded}</span> funded</span>
+          <span>·</span>
+          <span><span className="text-[var(--success)]">{totals.live}</span> live</span>
+          <span>·</span>
+          <span><span className="text-[var(--foreground)]">{totals.backers}</span> backers</span>
+          <span>·</span>
+          <span><span className="text-[var(--foreground)]">{totals.backed.toFixed(1)}</span> SOL backed</span>
+          {proofPaidOut !== null && (
+            <>
+              <span>·</span>
+              <span>
+                <span className="text-[var(--success)]">{proofPaidOut.toFixed(2)}</span>{' '}
+                SOL airdropped to <span className="text-[var(--accent-gold)]">$PROOF</span> holders
               </span>
-              <select
-                value={sortBy}
-                onChange={(e) => handleSortChange(e.target.value as SortOption)}
-                className="px-2 py-1 bg-[var(--background)] border border-[var(--border)] text-xs font-mono uppercase focus:border-[var(--accent)] focus:outline-none"
-              >
-                <option value="newest">NEWEST</option>
-                <option value="progress">PROGRESS</option>
-                <option value="ending_soon">ENDING_SOON</option>
-              </select>
-            </div>
-
-            {sortBy !== 'newest' && (
-              <button
-                onClick={() => {
-                  setSortBy('newest');
-                  setCurrentPage(1);
-                }}
-                className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:underline"
-              >
-                [×] RESET
-              </button>
-            )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Loading State */}
+      {/* Search — single row (sort is per-column now, in column headers) */}
+      <div className="border border-[var(--border)] bg-[var(--card)] flex items-center gap-2 px-3 py-2">
+        <Search className="w-3.5 h-3.5 text-[var(--muted)] shrink-0" />
+        <input
+          type="text"
+          placeholder="search tokens by name or symbol..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 bg-transparent border-0 outline-none text-sm font-mono placeholder:text-[var(--muted)] focus:ring-0"
+          style={{ border: 'none', background: 'transparent' }}
+        />
+      </div>
+
+      {/* Loading */}
       {loading && (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
         </div>
       )}
 
-      {/* Results Count */}
-      {!loading && filteredMemes.length > 0 && (
-        <div className="flex justify-between items-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-          <span>
-            [{((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredMemes.length)}] OF {filteredMemes.length}
-          </span>
-          {totalPages > 1 && (
-            <span>PAGE {currentPage}/{totalPages}</span>
-          )}
+      {/* 3-column board */}
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Column
+            label="Proving"
+            icon={Flame}
+            iconColor="text-[var(--accent)]"
+            count={proving.length}
+            totalCount={totals.proving}
+            isFiltered={!!search.trim()}
+            memes={proving}
+            emptyHint={search ? 'No matches' : 'No active provings'}
+            sortValue={provingSort}
+            onSortChange={(v) => setProvingSort(v as ProvingSort)}
+            sortOptions={[
+              { value: 'ending_soon', label: 'ENDING_SOON' },
+              { value: 'progress', label: 'PROGRESS' },
+              { value: 'newest', label: 'NEWEST' },
+            ]}
+          />
+          <Column
+            label="Funded"
+            icon={Zap}
+            iconColor="text-[var(--accent-gold)]"
+            count={funded.length}
+            totalCount={totals.funded}
+            isFiltered={!!search.trim()}
+            memes={funded}
+            emptyHint={search ? 'No matches' : 'No funded tokens waiting'}
+            sortValue={fundedSort}
+            onSortChange={(v) => setFundedSort(v as FundedSort)}
+            sortOptions={[
+              { value: 'newest', label: 'NEWEST' },
+              { value: 'oldest', label: 'OLDEST' },
+            ]}
+          />
+          <Column
+            label="Live"
+            icon={Rocket}
+            iconColor="text-[var(--success)]"
+            count={live.length}
+            totalCount={totals.live}
+            isFiltered={!!search.trim()}
+            memes={live}
+            emptyHint={search ? 'No matches' : 'No launched tokens yet'}
+            sortValue={liveSort}
+            onSortChange={(v) => setLiveSort(v as LiveSort)}
+            sortOptions={[
+              { value: 'newest', label: 'NEWEST' },
+              { value: 'oldest', label: 'OLDEST' },
+            ]}
+          />
         </div>
       )}
 
-      {/* Meme Grid */}
-      {!loading && paginatedMemes.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {paginatedMemes.map((meme) => (
-            <MemeCard key={meme.id} meme={meme as any} />
-          ))}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {!loading && totalPages > 1 && (
-        <div className="flex justify-center items-center gap-1 font-mono text-xs">
-          <button
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            className="px-3 h-9 bg-[var(--card)] border border-[var(--border)] disabled:opacity-30 disabled:cursor-not-allowed hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest text-[10px]"
-          >
-            &lt; PREV
-          </button>
-
-          {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2)
-            .map((page, index, array) => {
-              const showEllipsisBefore = index > 0 && page - array[index - 1] > 1;
-              return (
-                <span key={page} className="flex items-center gap-1">
-                  {showEllipsisBefore && (
-                    <span className="px-1 text-[var(--muted)]">…</span>
-                  )}
-                  <button
-                    onClick={() => setCurrentPage(page)}
-                    className={`min-w-[36px] h-9 font-mono text-xs transition-colors ${
-                      currentPage === page
-                        ? 'bg-[var(--accent)] text-[#0a0a0a]'
-                        : 'bg-[var(--card)] border border-[var(--border)] hover:border-[var(--accent)]'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                </span>
-              );
-            })}
-
-          <button
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            className="px-3 h-9 bg-[var(--card)] border border-[var(--border)] disabled:opacity-30 disabled:cursor-not-allowed hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest text-[10px]"
-          >
-            NEXT &gt;
-          </button>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!loading && filteredMemes.length === 0 && (
-        <div className="border border-[var(--border)] bg-[var(--card)] p-12 text-center">
-          <div className="text-[var(--accent)] font-mono text-xs uppercase tracking-widest mb-3">
-            [!] NO_RESULTS
-          </div>
-          <h3 className="font-mono uppercase tracking-tight text-base mb-2">No memes found</h3>
-          <p className="text-xs font-mono text-[var(--muted)] mb-6">
-            {search ? '> try a different search term' : '> be the first to submit a meme'}
-          </p>
-          <Link href="/submit" className="btn-primary inline-flex items-center gap-2">
-            [&gt;] Submit Meme
-          </Link>
-        </div>
-      )}
-
-      {/* How It Works — terminal sequence */}
-      <div className="border border-[var(--border)] bg-[var(--card)] mt-8">
+      {/* How It Works — small terminal block at the bottom, doesn't compete with the board */}
+      <div className="border border-[var(--border)] bg-[var(--card)] mt-6">
         <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            // SEQUENCE.HOW_IT_WORKS
+            {'// SEQUENCE.HOW_IT_WORKS'}
           </span>
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
             4 STEPS
           </span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-[var(--border)]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[var(--border)]">
           {[
-            { step: '01', title: 'SUBMIT', desc: 'Creator submits a meme to the Proving Grounds' },
+            { step: '01', title: 'SUBMIT', desc: 'Creator submits a token to the Proving Grounds' },
             { step: '02', title: 'BACK', desc: 'Community backs with SOL to prove demand' },
             { step: '03', title: 'LAUNCH', desc: 'All slots filled = token launches on Pump.fun' },
-            { step: '04', title: 'TRADE', desc: 'Token goes live with instant visibility' },
+            { step: '04', title: 'EARN', desc: 'Backers earn from every trade — proportional to holdings' },
           ].map((item) => (
-            <div key={item.step} className="p-5">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-3">
+            <div key={item.step} className="p-4">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">
                 STEP {item.step}
               </div>
-              <h3 className="font-mono font-semibold uppercase text-base mb-2">{item.title}</h3>
-              <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">{item.desc}</p>
+              <h3 className="font-mono font-semibold uppercase text-sm mb-1">{item.title}</h3>
+              <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>
@@ -357,3 +288,65 @@ export default function Home() {
     </div>
   );
 }
+
+// ── Column ───────────────────────────────────────────────────────
+// Header has icon + label on the left, sort selector + count on the
+// right. Scrollable card stack below. On mobile the columns stack
+// vertically and lose their max-height (the page itself becomes
+// scrollable instead).
+interface SortOption { value: string; label: string }
+interface ColumnProps {
+  label: string;
+  icon: typeof Flame;
+  iconColor: string;
+  count: number;            // post-filter count
+  totalCount: number;       // pre-filter count (for the platform-truth chip)
+  isFiltered: boolean;
+  memes: MemeWithCount[];
+  emptyHint: string;
+  sortValue: string;
+  onSortChange: (v: string) => void;
+  sortOptions: SortOption[];
+}
+
+const Column: React.FC<ColumnProps> = ({
+  label, icon: Icon, iconColor, count, totalCount, isFiltered, memes, emptyHint,
+  sortValue, onSortChange, sortOptions,
+}) => {
+  return (
+    <div className="border border-[var(--border)] bg-[var(--card)] flex flex-col md:max-h-[75vh]">
+      <div className="border-b border-[var(--border)] px-3 py-2 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon className={`w-3 h-3 ${iconColor} shrink-0`} />
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            {'// '}{label.toUpperCase()}
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] shrink-0">
+            {isFiltered ? <><span className={iconColor}>{count}</span>/{totalCount}</> : <span className={iconColor}>{totalCount}</span>}
+          </span>
+        </div>
+        <select
+          value={sortValue}
+          onChange={(e) => onSortChange(e.target.value)}
+          className="bg-transparent border-0 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)] outline-none cursor-pointer pr-1 shrink-0"
+          aria-label={`Sort ${label}`}
+        >
+          {sortOptions.map((opt) => (
+            <option key={opt.value} value={opt.value} className="bg-[var(--background)] text-[var(--foreground)]">
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex-1 md:overflow-y-auto p-2 space-y-2">
+        {memes.length === 0 ? (
+          <div className="p-6 text-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            &gt; {emptyHint}
+          </div>
+        ) : (
+          memes.map((m) => <MemeCard key={m.id} meme={m} />)
+        )}
+      </div>
+    </div>
+  );
+};
