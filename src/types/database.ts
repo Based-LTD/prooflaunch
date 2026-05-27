@@ -31,6 +31,7 @@ export interface Meme {
   current_backing_sol: number;   // Total amount backed (sum of all backings)
   backing_deadline: string;      // ISO date - when backing period ends (3 days default)
   funded_at?: string;            // ISO date - when status flipped to funded; null = pre-019 grandfathered (no 24h launch deadline)
+  launch_deadline?: string;      // ISO date - funded meme must launch or auto-refund by this time; creator can reset via /api/memes/{id}/reset-launch-window (migration 027)
 
   // Legacy field (deprecated, kept for backward compatibility)
   backing_goal_sol?: number;     // Old goal-based system - no longer used

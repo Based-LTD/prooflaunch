@@ -170,17 +170,43 @@ async function runProcessor() {
       }
     }
 
-    // NOTE: funded memes have no auto-refund expiry. The funded_at
-    // timestamp is still captured at funded-flip (column lives in
-    // migration 019) but nothing consumes it here — preserved for
-    // potential v2 features (e.g. torch-passing launch authority).
-    // Product rule restored: funded never expires; creator launches
-    // when ready. Pre-launch withdrawal during 'backing' status is
-    // the backer's only voluntary exit.
+    // === Funded memes that blew past their launch_deadline ===
+    // Migration 027 (2026-05-26) added a 48h launch window for funded
+    // memes, creator-resettable via POST /api/memes/{id}/reset-launch-window.
+    // If the deadline passes without launch OR reset, the creator has
+    // effectively abandoned the meme and backers get auto-refunded — same
+    // refund path as expired backing-phase memes.
+    const { data: expiredFunded } = await supabase
+      .from('memes')
+      .select('id, name, symbol, pool_wallet, encrypted_pool_key')
+      .eq('status', 'funded')
+      .lt('launch_deadline', now.toISOString());
+
+    for (const meme of expiredFunded || []) {
+      console.log(`Auto-refunding funded-but-not-launched expired meme ${meme.id}: ${meme.symbol} (${meme.name})`);
+      if (!meme.pool_wallet) {
+        results.errors.push({ memeId: meme.id, error: 'Funded meme has no pool_wallet — cannot auto-refund' });
+        continue;
+      }
+      try {
+        const pooled = await refundMemePool(supabase, meme.id);
+        if (pooled.ok) {
+          if (pooled.refunded > 0 || pooled.markedFailed) results.refunded.push(meme.id);
+        } else {
+          for (const f of pooled.failures || []) {
+            results.errors.push({ memeId: meme.id, error: `Funded refund failed for ${f.backerWallet}: ${f.error}` });
+          }
+          if (pooled.error) results.errors.push({ memeId: meme.id, error: pooled.error });
+        }
+      } catch (err) {
+        results.errors.push({ memeId: meme.id, error: `Funded refund error: ${err instanceof Error ? err.message : 'Unknown'}` });
+      }
+    }
 
     return {
       success: true,
       processed: backingMemes?.length || 0,
+      fundedExpiredProcessed: expiredFunded?.length || 0,
       launched: results.launched.length,
       refunded: results.refunded.length,
       errors: results.errors,

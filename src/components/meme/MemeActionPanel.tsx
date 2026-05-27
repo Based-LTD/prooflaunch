@@ -1,0 +1,451 @@
+'use client';
+
+import { Loader2, ExternalLink, Copy, Check, Clock, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import type { Meme } from '@/types/database';
+
+// All four status branches in one component because they share the same
+// visual slot on the page. Each branch renders its own primary action
+// loud and centered, with secondary details below. Keeps the action
+// above the fold no matter what state the meme is in.
+
+interface BackingProps {
+  variant: 'backing';
+  meme: Meme;
+  backerCount: number;
+  totalBackingSol: number;
+  slotsRemaining: number;
+  totalSlots: number;
+  timeRemaining: string;
+  minBacking: number;
+  amount: string;
+  setAmount: (s: string) => void;
+  onPledge: () => void;
+  backing: boolean;
+  backingStatus: string | null;
+  backingPaused: boolean;
+  connected: boolean;
+  projectedSharePct: number;
+}
+
+interface FundedProps {
+  variant: 'funded';
+  meme: Meme;
+  totalSlots: number;
+  totalBackingSol: number;
+  isCreator: boolean;
+  isLaunching: boolean;
+  launching: boolean;
+  launchStatus: string | null;
+  onLaunch: () => void;
+  onResetWindow: () => void;       // creator-only — extends launch window 48h
+  resetting: boolean;
+  resetStatus: string | null;
+  connected: boolean;
+}
+
+interface LiveProps {
+  variant: 'live';
+  meme: Meme;
+  myBacking?: {
+    amount_sol: number | string;
+    status?: string;
+    claim_tx?: string;
+    claim_tokens?: string | number;
+  } | null;
+}
+
+type Props = BackingProps | FundedProps | LiveProps;
+
+export const MemeActionPanel: React.FC<Props> = (props) => {
+  if (props.variant === 'live') return <LivePanel {...props} />;
+  if (props.variant === 'funded') return <FundedPanel {...props} />;
+  return <BackingPanel {...props} />;
+};
+
+// ── LIVE ────────────────────────────────────────────────────────────
+const LivePanel: React.FC<LiveProps> = ({ meme, myBacking }) => {
+  const [copied, setCopied] = useState(false);
+  const copy = (t: string) => {
+    navigator.clipboard.writeText(t);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  if (!meme.mint_address) return null;
+  const tradeUrl = meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`;
+  const distributed = myBacking?.status === 'distributed' && !!myBacking?.claim_tx;
+
+  return (
+    <div className="border border-[var(--success)] bg-[var(--card)]">
+      <div className="border-b border-[var(--success)] px-4 py-2 flex items-center justify-between">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
+          {'// TRADE_LIVE'}
+        </span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+          On pump.fun · trade anywhere
+        </span>
+      </div>
+
+      <div className="p-4 sm:p-5 space-y-4">
+        {/* Primary action — loud */}
+        <a
+          href={tradeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full text-center py-4 sm:py-5 bg-[var(--success)] hover:opacity-90 text-[#0a0a0a] font-mono font-bold uppercase tracking-widest text-sm sm:text-base transition-opacity"
+        >
+          ▶ BUY ${meme.symbol} ON PUMP.FUN
+        </a>
+
+        {/* Mint address + links — secondary */}
+        <div className="border border-[var(--border)] bg-[var(--background)] divide-y divide-[var(--border)]">
+          <div className="px-3 py-2.5">
+            <div className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+              Contract address
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-[11px] sm:text-xs font-mono break-all">{meme.mint_address}</code>
+              <button
+                onClick={() => copy(meme.mint_address!)}
+                className="text-[var(--muted)] hover:text-[var(--accent)] transition-colors shrink-0"
+                aria-label="Copy mint address"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-[var(--success)]" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+          <div className="px-3 py-2 flex flex-wrap gap-2">
+            <ExternalChip href={`https://dexscreener.com/solana/${meme.mint_address}`}>Dexscreener</ExternalChip>
+            <ExternalChip href={`https://solscan.io/account/${meme.mint_address}`}>Solscan</ExternalChip>
+            <ExternalChip href={`https://jup.ag/swap/SOL-${meme.mint_address}`}>Jupiter</ExternalChip>
+          </div>
+        </div>
+
+        {/* Backer allocation — shown only if user backed this meme */}
+        {myBacking && (
+          <div className="border border-[var(--border)] bg-[var(--background)] p-3">
+            <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest mb-1">
+              <span className="text-[var(--accent)]">{'// YOUR_ALLOCATION'}</span>
+              <span className="text-[var(--muted)]">backed {Number(myBacking.amount_sol).toFixed(3)} SOL</span>
+            </div>
+            {distributed ? (
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <div className="flex items-center gap-2 text-[var(--success)] text-xs font-mono">
+                  <Check className="w-3.5 h-3.5" />
+                  Received {formatTokens(myBacking.claim_tokens)} tokens
+                </div>
+                <a
+                  href={`https://solscan.io/tx/${myBacking.claim_tx}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)] underline"
+                >
+                  view tx ↗
+                </a>
+              </div>
+            ) : (
+              <p className="text-[11px] font-mono text-[var(--muted)] mt-1">
+                &gt; Distribution in progress — tokens land in this wallet automatically.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ExternalChip: React.FC<{ href: string; children: React.ReactNode }> = ({ href, children }) => (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="inline-flex items-center gap-1 px-2 py-1 border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] text-[10px] font-mono uppercase tracking-widest transition-colors"
+  >
+    {children} <ExternalLink className="w-2.5 h-2.5" />
+  </a>
+);
+
+// Pump.fun tokens are Token-2022 with 6 decimals. Match the existing
+// formatting used elsewhere on the page so the on-chain numbers read
+// the same across views.
+const PUMP_TOKEN_DECIMALS = 6;
+function formatTokens(raw: string | number | null | undefined): string {
+  const n = Number(raw || 0) / 10 ** PUMP_TOKEN_DECIMALS;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+// ── FUNDED / LAUNCHING ───────────────────────────────────────────────
+const FundedPanel: React.FC<FundedProps> = ({
+  meme, totalSlots, totalBackingSol, isCreator, isLaunching, launching, launchStatus,
+  onLaunch, onResetWindow, resetting, resetStatus, connected,
+}) => {
+  // Live-updating countdown to launch_deadline. Re-renders every second
+  // when not loading. Once the deadline hits, the cron auto-refunds
+  // backers — anyone viewing then sees a clear "expired" state.
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const deadlineMs = meme.launch_deadline ? new Date(meme.launch_deadline).getTime() : null;
+  const remainingMs = deadlineMs !== null ? deadlineMs - nowMs : null;
+  const expired = remainingMs !== null && remainingMs <= 0;
+  const lowTime = remainingMs !== null && remainingMs > 0 && remainingMs < 6 * 60 * 60 * 1000; // < 6h
+
+  const fmtRemaining = (ms: number) => {
+    if (ms <= 0) return 'expired';
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+  return (
+    <div className="border border-[var(--accent-gold)] bg-[var(--card)]">
+      <div className="border-b border-[var(--accent-gold)] px-4 py-2 flex items-center justify-between">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+          {'// STATE: GOAL_REACHED'}
+        </span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] pulse-glow">
+          [!] READY
+        </span>
+      </div>
+      <div className="p-4 sm:p-5 space-y-4">
+        <div className="text-center">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+            ALL {totalSlots} SLOTS FILLED · {totalBackingSol.toFixed(2)} SOL RAISED
+          </div>
+          <p className="text-xs font-mono text-[var(--muted)] mt-2">
+            Token is ready to deploy on pump.fun.
+          </p>
+        </div>
+
+        {/* Launch countdown — visible to everyone, signals creator engagement.
+            Expired state shows refund-in-progress copy (next cron tick handles
+            the actual refund, this just communicates the state). */}
+        {deadlineMs !== null && (
+          <div className={`border px-3 py-2.5 ${
+            expired ? 'border-[var(--error)] bg-[var(--error)]/10'
+            : lowTime ? 'border-[var(--warning)] bg-[var(--warning)]/10'
+            : 'border-[var(--border)] bg-[var(--background)]'
+          }`}>
+            <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest">
+              <span className="inline-flex items-center gap-1.5 text-[var(--muted)]">
+                <Clock className="w-3 h-3" />
+                {expired ? 'Launch window expired' : 'Creator must launch within'}
+              </span>
+              <span className={
+                expired ? 'text-[var(--error)]'
+                : lowTime ? 'text-[var(--warning)]'
+                : 'text-[var(--accent-gold)]'
+              }>
+                {remainingMs !== null ? fmtRemaining(remainingMs) : '—'}
+              </span>
+            </div>
+            {expired && (
+              <p className="text-[11px] font-mono text-[var(--error)]/90 mt-1.5 leading-snug">
+                &gt; Backers will be auto-refunded on the next cron tick (within 1 hour).
+              </p>
+            )}
+            {!expired && !isCreator && (
+              <p className="text-[10px] font-mono text-[var(--muted)] mt-1 leading-snug">
+                &gt; Creator can extend this window by 48h to stay engaged.
+              </p>
+            )}
+          </div>
+        )}
+
+        {isCreator ? (
+          <>
+            <button
+              onClick={onLaunch}
+              disabled={launching || isLaunching || expired}
+              className="w-full py-4 sm:py-5 bg-[var(--accent-gold)] hover:opacity-90 text-[#0a0a0a] font-mono font-bold uppercase tracking-widest text-sm sm:text-base transition-opacity disabled:opacity-50"
+            >
+              {launching || isLaunching ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Deploying…
+                </span>
+              ) : expired ? (
+                <>LAUNCH WINDOW EXPIRED</>
+              ) : (
+                <>▶ LAUNCH TOKEN</>
+              )}
+            </button>
+            {!expired && (
+              <button
+                onClick={onResetWindow}
+                disabled={resetting || launching || isLaunching}
+                className="w-full py-2.5 border border-[var(--border)] hover:border-[var(--accent-gold)] text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent-gold)] transition-colors disabled:opacity-50"
+              >
+                {resetting ? (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Resetting…
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <RefreshCw className="w-3 h-3" />
+                    Reset Window (+48h)
+                  </span>
+                )}
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="text-center py-3 text-[10px] font-mono text-[var(--muted)] border border-[var(--border)] uppercase tracking-widest">
+            {connected ? '> Waiting for creator to launch…' : '> Connect wallet to view'}
+          </div>
+        )}
+
+        {launchStatus && <StatusLine text={launchStatus} />}
+        {resetStatus && <StatusLine text={resetStatus} />}
+      </div>
+    </div>
+  );
+};
+
+// ── BACKING ──────────────────────────────────────────────────────────
+const BackingPanel: React.FC<BackingProps> = ({
+  backerCount, totalBackingSol, slotsRemaining, totalSlots, timeRemaining,
+  minBacking, amount, setAmount, onPledge, backing, backingStatus, backingPaused, connected,
+  projectedSharePct,
+}) => {
+  const filled = backerCount;
+  const slotsFull = slotsRemaining <= 0;
+
+  return (
+    <div className="border border-[var(--accent)] bg-[var(--card)]">
+      <div className="border-b border-[var(--accent)] px-4 py-2 flex items-center justify-between">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+          {'// BACK_THIS_TOKEN'}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
+          <Clock className="w-3 h-3" /> {timeRemaining}
+        </span>
+      </div>
+
+      <div className="p-4 sm:p-5 space-y-4">
+        {/* Progress strip */}
+        <div>
+          <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest mb-2">
+            <span className="text-[var(--muted)]">SLOTS [{filled}/{totalSlots}]</span>
+            <span className="text-[var(--accent)]">{slotsRemaining > 0 ? `${slotsRemaining} OPEN` : 'FULL'}</span>
+            <span className="text-[var(--muted)]">{totalBackingSol.toFixed(2)} SOL</span>
+          </div>
+          <div className="flex gap-1">
+            {Array.from({ length: totalSlots }).map((_, i) => (
+              <div
+                key={i}
+                className={`flex-1 h-3 transition-colors ${
+                  i < filled ? 'bg-[var(--accent)]' : 'border border-[var(--accent)]'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {!connected ? (
+          <div className="border border-[var(--border)] bg-[var(--background)] p-5 text-center">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-1.5">
+              [!] NO_WALLET
+            </div>
+            <div className="text-[11px] font-mono uppercase tracking-widest text-[var(--muted)]">
+              &gt; Connect a wallet to back this meme
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Amount input */}
+            <div>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  &gt; Your Pledge (SOL)
+                </label>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  Min: <span className="text-[var(--foreground)]">{minBacking}</span>
+                </span>
+              </div>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={minBacking.toString()}
+                min={minBacking}
+                step="0.1"
+                className="w-full px-4 py-3 bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-xl sm:text-2xl font-mono font-semibold"
+              />
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                <PresetButton onClick={() => setAmount(String(minBacking))} label="Min" />
+                <PresetButton onClick={() => setAmount(String(minBacking * 2))} label="2x" />
+                <PresetButton onClick={() => setAmount(String(minBacking * 5))} label="5x" />
+              </div>
+            </div>
+
+            {/* Primary action */}
+            <button
+              onClick={onPledge}
+              disabled={!amount || Number(amount) <= 0 || backing || backingPaused || slotsFull}
+              className="w-full py-4 sm:py-5 bg-[var(--accent)] hover:opacity-90 text-[#0a0a0a] font-mono font-bold uppercase tracking-widest text-sm sm:text-base transition-opacity disabled:opacity-40"
+            >
+              {backing ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Pledging…
+                </span>
+              ) : slotsFull ? (
+                <>SLOTS FULL</>
+              ) : (
+                <>▶ BACK WITH {amount || '0'} SOL</>
+              )}
+            </button>
+
+            {amount && Number(amount) > 0 && (
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] bg-[var(--background)] p-3">
+                <span className="text-[var(--muted)]">
+                  To pool: <span className="text-[var(--foreground)]">{Number(amount).toFixed(4)} SOL</span>
+                  <span className="text-[var(--muted)]/70 ml-1">(no fee)</span>
+                </span>
+                <span className="text-[var(--muted)] sm:ml-auto">
+                  Share: <span className="text-[var(--success)]">~{projectedSharePct.toFixed(1)}%</span>
+                </span>
+              </div>
+            )}
+
+            {backingStatus && <StatusLine text={backingStatus} />}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const PresetButton: React.FC<{ onClick: () => void; label: string }> = ({ onClick, label }) => (
+  <button
+    onClick={onClick}
+    className="py-2 text-[11px] font-mono uppercase tracking-widest border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+  >
+    [&gt;] {label}
+  </button>
+);
+
+const StatusLine: React.FC<{ text: string }> = ({ text }) => {
+  const cls = text.includes('Error')
+    ? 'text-[var(--error)] border-[var(--error)]'
+    : text.toLowerCase().includes('success') || text.toLowerCase().includes('launched')
+    ? 'text-[var(--success)] border-[var(--success)]'
+    : 'text-[var(--accent)] border-[var(--accent)]';
+  return (
+    <div className={`p-2.5 text-[11px] font-mono text-center uppercase tracking-widest border ${cls}`}>
+      &gt; {text}
+    </div>
+  );
+};
