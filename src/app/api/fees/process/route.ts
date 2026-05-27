@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getRecentFeeTransactions, calculateFeeDistribution } from '@/services/feeTracker';
 import { collectAndCreditFees } from '@/services/distribution';
+import { distributeAllLegacyMemes } from '@/services/legacyFeeDistribution';
 
 // Shared fee processing logic
 async function processFees() {
@@ -166,6 +167,29 @@ async function processFees() {
     }
   }
 
+  // === Legacy (pre-Phase-2) shared-escrow memes ===
+  // PROOF and other pre-P2 memes registered the shared platform escrow
+  // as their pump.fun creator, so collectAndCreditFees (Phase 2 path)
+  // skips them. This block calls the legacy distribution path for each
+  // pre-P2 meme — safety-floor gated (0.1 SOL min collectable), reverts
+  // cleanly on partial failure, idempotent across cron retries.
+  let legacyResults: Awaited<ReturnType<typeof distributeAllLegacyMemes>> = [];
+  try {
+    legacyResults = await distributeAllLegacyMemes(supabase);
+    for (const r of legacyResults) {
+      const s = r.result;
+      if (s.ok && !s.skipped) {
+        console.log(`[legacy-distribute] ${s.symbol} (${r.mint.slice(0, 8)}…): collected ${s.collectedLamports} lamports, slot1=${s.sentToSlot1WalletLamports}, holders=${s.sentToHolderRewardsLamports}, collect_tx=${s.collectSig}, transfer_tx=${s.transferSig}`);
+      } else if (s.skipped) {
+        console.log(`[legacy-distribute] ${s.symbol} skipped: ${s.skipped}`);
+      } else {
+        console.error(`[legacy-distribute] ${s.symbol} ERROR: ${s.error}`);
+      }
+    }
+  } catch (e) {
+    console.error('[legacy-distribute] top-level exception:', e);
+  }
+
   return {
     success: true,
     transactionsFound: feeTransactions.length,
@@ -173,6 +197,7 @@ async function processFees() {
     totalFeesProcessed,
     subescrowMemesScanned: subEscrowMemes?.length || 0,
     subescrowResults,
+    legacyResults,
   };
 }
 
