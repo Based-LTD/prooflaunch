@@ -76,7 +76,7 @@ function BannerLarge() {
           inset: '40px 0',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-start',
+          justifyContent: 'center',
           padding: '0 80px',
           gap: 56,
         }}
@@ -137,7 +137,7 @@ function BannerLarge() {
               marginTop: 6,
             }}
           >
-            The proving grounds for meme coins
+            The proving grounds for tokens
           </div>
         </div>
       </div>

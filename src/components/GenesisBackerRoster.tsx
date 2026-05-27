@@ -24,6 +24,7 @@ interface EnrichedMeme {
   current_backing_sol: number;
   vault_lamports: number;
   creator_subescrow_pubkey: string | null;
+  fee_distribution_mode?: 'legacy_flat' | 'hold_weighted' | null;
   backings: Backing[];
 }
 
@@ -95,6 +96,12 @@ export const GenesisBackerRoster: FC<Props> = ({ memeId }) => {
             Every backer who committed SOL pre-launch and got their pro-rata token allocation
             at the same atomic transaction that created the token. Verifiable on-chain.
           </p>
+          {data.fee_distribution_mode === 'hold_weighted' && (
+            <div className="mt-3 inline-flex items-center gap-2 border border-[var(--accent)] bg-[var(--accent)]/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+              <span>★ HOLD-WEIGHTED DISTRIBUTION</span>
+              <span className="text-[var(--muted)] normal-case tracking-normal">— each backer&apos;s fee share scales with their current hold %. Dumpers&apos; freed shares flow entirely to the PROOF holder airdrop pool.</span>
+            </div>
+          )}
         </div>
 
         {/* Table — desktop */}

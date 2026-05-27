@@ -236,7 +236,7 @@ export const PortfolioRewards: FC = () => {
 
         <p className="text-sm text-[var(--muted)]">
           You earn 90% of pump.fun trading fees on every token you back.
-          Rewards appear here automatically once your backed memes launch
+          Rewards appear here automatically once your backed tokens launch
           and start trading — the <span className="text-[var(--success)] font-medium">Pending</span> counter
           updates in near-real-time as trades hit the on-chain creator vault,
           and the hourly cron sweeps it into <span className="text-[var(--foreground)] font-medium">Claimable</span> for

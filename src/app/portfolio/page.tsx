@@ -372,10 +372,10 @@ export default function PortfolioPage() {
             </div>
             <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Backings Yet</h3>
             <p className="text-[var(--muted)] mb-4 uppercase tracking-wide text-sm">
-              Find a meme to back in the Proving Grounds
+              Find a token to back in the Proving Grounds
             </p>
             <Link href="/" className="inline-block px-6 py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 transition-opacity border-2 border-[var(--accent)]">
-              Browse Memes
+              Browse Tokens
             </Link>
           </div>
         ) : (
@@ -597,7 +597,7 @@ export default function PortfolioPage() {
             // SECTION
           </div>
           <h2 className="text-xl font-mono font-semibold uppercase tracking-tight">
-            Your Memes
+            Your Tokens
           </h2>
         </div>
 
@@ -606,12 +606,12 @@ export default function PortfolioPage() {
             <div className="w-16 h-16 mx-auto bg-[var(--background)] flex items-center justify-center border-2 border-[var(--border)] mb-4">
               <Sparkles className="w-8 h-8 text-[var(--muted)] opacity-50" />
             </div>
-            <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Memes Submitted</h3>
+            <h3 className="text-lg font-black uppercase tracking-tight mb-2">No Tokens Submitted</h3>
             <p className="text-[var(--muted)] mb-4 uppercase tracking-wide text-sm">
-              Submit your first meme
+              Submit your first token
             </p>
             <Link href="/submit" className="inline-block px-6 py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 transition-opacity border-2 border-[var(--accent)]">
-              Submit a Meme
+              Submit a Token
             </Link>
           </div>
         ) : (

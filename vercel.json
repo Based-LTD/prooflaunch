@@ -15,6 +15,10 @@
     {
       "path": "/api/health/drift",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/airdrop/daily",
+      "schedule": "0 * * * *"
     }
   ]
 }

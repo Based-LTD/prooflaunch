@@ -28,6 +28,62 @@
   --gradient-end: #ffd400;
 }
 
+/* ────────────────────────────────────────────────────────────────────
+ * Glass skin — opt-in via .glass-skin class on the route layout.
+ *
+ * Strategy: override the SAME CSS variables the rest of the site uses
+ * (--card, --background, --border). Because every terminal card writes
+ * `bg-[var(--card)]` and `border-[var(--border)]`, they automatically
+ * become translucent + amber-tinted inside .glass-skin scope. No need
+ * to touch a single component.
+ *
+ * Backdrop blur is applied with an attribute selector matching
+ * Tailwind's literal arbitrary-value class names (brackets are part of
+ * the class attribute value, not CSS escape syntax).
+ *
+ * Tweak these knobs in one place to iterate the look:
+ *   --card  → background opacity / tint
+ *   --border → border tint
+ * ──────────────────────────────────────────────────────────────────── */
+.glass-skin {
+  --background: transparent;
+  --card: rgba(10, 10, 10, 0.75);             /* darker iteration — text legibility over video */
+  --card-hover: rgba(15, 15, 15, 0.82);
+  --border: rgba(255, 157, 0, 0.22);          /* amber-tinted */
+  --border-strong: rgba(255, 157, 0, 0.40);
+
+  /* Bump muted text colors brighter — the default dark-mode greys get
+     washed out over a live video background. Lean slightly warm to
+     stay in the amber/cream palette without becoming a highlight. */
+  --muted: #d4d0c2;          /* was #c8c5b8 — another bump for legibility */
+  --muted-soft: #a8a59a;     /* was #9c998d */
+}
+
+/* Apply frosted-glass blur to any element using the card background.
+ * Tailwind generates literal class names like `bg-[var(--card)]`; the
+ * brackets stay in the HTML class attribute, so [class*="..."] with the
+ * exact substring matches cleanly.
+ *
+ * Stronger blur (16px) diffuses the moving video behind the cards so
+ * text reads more stable over the frame-to-frame motion. */
+.glass-skin [class*="bg-[var(--card)]"] {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Subtle warm hover lift — matches Clyde's glass-card pattern but
+ * applied automatically wherever a card lives. */
+.glass-skin [class*="bg-[var(--card)]"]:hover {
+  border-color: rgba(255, 157, 0, 0.45);
+  box-shadow: 0 0 18px rgba(255, 157, 0, 0.18), 0 0 36px rgba(255, 157, 0, 0.08);
+}
+
+/* The body's terminal-grid pattern is way too busy over video — kill it
+ * inside glass-skin scope. */
+.glass-skin .terminal-grid {
+  display: none;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -1,5 +1,6 @@
 'use client';
 
+import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -25,37 +26,39 @@ import {
 // Updated when reality changes, not on a schedule.
 
 const SHIPPED = [
+  { icon: Coins, title: 'Free submissions for PROOF holders', desc: 'Hold ≥500k PROOF → submission fee (0.02 SOL) waived. On-chain balance check at submission time. Real utility for holding PROOF: the more you hold, the more it pays off. Non-holders still launch normally — just pay the fee.' },
+  { icon: Coins, title: 'Carry-forward airdrop accumulator', desc: 'Every PROOF holder accumulates their daily share, no matter how small. When your accumulated balance crosses the 0.001 SOL gas-economical floor, it pays out. Tiny holders get paid every few days instead of zero. No share is ever lost — everyone gets their pro-rata, eventually.' },
+  { icon: Coins, title: 'Daily PROOF holder airdrop', desc: 'We cut our platform fee from 10% to 5%. The other 5% becomes a daily SOL airdrop to every PROOF holder, pro-rata to balance. No staking, no claim button, no minting — just hold PROOF and get paid native SOL every day. Streamflow-locked PROOF counts. Snapshot time varies daily (anti-gaming). First distribution 2026-05-23: 5.10 SOL across 217 wallets. Now runs automatically on a Vercel cron.' },
   { icon: Rocket, title: 'Pooled atomic launches', desc: 'createV2 + buy in a single transaction. Dev holds 0%. No sniper gap. Every backer enters at the identical price. Contract address ends in "…pooL" so anyone can verify it\'s a real Proof launch.' },
-  { icon: Coins, title: 'Per-coin trading fee distribution', desc: 'Every new meme gets its own on-chain creator vault. The platform collects creator fees hourly, splits 10% / 90%, and credits each backer\'s share to their wallet — automatic, on-chain verifiable, no claim window pressure.' },
+  { icon: Coins, title: 'Per-token trading fee distribution', desc: 'Every new token gets its own on-chain creator vault. The platform collects creator fees hourly, splits 90% backers / 5% platform / 5% PROOF-holder airdrop pool, and credits each backer\'s share to their wallet — automatic, on-chain verifiable, no claim window pressure.' },
   { icon: Bell, title: 'Live fee accrual counter', desc: 'Watch your share of every pump trade tick into "Pending" in near-real-time, before the hourly cron has even moved the SOL. Pending → Claimable on each cron tick → one-click claim to your wallet as native SOL. The whole fee flow, transparent and animated on your Portfolio.' },
-  { icon: Users, title: 'Genesis Backer Roster', desc: 'Every launched meme shows all of its original backers, their stakes, current on-chain hold %, realized fees, and live Pending share. Streamflow-locked tokens count toward hold %, so creators who lock their allocation read correctly instead of looking like dumps. 💎 = ≥80% hold · 🔒 = portion locked via Streamflow.' },
-  { icon: Trophy, title: 'More backer slots — up to 24', desc: 'Max raised from 8 → 24 backer slots per meme, per community feedback. Verified end-to-end with a controlled 24-backer launch (atomic createV2 + buy + 24 sequential distributions, all in one request under 30 seconds, zero token leak).' },
-  { icon: Shield, title: 'Refund protection', desc: '3-day backing deadline: if a meme\'s slots don\'t fill within the creator\'s window, every backer is automatically refunded 100% — no fee, no support tickets, no human in the loop.' },
-  { icon: TrendingUp, title: 'Proving Grounds', desc: 'Browse every meme currently in the backing or funded phase. Funded memes surface first so backers can see what\'s about to launch.' },
-  { icon: MessageSquare, title: 'Per-meme community chat', desc: 'Every meme has its own real-time chat room where backers and the creator coordinate before launch.' },
+  { icon: Users, title: 'Genesis Backer Roster', desc: 'Every launched token shows all of its original backers, their stakes, current on-chain hold %, realized fees, and live Pending share. Streamflow-locked tokens count toward hold %, so creators who lock their allocation read correctly instead of looking like dumps. 💎 = ≥80% hold · 🔒 = portion locked via Streamflow.' },
+  { icon: Trophy, title: 'More backer slots — up to 24', desc: 'Max raised from 8 → 24 backer slots per token, per community feedback. Verified end-to-end with a controlled 24-backer launch (atomic createV2 + buy + 24 sequential distributions, all in one request under 30 seconds, zero supply leak).' },
+  { icon: Shield, title: 'Refund protection', desc: '3-day backing deadline: if a token\'s slots don\'t fill within the creator\'s window, every backer is automatically refunded 100% — no fee, no support tickets, no human in the loop.' },
+  { icon: TrendingUp, title: 'Proving Grounds', desc: 'Browse every token currently in the backing or funded phase. Funded tokens surface first so backers can see what\'s about to launch.' },
+  { icon: MessageSquare, title: 'Per-token community chat', desc: 'Every token has its own real-time chat room where backers and the creator coordinate before launch.' },
 ];
 
 const BUILDING = [
-  { icon: Coins, title: 'PROOF staking → revenue share', desc: 'Stake PROOF, earn a portion of the platform\'s 10% cut from every meme launched on Proof Launch. Funded entirely by real platform fees (no inflation). Reflexive flywheel: more launches → more yield → more reasons to hold PROOF → more eyes on the platform.' },
-  { icon: Award, title: 'PROOF holder perks', desc: 'Tier-based platform fee discounts for PROOF holders: submission fee waived/reduced, lower withdrawal fee, and a holder badge in meme chat. Loyalty rewarded without ever gating the permissionless submission path — non-holders still launch normally, holders just pay less.' },
-  { icon: Activity, title: 'Live activity feed per meme', desc: 'See backing events, launch milestones, fee distributions, and refund activity in real-time on each meme page. Transparency by default.' },
+  { icon: Coins, title: 'PROOF staking (optional lock for boosted airdrop weight)', desc: 'V1 daily airdrop is already live for every holder. V2 adds an optional Streamflow lock: holders who lock PROOF for N days get a boosted multiplier on their daily airdrop share. Rewards commitment without forcing it — unlocked holders still earn normally, locked holders earn more. Same fee revenue source, no inflation.' },
+  { icon: Activity, title: 'Live activity feed per token', desc: 'See backing events, launch milestones, fee distributions, and refund activity in real-time on each token page. Transparency by default.' },
   { icon: Award, title: 'Creator profile pages', desc: 'Surface each creator\'s lifetime stats (submissions, successful launches, reputation score) from the database tracking that\'s already in place. Backers can vet creators on their on-platform record before committing.' },
-  { icon: Coins, title: 'Lower minimum backing', desc: 'Reduce the floor below 0.1 SOL after launch traffic stabilizes, so smaller backers can participate in any pool.' },
+  { icon: Coins, title: 'Lower minimum backing', desc: 'Reduce the floor below current 0.05 SOL minimum, so smaller backers can participate in any pool.' },
 ];
 
 const EXPLORING = [
   { icon: Trophy, title: 'Conviction Score', desc: '% of original genesis backers still holding at any given moment. A signal nobody else can compute, because nobody else knows who the OG backers were.' },
   { icon: Eye, title: 'Creator track record dashboard', desc: 'An analytics layer on top of the basic creator profile: peak market caps, current holder counts, reputation trends over time, time-to-launch averages. Helps backers vet repeat creators on the data, not just the vibe.' },
-  { icon: Trophy, title: 'Diamond Hands leaderboard', desc: 'Cross-meme reputation for backers who hold longest, biggest, across multiple successful launches. Soulbound on-chain reputation.' },
-  { icon: Shield, title: 'Pool atomicity proof badge', desc: 'Each launched coin\'s detail page links directly back to the on-chain createV2+buy bundle. Visual "verified Proof launch" stamp that traders can click to confirm authenticity.' },
-  { icon: Signal, title: 'Momentum signals (informational)', desc: 'Volume sparklines, recent trade size, holder count deltas on each launched meme. Information-only — never push notifications or alert sounds. We are not a trading terminal.' },
-  { icon: Users, title: 'Torch-passing launch authority', desc: 'If a funded meme isn\'t launched within a reasonable window, the right to launch passes sequentially to backers in commitment order. Means a meme can still launch even if the original creator vanishes — refund becomes a last-resort safety net rather than the only outcome. Reinforces the brand promise: the pool always becomes a token.' },
-  { icon: MessageSquare, title: 'Persistent post-launch chat', desc: 'Keep the meme chat alive after launch for the coin\'s lifetime — a permanent rallying point for holders.' },
-  { icon: Bell, title: 'Notification preferences', desc: 'Optional email or Telegram alerts for specific events you care about: fee credits crossing a threshold, momentum spikes on coins you back, refunds triggered. Opt-in only.' },
+  { icon: Trophy, title: 'Diamond Hands leaderboard', desc: 'Cross-token reputation for backers who hold longest, biggest, across multiple successful launches. Soulbound on-chain reputation.' },
+  { icon: Shield, title: 'Pool atomicity proof badge', desc: 'Each launched token\'s detail page links directly back to the on-chain createV2+buy bundle. Visual "verified Proof launch" stamp that traders can click to confirm authenticity.' },
+  { icon: Signal, title: 'Momentum signals (informational)', desc: 'Volume sparklines, recent trade size, holder count deltas on each launched token. Information-only — never push notifications or alert sounds. We are not a trading terminal.' },
+  { icon: Users, title: 'Torch-passing launch authority', desc: 'If a funded token isn\'t launched within a reasonable window, the right to launch passes sequentially to backers in commitment order. Means a token can still launch even if the original creator vanishes — refund becomes a last-resort safety net rather than the only outcome. Reinforces the brand promise: the pool always becomes a token.' },
+  { icon: MessageSquare, title: 'Persistent post-launch chat', desc: 'Keep the token\'s chat alive after launch for the project\'s lifetime — a permanent rallying point for holders.' },
+  { icon: Bell, title: 'Notification preferences', desc: 'Optional email or Telegram alerts for specific events you care about: fee credits crossing a threshold, momentum spikes on tokens you back, refunds triggered. Opt-in only.' },
 ];
 
 interface RowProps {
-  icon: React.ElementType;
+  icon: LucideIcon;
   title: string;
   desc: string;
   accentColor: string;

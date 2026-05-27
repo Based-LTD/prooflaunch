@@ -1,9 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Keypair } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { createServerClient } from '@/lib/supabase';
 import { verifyDeposit } from '@/services/pumpfun';
 import { encryptPrivateKey } from '@/lib/crypto';
+
+// Free submission perk for PROOF holders.
+// Holding >= this many PROOF (UI amount, 6 decimals) waives the 0.02 SOL
+// submission fee. Threshold tunable via env (PROOF_FREE_SUBMISSION_MIN_TOKENS).
+const PROOF_MINT = 'oaBXM2rCnWFeQc9ufdTSSpASwSrMBPrSmg8xtiepooL';
+const PROOF_DECIMALS = 6;
+const FREE_SUBMISSION_THRESHOLD_TOKENS = Number(
+  process.env.PROOF_FREE_SUBMISSION_MIN_TOKENS || '500000',
+);
+
+// Reads creator's effective PROOF balance (direct + Streamflow-locked) and
+// returns true if it meets the free-submission threshold. Conservative: any
+// RPC error returns false (= fee required), so we never accidentally waive
+// the fee due to an upstream failure.
+async function qualifiesForFreeSubmission(creatorWallet: string): Promise<boolean> {
+  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
+  if (!rpcUrl) return false;
+  try {
+    const conn = new Connection(rpcUrl, 'confirmed');
+    const owner = new PublicKey(creatorWallet);
+    const mint = new PublicKey(PROOF_MINT);
+    const accts = await conn.getParsedTokenAccountsByOwner(owner, { mint });
+    const directBalance = accts.value.reduce(
+      (sum: number, a) => sum + Number(a.account.data.parsed.info.tokenAmount.uiAmount || 0),
+      0,
+    );
+    // Phase 1: direct balance only. Streamflow-locked support can be added
+    // later — most holders just hold liquid. Simpler to ship.
+    return directBalance >= FREE_SUBMISSION_THRESHOLD_TOKENS;
+  } catch (e) {
+    console.warn('qualifiesForFreeSubmission RPC error:', e instanceof Error ? e.message : e);
+    return false; // fail-closed: require the fee on any uncertainty
+  }
+}
 
 // GET /api/memes - List all memes with optional filters
 export async function GET(request: NextRequest) {
@@ -15,7 +49,10 @@ export async function GET(request: NextRequest) {
     const creator = searchParams.get('creator');
     const limit = parseInt(searchParams.get('limit') || '1000');
     const offset = parseInt(searchParams.get('offset') || '0');
-    // Hide expired memes after 24 hours by default (unless querying specific creator)
+    // Hide expired-backing memes from listings immediately (no grace period).
+    // Exemptions: when querying a specific creator (so they/their backers can
+    // still see + handle refunds in Portfolio), or when explicitly requested
+    // via includeStaleExpired=true (admin / debug use).
     const includeStaleExpired = searchParams.get('includeStaleExpired') === 'true';
 
     let query = supabase
@@ -38,18 +75,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Filter out expired memes older than 24 hours (unless creator is specified or includeStaleExpired)
+    // Hide failed/expired memes from public listings IMMEDIATELY.
+    // Whitelist what's allowed to show — defends against any new failure-
+    // shaped statuses (refunded, cancelled, etc.) added later without us
+    // having to revisit this filter.
+    //   - 'backing'  → show only if deadline hasn't passed
+    //   - 'funded'   → always (filled pool, awaiting launch)
+    //   - 'live'     → always (already launched, trading)
+    //   - everything else (failed, refunded, etc.) → HIDDEN
+    // Creator-scoped queries (Portfolio) and admin (includeStaleExpired)
+    // remain exempt so refunds can still be tracked / handled.
     let filteredData = data;
     if (!creator && !includeStaleExpired) {
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const PUBLIC_STATUSES = new Set(['backing', 'funded', 'live']);
       filteredData = data?.filter((meme) => {
-        // Keep all non-backing memes (live, funded, etc.)
-        if (meme.status !== 'backing') return true;
-        // Keep backing memes that haven't expired yet
-        const deadline = new Date(meme.backing_deadline);
-        if (deadline > new Date()) return true;
-        // Keep expired memes that are within 24 hours of deadline
-        return deadline > twentyFourHoursAgo;
+        if (!PUBLIC_STATUSES.has(meme.status)) return false;
+        // For backing memes, also require an unexpired deadline
+        if (meme.status === 'backing') {
+          const deadline = new Date(meme.backing_deadline);
+          return deadline > now;
+        }
+        return true;
       });
     }
 
@@ -96,7 +143,50 @@ export async function POST(request: NextRequest) {
       // Creation fee payment (goes to escrow for platform costs)
       creation_fee_signature,
       creation_fee_sol,
+      // Partner attribution — set when the user arrived via a partner
+      // hosted-checkout URL (?session=pls_xxx). The session row carries
+      // the partner_id and validation context.
+      partner_session_id,
     } = body;
+
+    // ── Partner session lookup (optional) ──────────────────────────
+    // If a partner_session_id was supplied, look it up and validate it
+    // BEFORE we charge any fees. Reject early if the session is dead so
+    // the user doesn't pay the creation fee on a doomed submission.
+    let partnerSessionRow: {
+      id: string; partner_id: string; creator_wallet: string;
+      status: string; expires_at: string; meme_id: string | null;
+    } | null = null;
+    if (partner_session_id) {
+      const { data: sess, error: sessErr } = await supabase
+        .from('partner_sessions')
+        .select('id, partner_id, creator_wallet, status, expires_at, meme_id')
+        .eq('id', partner_session_id)
+        .maybeSingle();
+      if (sessErr) {
+        console.error('Partner session lookup error:', sessErr);
+        return NextResponse.json({ error: 'Failed to validate partner session' }, { status: 500 });
+      }
+      if (!sess) {
+        return NextResponse.json({ error: 'Partner session not found' }, { status: 400 });
+      }
+      if (sess.status !== 'pending') {
+        return NextResponse.json({ error: `Partner session is ${sess.status} and cannot be used` }, { status: 400 });
+      }
+      if (new Date(sess.expires_at) <= new Date()) {
+        return NextResponse.json({ error: 'Partner session has expired' }, { status: 400 });
+      }
+      // Wallet identity check: only the wallet the partner registered can
+      // complete the session. Prevents an attacker from hijacking someone
+      // else's checkout link to mint a token under their name.
+      if (sess.creator_wallet !== creator_wallet) {
+        return NextResponse.json(
+          { error: 'Connected wallet does not match the partner session creator_wallet' },
+          { status: 403 },
+        );
+      }
+      partnerSessionRow = sess;
+    }
 
     // Validation
     if (!creator_wallet || !name || !symbol || !description || !image_url) {
@@ -113,42 +203,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Require creation fee payment
-    if (!creation_fee_signature) {
-      return NextResponse.json(
-        { error: 'Creation fee payment required' },
-        { status: 400 }
-      );
-    }
+    // Check for free-submission perk: holding >= threshold PROOF waives the
+    // 0.02 SOL creation fee. Fail-closed: any RPC issue → fee required as
+    // normal.
+    const freeSubmission = await qualifiesForFreeSubmission(creator_wallet);
 
-    if (!creation_fee_sol || creation_fee_sol < CREATION_FEE_SOL) {
-      return NextResponse.json(
-        { error: `Creation fee must be at least ${CREATION_FEE_SOL} SOL` },
-        { status: 400 }
-      );
-    }
+    if (!freeSubmission) {
+      // Require creation fee payment
+      if (!creation_fee_signature) {
+        return NextResponse.json(
+          { error: `Creation fee payment required (or hold ≥${FREE_SUBMISSION_THRESHOLD_TOKENS.toLocaleString()} PROOF for free submissions)` },
+          { status: 400 }
+        );
+      }
 
-    // Prevent replay — ensure this tx signature hasn't already been used for another meme
-    const { data: existingMemeWithTx } = await supabase
-      .from('memes')
-      .select('id')
-      .eq('creation_fee_signature', creation_fee_signature)
-      .maybeSingle();
-    if (existingMemeWithTx) {
-      return NextResponse.json(
-        { error: 'This creation fee transaction has already been used' },
-        { status: 400 }
-      );
-    }
+      if (!creation_fee_sol || creation_fee_sol < CREATION_FEE_SOL) {
+        return NextResponse.json(
+          { error: `Creation fee must be at least ${CREATION_FEE_SOL} SOL` },
+          { status: 400 }
+        );
+      }
 
-    // Verify the creation fee tx on-chain: creator_wallet spent >= CREATION_FEE_SOL
-    // and the escrow received the fee
-    const feeValid = await verifyDeposit(creation_fee_signature, CREATION_FEE_SOL, creator_wallet);
-    if (!feeValid) {
-      return NextResponse.json(
-        { error: 'Creation fee transaction could not be verified on-chain' },
-        { status: 400 }
-      );
+      // Prevent replay — ensure this tx signature hasn't already been used for another meme
+      const { data: existingMemeWithTx } = await supabase
+        .from('memes')
+        .select('id')
+        .eq('creation_fee_signature', creation_fee_signature)
+        .maybeSingle();
+      if (existingMemeWithTx) {
+        return NextResponse.json(
+          { error: 'This creation fee transaction has already been used' },
+          { status: 400 }
+        );
+      }
+
+      // Verify the creation fee tx on-chain: creator_wallet spent >= CREATION_FEE_SOL
+      // and the escrow received the fee
+      const feeValid = await verifyDeposit(creation_fee_signature, CREATION_FEE_SOL, creator_wallet);
+      if (!feeValid) {
+        return NextResponse.json(
+          { error: 'Creation fee transaction could not be verified on-chain' },
+          { status: 400 }
+        );
+      }
+    } else {
+      console.log(`Free submission granted to ${creator_wallet} (PROOF holder perk)`);
     }
 
     // Validate slot-based backing system (max raised 8 → 24 in migration 021)
@@ -206,7 +305,7 @@ export async function POST(request: NextRequest) {
         backing_goal_sol: min_backing_sol * total_slots, // Minimum possible raise (for compatibility)
         backing_deadline: deadline.toISOString(),
         status: 'backing', // Start in backing phase
-        submission_fee_paid: true, // Fee paid via creation_fee_signature
+        submission_fee_paid: true, // Fee paid via creation_fee_signature (or waived for PROOF holders)
         current_backing_sol: 0, // Starts at 0, backers add to this
         // Trust score parameters
         creator_fee_pct,
@@ -214,6 +313,11 @@ export async function POST(request: NextRequest) {
         dev_initial_buy_sol,
         auto_refund: true, // Always auto-refund on failure - no option to hold backer funds
         trust_score,
+        // Partner attribution — set only when this submission came from a
+        // partner hosted-checkout session. Drives the "Launched via X" badge
+        // on the public token page and rev-share routing at fee distribution.
+        partner_id: partnerSessionRow?.partner_id ?? null,
+        partner_session_id: partnerSessionRow?.id ?? null,
       })
       .select()
       .single();
@@ -269,6 +373,25 @@ export async function POST(request: NextRequest) {
 
     // Update user's meme count
     await supabase.rpc('increment_memes_created', { wallet: creator_wallet });
+
+    // Mark the partner session as submitted so polling + future webhooks
+    // see the linked meme_id. Best-effort — failure here doesn't roll
+    // back the meme creation (the meme is already valid; we just lose
+    // partner attribution polling if this fails, which is recoverable
+    // via the partner_id column on memes).
+    if (partnerSessionRow) {
+      const { error: sessUpdateErr } = await supabase
+        .from('partner_sessions')
+        .update({
+          status: 'submitted',
+          meme_id: data.id,
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('id', partnerSessionRow.id);
+      if (sessUpdateErr) {
+        console.warn('Partner session update failed (meme still created):', sessUpdateErr.message);
+      }
+    }
 
     return NextResponse.json({ meme: data }, { status: 201 });
   } catch (error) {

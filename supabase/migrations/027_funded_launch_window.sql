@@ -87,3 +87,55 @@ UPDATE memes
 SET launch_deadline = NOW() + INTERVAL '48 hours'
 WHERE status = 'funded'
   AND launch_deadline IS NULL;
+
+
+-- ── Re-create memes_with_stats view to include launch_deadline ────
+-- The view is what /api/memes (public listing) queries — without this
+-- replacement, the new launch_deadline column wouldn't reach the
+-- homepage cards. We preserve the exact existing column list (from
+-- migration 013) and append launch_deadline + funded_at + creator_
+-- subescrow_pubkey (also missing from the view, used elsewhere).
+DROP VIEW IF EXISTS memes_with_stats;
+CREATE VIEW memes_with_stats
+  WITH (security_invoker = true)
+AS
+SELECT
+  m.id,
+  m.created_at,
+  m.updated_at,
+  m.creator_wallet,
+  m.name,
+  m.symbol,
+  m.description,
+  m.image_url,
+  m.twitter,
+  m.telegram,
+  m.discord,
+  m.website,
+  m.backing_goal_sol,
+  m.current_backing_sol,
+  m.backing_deadline,
+  m.status,
+  m.mint_address,
+  m.pump_fun_url,
+  m.launched_at,
+  m.submission_fee_paid,
+  m.platform_fee_bps,
+  m.creator_fee_pct,
+  m.backer_share_pct,
+  m.dev_initial_buy_sol,
+  m.auto_refund,
+  m.trust_score,
+  m.total_slots,
+  m.min_backing_sol,
+  m.creator_twitter,
+  m.funded_at,
+  m.launch_deadline,   -- NEW (migration 027)
+  m.pool_wallet,
+  m.creator_subescrow_pubkey,
+  m.partner_id,
+  m.fee_distribution_mode,
+  (SELECT COUNT(*) FROM backings b WHERE b.meme_id = m.id AND b.status = 'confirmed') AS backer_count,
+  (m.backing_goal_sol - m.current_backing_sol) AS remaining_sol,
+  (m.current_backing_sol / m.backing_goal_sol * 100) AS progress_percent
+FROM memes m;

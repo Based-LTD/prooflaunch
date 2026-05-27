@@ -5,6 +5,7 @@ import { Connection, PublicKey, Keypair, Transaction, SystemProgram, LAMPORTS_PE
 import { OnlinePumpSdk } from '@pump-fun/pump-sdk';
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
+import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 
 // Shared, idempotent pooled-token distribution.
 //
@@ -279,7 +280,7 @@ export async function collectAndCreditFees(
 ): Promise<CollectAndCreditResult> {
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode')
     .eq('id', memeId)
     .single();
   if (memeErr || !meme) return { ok: false, error: 'meme not found' };
@@ -287,6 +288,9 @@ export async function collectAndCreditFees(
   if (!meme.creator_subescrow_pubkey || !meme.encrypted_creator_subescrow_key) {
     return { ok: true, skipped: 'legacy meme (no sub-escrow; trading fees route to shared escrow as platform revenue)' };
   }
+  // Default to legacy_flat if the column is null (handles pre-migration rows)
+  const feeMode: 'legacy_flat' | 'hold_weighted' =
+    meme.fee_distribution_mode === 'hold_weighted' ? 'hold_weighted' : 'legacy_flat';
 
   // Decrypt sub-escrow keypair + pubkey-match safety gate
   let subKp: Keypair;
@@ -376,14 +380,21 @@ export async function collectAndCreditFees(
     };
   }
 
-  // Step C: credit backers proportionally (10% platform / 90% backers)
+  // Step C: credit backers proportionally.
+  // PLATFORM_FEE_CUT (10%) is the non-backer cut. The 90% backer pool is
+  // split by mode:
+  //   legacy_flat:    pure pro-rata by stake (every backer earns regardless of hold)
+  //   hold_weighted:  pro-rata × current hold % (capped 100%). The ENTIRE
+  //                   freed-up portion from dumpers flows to the holder
+  //                   airdrop pool. Brand: every backer dump on every meme
+  //                   pays every PROOF holder.
   const collectedLamports = transferLamports;
   const platformLamports = Math.floor(collectedLamports * PLATFORM_FEE_CUT);
-  const backerLamports = collectedLamports - platformLamports;
+  const backerPoolLamports = collectedLamports - platformLamports;
 
   const { data: backings } = await supabase
     .from('backings')
-    .select('id, backer_wallet, amount_sol, claimable_fees_sol')
+    .select('id, backer_wallet, amount_sol, claimable_fees_sol, tokens_received')
     .eq('meme_id', meme.id)
     .eq('status', 'distributed');
 
@@ -399,33 +410,165 @@ export async function collectAndCreditFees(
   const totalBacking = backings.reduce((s, b) => s + Number(b.amount_sol), 0);
   if (totalBacking <= 0) return { ok: false, error: 'totalBacking <= 0 — cannot split' };
 
-  const backerSol = backerLamports / LAMPORTS_PER_SOL;
+  // ── Compute each backer's effective share ──────────────────────────
+  // For legacy_flat: effective = stake / totalBacking (no weighting)
+  // For hold_weighted: effective = (stake / totalBacking) × hold_pct (capped 1.0)
+  type BackerCredit = {
+    id: string; wallet: string; existingClaimable: number;
+    stakeFraction: number;     // share of total backing pool
+    holdPct: number;            // 0..1, capped at 1.0
+    effectiveShareLam: number;  // actual lamports earned this round
+  };
+
+  const credits: BackerCredit[] = [];
+  let totalEffectiveLam = 0;
+
+  if (feeMode === 'legacy_flat') {
+    for (const b of backings) {
+      const stakeFraction = Number(b.amount_sol) / totalBacking;
+      const lam = Math.floor(stakeFraction * backerPoolLamports);
+      credits.push({
+        id: b.id, wallet: b.backer_wallet, existingClaimable: Number(b.claimable_fees_sol) || 0,
+        stakeFraction, holdPct: 1.0, effectiveShareLam: lam,
+      });
+      totalEffectiveLam += lam;
+    }
+  } else {
+    // hold_weighted: fetch each backer's current hold % (wallet + Streamflow-locked)
+    const mintAddress = meme.mint_address;
+    if (!mintAddress) {
+      return { ok: false, error: 'mint_address required for hold_weighted but missing' };
+    }
+    const streamClient = new SolanaStreamClient(RPC_URL, ICluster.Mainnet, 'confirmed');
+    const mint = new PublicKey(mintAddress);
+
+    // Per-backer hold % — fetched in parallel
+    const holdPcts = await Promise.all(backings.map(async (b) => {
+      const allocated = b.tokens_received ? BigInt(b.tokens_received) : BigInt(0);
+      if (allocated === BigInt(0)) return { id: b.id, pct: 0 }; // no allocation = no fee share
+      try {
+        const owner = new PublicKey(b.backer_wallet);
+        // Direct wallet balance
+        const accts = await conn.getParsedTokenAccountsByOwner(owner, { mint });
+        const directRaw = accts.value.reduce((s, a) => {
+          const amt = a.account.data.parsed.info.tokenAmount.amount;
+          return s + BigInt(amt || '0');
+        }, BigInt(0));
+        // Streamflow-locked (search by sender = wallet — matches Roster pattern)
+        let lockedRaw = BigInt(0);
+        try {
+          const streams = await streamClient.searchStreams({ mint: mintAddress, sender: b.backer_wallet });
+          if (streams && streams.length > 0) {
+            const lockBals = await Promise.all(streams.map(async (s) => {
+              try {
+                const raw = (s.account as { escrowTokens?: unknown })?.escrowTokens;
+                if (!raw) return BigInt(0);
+                const pk = typeof raw === 'string'
+                  ? new PublicKey(raw)
+                  : new PublicKey((raw as { toBase58?: () => string }).toBase58 ? (raw as { toBase58: () => string }).toBase58() : raw as never);
+                const info = await conn.getAccountInfo(pk);
+                if (!info) return BigInt(0);
+                return info.data.readBigUInt64LE(64);
+              } catch { return BigInt(0); }
+            }));
+            lockedRaw = lockBals.reduce((s, x) => s + x, BigInt(0));
+          }
+        } catch { /* no streams for this wallet */ }
+        const effective = directRaw + lockedRaw;
+        // Cap at 100% (anti-gaming: buying extra beyond allocation doesn't boost share)
+        const rawPct = Number((effective * BigInt(10_000)) / allocated) / 10_000;
+        return { id: b.id, pct: Math.min(1.0, rawPct) };
+      } catch (e) {
+        log('reconcile_error', { ok: false, detail: { stage: 'hold_pct_read', wallet: b.backer_wallet, err: e instanceof Error ? e.message : String(e) } });
+        return { id: b.id, pct: 0 }; // fail-closed: zero share on RPC error
+      }
+    }));
+
+    for (const b of backings) {
+      const holdPct = holdPcts.find(h => h.id === b.id)?.pct ?? 0;
+      const stakeFraction = Number(b.amount_sol) / totalBacking;
+      const effective = Math.floor(stakeFraction * holdPct * backerPoolLamports);
+      credits.push({
+        id: b.id, wallet: b.backer_wallet, existingClaimable: Number(b.claimable_fees_sol) || 0,
+        stakeFraction, holdPct, effectiveShareLam: effective,
+      });
+      totalEffectiveLam += effective;
+    }
+  }
+
+  // ── Compute freed-up amount → entirely to holder airdrop pool ──────
+  // (No per-backer redistribution. Diamond hands already earn full pro-rata
+  //  via their 100% hold. Freed shares from dumpers go to ALL PROOF holders
+  //  via the daily airdrop pool. Backers who also hold PROOF earn there too.)
+  const freedLam = backerPoolLamports - totalEffectiveLam;
+  const freedToHolderRewardsLam = feeMode === 'hold_weighted' ? Math.max(0, freedLam) : 0;
+
+  // ── Send the freed holder-rewards portion to HOLDER_REWARDS_WALLET ──
+  let holderRewardsSig: string | undefined;
+  if (freedToHolderRewardsLam > 0) {
+    const holderRewardsAddr = process.env.HOLDER_REWARDS_WALLET_ADDRESS;
+    if (holderRewardsAddr) {
+      try {
+        const tx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: escrow.publicKey,
+            toPubkey: new PublicKey(holderRewardsAddr),
+            lamports: freedToHolderRewardsLam,
+          })
+        );
+        tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+        tx.feePayer = escrow.publicKey;
+        holderRewardsSig = await conn.sendTransaction(tx, [escrow]);
+        await conn.confirmTransaction(holderRewardsSig, 'confirmed');
+        log('reconcile_recovered', { detail: { stage: 'freed_to_holder_rewards', sig: holderRewardsSig, lamports: freedToHolderRewardsLam } });
+      } catch (e) {
+        log('reconcile_error', { ok: false, detail: { stage: 'freed_to_holder_rewards', err: e instanceof Error ? e.message : String(e), lamports: freedToHolderRewardsLam } });
+        // Non-fatal: SOL stays in escrow, can be swept manually next cycle
+      }
+    }
+  }
+
+  // ── Credit backers in DB ────────────────────────────────────────────
   const errors: string[] = [];
   let credited = 0;
-  for (const b of backings) {
-    const share = (Number(b.amount_sol) / totalBacking) * backerSol;
-    const newClaimable = (Number(b.claimable_fees_sol) || 0) + share;
+  for (const c of credits) {
+    const shareSol = c.effectiveShareLam / LAMPORTS_PER_SOL;
+    const newClaimable = c.existingClaimable + shareSol;
     const { error: upErr } = await supabase
       .from('backings')
       .update({ claimable_fees_sol: newClaimable })
-      .eq('id', b.id);
-    if (upErr) errors.push(`${b.backer_wallet.slice(0, 8)}: ${upErr.message}`);
+      .eq('id', c.id);
+    if (upErr) errors.push(`${c.wallet.slice(0, 8)}: ${upErr.message}`);
     else credited++;
   }
 
   if (errors.length > 0) {
-    log('reconcile_error', { ok: false, detail: { stage: 'credit_backers', errors, credited } });
+    log('reconcile_error', { ok: false, detail: { stage: 'credit_backers', errors, credited, feeMode } });
     return {
       ok: false,
       error: `${errors.length} backer credit(s) failed: ${errors.slice(0, 3).join('; ')}`,
-      collectedLamports, platformLamports, backerLamports, backerCount: credited,
+      collectedLamports, platformLamports, backerLamports: totalEffectiveLam, backerCount: credited,
       collectSig: collectSig ?? undefined, drainSig,
     };
   }
 
+  log('reconcile_recovered', {
+    detail: {
+      stage: 'credit_backers_done',
+      feeMode,
+      collectedLamports,
+      platformLamports,
+      backerLamports: totalEffectiveLam,
+      freedLamports: freedLam,
+      freedToHolderRewardsLam,
+      holderRewardsSig: holderRewardsSig ?? null,
+      backerCount: credited,
+    },
+  });
+
   return {
     ok: true,
-    collectedLamports, platformLamports, backerLamports, backerCount: credited,
+    collectedLamports, platformLamports, backerLamports: totalEffectiveLam, backerCount: credited,
     collectSig: collectSig ?? undefined, drainSig,
   };
 }

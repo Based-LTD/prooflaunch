@@ -65,7 +65,7 @@ export default function LaunchedPage() {
             Launched Tokens
           </h1>
           <p className="text-xs font-mono text-[var(--muted)] mt-2">
-            Memes that hit all slots and went live on Pump.fun
+            Tokens that hit all slots and went live on pump.fun
           </p>
         </div>
       </div>
@@ -119,7 +119,7 @@ export default function LaunchedPage() {
           </div>
           <h3 className="font-mono uppercase tracking-tight text-base mb-2">No launches yet</h3>
           <p className="text-xs font-mono text-[var(--muted)]">
-            &gt; Be the first to launch a meme
+            &gt; Be the first to launch a token
           </p>
         </div>
       )}

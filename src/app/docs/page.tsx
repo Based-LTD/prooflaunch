@@ -110,15 +110,15 @@ export default function DocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">What is Proof Launch?</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                Proof Launch is a community-curated meme coin launchpad on Solana. Unlike typical
+                Proof Launch is a community-pre-formed token launchpad on Solana. Unlike typical
                 launches where developers control everything, here <strong>communities form BEFORE
-                tokens launch</strong>. Creators set up to 8 backer slots, and once all slots are filled,
-                the token launches on Pump.fun with backers receiving tokens proportional to their contribution.
+                tokens launch</strong>. Creators set up to 24 backer slots, and once all slots are filled,
+                the token launches on pump.fun with backers receiving supply proportional to their contribution.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
                   <div className="text-3xl font-black text-[var(--accent)]">1</div>
-                  <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Submit a Meme</div>
+                  <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Submit a Token</div>
                   <div className="text-xs text-[var(--muted)] mt-1">Set 2-24 slots + minimum</div>
                 </div>
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
@@ -144,7 +144,7 @@ export default function DocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">How Backing Works</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                Backers pool their SOL into one transparent, on-chain wallet for the meme.
+                Backers pool their SOL into one transparent, on-chain wallet for the token.
                 At launch, that pool creates the token and buys it in a <strong>single atomic
                 transaction</strong> — the creator (dev) holds <strong>0%</strong>, there is
                 no gap for snipers, and <strong>every backer gets the exact same entry price</strong>.
@@ -152,7 +152,7 @@ export default function DocsPage() {
               </p>
               <div className="space-y-3 pt-2">
                 {[
-                  { num: '1', title: 'Back the Pool', desc: 'Send at least the creator\'s minimum to claim one of 2–8 slots. Your SOL goes to the meme\'s transparent pool wallet — publicly visible on-chain.' },
+                  { num: '1', title: 'Back the Pool', desc: 'Send at least the creator\'s minimum to claim one of 2–24 slots. Your SOL goes to the token\'s transparent pool wallet — publicly visible on-chain.' },
                   { num: '2', title: 'Pool Locked Until Launch', desc: 'The pool simply holds the backers\' SOL until all slots fill. Nothing can be done with it but launch or refund.' },
                   { num: '3', title: 'One Atomic Launch', desc: 'When slots fill, the creator launches: ONE transaction creates the token and the pool buys it in the same block. No sniper gap. Dev holds 0%. The contract address ends in “pooL” so anyone can verify it\'s a real Proof launch.' },
                   { num: '4', title: 'Proportional Distribution', desc: 'Tokens are sent to every backer\'s own wallet, proportional to their backing. Same price for everyone — no slot is favored.' },
@@ -187,11 +187,11 @@ export default function DocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">The Proving Phase</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                When a meme is submitted, it enters the "Proving" phase. Backers race to fill the available slots:
+                When a token is submitted, it enters the "Proving" phase. Backers race to fill the available slots:
               </p>
               <ul className="space-y-3">
                 {[
-                  { title: 'Back the pool', desc: 'Send at least the creator\'s minimum to claim one of up to 24 slots. No maximum — back as much as you want! Your SOL joins the meme\'s transparent pool.' },
+                  { title: 'Back the pool', desc: 'Send at least the creator\'s minimum to claim one of up to 24 slots. No maximum — back as much as you want! Your SOL joins the token\'s transparent pool.' },
                   { title: 'Same price for everyone', desc: 'At launch the pool makes ONE buy — every backer enters at the identical price. No slot is favored, no one is front-run.' },
                   { title: 'Proportional share', desc: 'You receive tokens proportional to how much you backed, sent straight to your wallet.' },
                   { title: 'Withdraw anytime', desc: 'Changed your mind? Withdraw before launch. If slots don\'t fill in 3 days, claim a refund from Portfolio.' },
@@ -220,12 +220,12 @@ export default function DocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { icon: Coins, color: 'text-[var(--accent)]', title: 'Back the Pool', desc: 'Browse the Proving Grounds and claim one of up to 24 backer slots. Your SOL joins the meme\'s transparent on-chain pool.' },
+                { icon: Coins, color: 'text-[var(--accent)]', title: 'Back the Pool', desc: 'Browse the Proving Grounds and claim one of up to 24 backer slots. Your SOL joins the token\'s transparent on-chain pool.' },
                 { icon: Key, color: 'text-[var(--warning)]', title: 'Dev Holds 0%', desc: 'The creator never holds the supply. The pool buys at launch and distributes to backers — nothing for a dev to rug.' },
                 { icon: Zap, color: 'text-[var(--success)]', title: 'Same Price For Everyone', desc: 'One atomic pool buy at launch — every backer enters at the identical price. No front-running, no favored slot.' },
                 { icon: Wallet, color: 'text-[var(--accent-gold)]', title: 'Tokens Sent To You', desc: 'After launch, your proportional share is distributed straight to your connected wallet. Trade anywhere instantly.' },
                 { icon: Undo2, color: 'text-[var(--error)]', title: 'Withdraw Anytime', desc: 'Changed your mind? Withdraw before launch. Your SOL returns to your wallet (minus 2% fee).' },
-                { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Earn Trading Fees', desc: 'Genesis backers earn 90% of all trading fees proportional to contribution. Platform takes 10%.' },
+                { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Earn Trading Fees', desc: 'Genesis backers earn 90% of all trading fees, hold-weighted. The remaining 10% splits 5% platform / 5% to the $PROOF holder airdrop pool — half goes back to the community.' },
               ].map((item, i) => {
                 const Icon = item.icon;
                 return (
@@ -247,7 +247,7 @@ export default function DocsPage() {
                 After Launch — Finding Your Tokens in Phantom
               </h3>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Your tokens are sent to your connected wallet automatically when the meme launches.
+                Your tokens are sent to your connected wallet automatically when the token launches.
                 But Phantom (and most Solana wallets) hide brand-new tokens by default — a spam
                 filter that protects users from random airdrop scams. <strong className="text-[var(--foreground)]">Your tokens are there,
                 they&apos;re just hidden until the wallet recognizes them.</strong>
@@ -280,9 +280,9 @@ export default function DocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { num: '1', title: 'Submit Your Meme (0.02 SOL)', desc: 'Create your meme with name, symbol, description, and image. Set 2-24 backer slots and a minimum backing amount.' },
-                { num: '2', title: 'Fill the Slots', desc: 'Share your meme page, engage in the community chat, and rally backers to fill all slots within 3 days.' },
-                { num: '3', title: 'Launch on Pump.fun', desc: 'Once all slots are filled, click "Launch" when you\'re ready. Coordinate with whales, time the market, give yourself a runway. The pool waits for you — funded memes don\'t expire.' },
+                { num: '1', title: 'Submit Your Token (0.02 SOL)', desc: 'Create your token with name, symbol, description, and image. Set 2-24 backer slots and a minimum backing amount.' },
+                { num: '2', title: 'Fill the Slots', desc: 'Share your token page, engage in the community chat, and rally backers to fill all slots within 3 days.' },
+                { num: '3', title: 'Launch on Pump.fun', desc: 'Once all slots are filled, click "Launch" when you\'re ready. Coordinate with whales, time the market, give yourself a runway. The pool waits for you — funded tokens don\'t expire.' },
               ].map((step) => (
                 <div key={step.num} className="flex items-start gap-4 p-4 bg-[var(--background)] border-l-4 border-[var(--accent-gold)]">
                   <div className="w-8 h-8 bg-[var(--accent-gold)] text-black flex items-center justify-center text-sm font-black flex-shrink-0">
@@ -298,7 +298,7 @@ export default function DocsPage() {
             <div className="bg-[var(--warning)]/10 border-2 border-[var(--warning)]/30 p-4 mt-4">
               <p className="text-sm text-[var(--muted)]">
                 <strong className="text-[var(--warning)]">Important:</strong> Creators are treated equally to other backers.
-                To receive tokens at launch and a share of trading fees, you must back your own meme.
+                To receive tokens at launch and a share of trading fees, you must back your own token.
                 This ensures creators have skin in the game alongside backers.
               </p>
             </div>
@@ -319,10 +319,10 @@ export default function DocsPage() {
               </p>
               <div className="space-y-3 pt-2">
                 {[
-                  { label: 'Creation Fee', value: '0.02 SOL', color: 'border-[var(--accent)]', desc: 'One-time fee when submitting a meme. Covers token creation costs on Pump.fun.' },
-                  { label: 'Platform Fee (Backing)', value: '2%', color: 'border-[var(--success)]', desc: 'Added to each backing: 2% of your backing amount.' },
+                  { label: 'Creation Fee', value: '0.02 SOL', color: 'border-[var(--accent)]', desc: 'One-time fee when submitting a token. Covers token creation costs on pump.fun. Waived for $PROOF holders (≥500k).' },
+                  { label: 'Backing Fee', value: 'None', color: 'border-[var(--success)]', desc: 'No fee on backing. 100% of your SOL goes to the token\'s pool wallet.' },
                   { label: 'Withdrawal Fee', value: '2%', color: 'border-[var(--warning)]', desc: 'If you withdraw your backing before launch, 2% is deducted to discourage frivolous backing/withdrawing.' },
-                  { label: 'Trading Fees', value: '10% platform cut', color: 'border-[var(--accent)]', desc: 'Platform takes 10% of Pump.fun creator fees for sustainability. The remaining 90% goes to all backers proportionally.' },
+                  { label: 'Trading Fees Split', value: '90 / 5 / 5', color: 'border-[var(--accent)]', desc: '90% to genesis backers (hold-weighted), 5% to platform operations, 5% to the $PROOF holder airdrop pool. Half the platform-side take flows back to the community.' },
                 ].map((fee, i) => (
                   <div key={i} className={`bg-[var(--background)] p-4 border-l-4 ${fee.color}`}>
                     <div className="flex justify-between items-center mb-2">
@@ -346,7 +346,8 @@ export default function DocsPage() {
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
                 Pump.fun sends 0.5% of all trading volume to the token creator wallet (controlled by Proof Launch).
-                This is distributed to all backers proportionally. Creators must back their own meme to earn fees.
+                Proof Launch splits this three ways: 90% to genesis backers (hold-weighted), 5% to platform
+                operations, 5% to the $PROOF holder airdrop pool. Creators must back their own token to earn fees.
               </p>
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 mt-4">
                 <h3 className="font-bold mb-3 uppercase tracking-wide">Example: How Fees Flow</h3>
@@ -359,20 +360,25 @@ export default function DocsPage() {
                     <span className="font-bold">0.005 SOL</span>
                   </div>
                   <div className="border-t-2 border-[var(--border)] pt-3 mt-3 space-y-2">
-                    <div className="text-xs text-[var(--muted)] mb-2 uppercase tracking-wide font-bold">Proof Launch distributes the 0.005 SOL:</div>
-                    <div className="flex justify-between p-2 bg-[var(--accent)]/10">
-                      <span className="text-[var(--accent)] font-bold">Platform (10%)</span>
-                      <span className="font-bold">0.0005 SOL</span>
-                    </div>
+                    <div className="text-xs text-[var(--muted)] mb-2 uppercase tracking-wide font-bold">Proof Launch splits the 0.005 SOL:</div>
                     <div className="flex justify-between p-2 bg-[var(--success)]/10">
-                      <span className="text-[var(--success)]">All Backers (90%)</span>
-                      <span className="font-bold">0.0045 SOL</span>
+                      <span className="text-[var(--success)] font-bold">Genesis Backers (90%, hold-weighted)</span>
+                      <span className="font-bold">0.00450 SOL</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-[var(--accent)]/10">
+                      <span className="text-[var(--accent)]">Platform Operations (5%)</span>
+                      <span className="font-bold">0.00025 SOL</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-[var(--accent-gold)]/10">
+                      <span className="text-[var(--accent-gold)] font-bold">$PROOF Holder Airdrop Pool (5%)</span>
+                      <span className="font-bold">0.00025 SOL</span>
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-[var(--muted)] mt-3 uppercase tracking-wide">
-                  Backers split their share proportionally based on how much they backed.
-                  Creators are treated equally — back your meme to earn fees!
+                <p className="text-xs text-[var(--muted)] mt-3 uppercase tracking-wide leading-relaxed">
+                  Backers split their share proportionally, scaled by current hold %. Dumpers&apos; freed
+                  shares flow 100% into the $PROOF airdrop pool — so half the platform-side take goes
+                  back to the community, and the more conviction the cap table has, the more backers earn.
                 </p>
               </div>
             </section>
@@ -401,7 +407,8 @@ export default function DocsPage() {
                   Platform Operations
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  Platform fees fund token creation costs on Pump.fun and ongoing operations.
+                  The 5% platform cut funds token creation costs on pump.fun and ongoing operations.
+                  The other 5% platform-side share flows back to $PROOF holders via the daily airdrop.
                   All fee transactions are verifiable on-chain.
                 </p>
               </div>
@@ -413,7 +420,7 @@ export default function DocsPage() {
                   The Pool & Distribution
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  Your backing goes into the meme&apos;s transparent on-chain pool wallet —
+                  Your backing goes into the token&apos;s transparent on-chain pool wallet —
                   publicly viewable, key held encrypted server-side. It can only do two
                   things: launch (one atomic create+buy) or refund. After launch:
                 </p>
@@ -437,8 +444,8 @@ export default function DocsPage() {
               </div>
               <div className="space-y-3 text-[var(--muted)]">
                 <p>
-                  <strong className="text-[var(--foreground)]">This is not financial advice.</strong> Meme
-                  coins are highly speculative and volatile. Only invest what you can afford to lose.
+                  <strong className="text-[var(--foreground)]">This is not financial advice.</strong> Tokens
+                  launched here are highly speculative and volatile. Only invest what you can afford to lose.
                 </p>
                 <ul className="space-y-2">
                   <li className="flex items-start gap-2">
@@ -447,7 +454,7 @@ export default function DocsPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-[var(--warning)]">★</span>
-                    Understand that most meme coins go to zero
+                    Understand that most tokens go to zero
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-[var(--warning)]">★</span>
@@ -472,12 +479,12 @@ export default function DocsPage() {
             </div>
             <div className="space-y-3">
               {[
-                { q: 'What happens if slots don\'t fill?', a: 'If all slots aren\'t filled within 3 days, the meme expires. Backers can claim a refund from their Portfolio page — SOL is returned from the pool back to your main wallet.' },
-                { q: 'How do I get my tokens after launch?', a: 'They\'re distributed to your connected wallet automatically — proportional to how much you backed. Nothing to export or claim manually. You\'ll see your allocation on the meme page once distributed.' },
+                { q: 'What happens if slots don\'t fill?', a: 'If all slots aren\'t filled within 3 days, the token expires. Backers can claim a refund from their Portfolio page — SOL is returned from the pool back to your main wallet.' },
+                { q: 'How do I get my tokens after launch?', a: 'They\'re distributed to your connected wallet automatically — proportional to how much you backed. Nothing to export or claim manually. You\'ll see your allocation on the token page once distributed.' },
                 { q: 'Does everyone get the same price?', a: 'Yes. At launch the pool makes ONE atomic buy, so every backer enters at the identical price. No slot is favored and no one can be front-run — that\'s the core fairness of the pooled model.' },
-                { q: 'Can I back multiple times?', a: 'Currently one backing per wallet per meme. Withdraw first if you want to change your backing amount.' },
+                { q: 'Can I back multiple times?', a: 'Currently one backing per wallet per token. Withdraw first if you want to change your backing amount.' },
                 { q: 'What\'s the minimum/maximum backing?', a: 'The creator sets a minimum (at least 0.1 SOL). There is NO maximum — back as much as you want! Your token share is proportional to your contribution.' },
-                { q: 'Where does my backed SOL go?', a: 'Into the meme\'s transparent on-chain pool wallet (publicly viewable). It can only launch (one atomic create+buy) or refund — it never sits with the creator.' },
+                { q: 'Where does my backed SOL go?', a: 'Into the token\'s transparent on-chain pool wallet (publicly viewable). It can only launch (one atomic create+buy) or refund — it never sits with the creator.' },
                 { q: 'Why does the contract address end in "pooL"?', a: 'Every genuine Proof Launch token\'s contract address ends in “pooL”. It\'s a verifiable on-chain signature that the token was launched fairly through Proof — dev holds 0%, atomic pooled buy, proportional distribution.' },
                 { q: 'How is this rug-resistant?', a: 'The creator never holds the supply (dev = 0%). The pool buys atomically with token creation — no sniper gap — and tokens go straight to backers. There is no concentrated dev bag to dump.' },
               ].map((faq, i) => (
@@ -500,13 +507,13 @@ export default function DocsPage() {
             href="/"
             className="px-6 py-3 bg-[var(--accent)] text-white font-black uppercase tracking-wide hover:opacity-90 transition-opacity border-2 border-[var(--accent)]"
           >
-            Browse Memes
+            Browse Tokens
           </Link>
           <Link
             href="/submit"
             className="px-6 py-3 bg-[var(--card)] border-2 border-[var(--border)] font-black uppercase tracking-wide hover:border-[var(--accent)] transition-colors"
           >
-            Submit a Meme
+            Submit a Token
           </Link>
         </div>
         <p className="text-xs font-mono text-[var(--muted)] mt-6">

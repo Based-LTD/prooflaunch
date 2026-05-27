@@ -71,7 +71,7 @@ export async function GET(
     // table (NOT encrypted_pool_key) and merge them in.
     const { data: poolFields } = await supabase
       .from('memes')
-      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address')
+      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address, fee_distribution_mode')
       .eq('id', id)
       .single();
 
@@ -224,6 +224,7 @@ export async function GET(
         pool_wallet: poolFields?.pool_wallet ?? null,
         pool_token_balance: poolFields?.pool_token_balance ?? null,
         creator_subescrow_pubkey: poolFields?.creator_subescrow_pubkey ?? null,
+        fee_distribution_mode: poolFields?.fee_distribution_mode ?? 'legacy_flat',
         vault_lamports: vaultLamports,
         backings: enrichedBackings,
       },

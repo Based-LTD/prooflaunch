@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { MemeCard } from '@/components/MemeCard';
+import { LandingHero } from '@/components/LandingHero';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { useRealtimeMemes } from '@/hooks/useRealtimeMemes';
 import type { Meme } from '@/types/database';
@@ -38,31 +39,17 @@ export default function Home() {
   const [provingSort, setProvingSort] = useState<ProvingSort>('ending_soon');
   const [fundedSort, setFundedSort] = useState<FundedSort>('newest');
   const [liveSort, setLiveSort] = useState<LiveSort>('newest');
-  const [proofPaidOut, setProofPaidOut] = useState<number | null>(null);
+
+  // Mobile-only: which column is visible. The three columns collapse
+  // to one column on narrow screens; without a switcher you have to
+  // scroll through Proving + Funded to reach Live. Tabs jump you
+  // straight to what you want. Ignored on md+ where all three render
+  // side-by-side.
+  const [mobileTab, setMobileTab] = useState<'proving' | 'funded' | 'live'>('proving');
 
   // Pull every status in one query so the page renders all three columns
   // in a single round-trip. The realtime hook already streams updates.
   const { memes, loading } = useRealtimeMemes({ status: 'all' });
-
-  // Fetch the live "PROOF airdropped to holders" total for the ticker.
-  // Quietly fails — if the API is down the chip is hidden rather than
-  // showing a dash that looks broken.
-  useEffect(() => {
-    let cancelled = false;
-    const fetchPaidOut = async () => {
-      try {
-        const r = await fetch('/api/proof/paid-out');
-        if (!r.ok) return;
-        const j = await r.json();
-        if (!cancelled && typeof j.totalPaidOutSol === 'number') {
-          setProofPaidOut(j.totalPaidOutSol);
-        }
-      } catch {}
-    };
-    fetchPaidOut();
-    const id = setInterval(fetchPaidOut, 5 * 60 * 1000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
 
   const { proving, funded, live, totals } = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -82,15 +69,13 @@ export default function Home() {
     const funded = all.filter((m) => m.status === 'funded' || m.status === 'launching').sort(fundedFn);
     const live = all.filter((m) => m.status === 'live').sort(liveFn);
 
-    // Total counts use the pre-filter set so the hero strip reads the
-    // platform state, not the search results.
+    // Total counts use the pre-filter set so column headers can show
+    // "N of TOTAL" even when search is narrowing the visible cards.
     const allUnfiltered = memes as MemeWithCount[];
     const totals = {
       proving: allUnfiltered.filter((m) => m.status === 'backing').length,
       funded: allUnfiltered.filter((m) => m.status === 'funded' || m.status === 'launching').length,
       live: allUnfiltered.filter((m) => m.status === 'live').length,
-      backers: allUnfiltered.reduce((s, m) => s + (Number(m.backer_count) || 0), 0),
-      backed: allUnfiltered.reduce((s, m) => s + Number(m.current_backing_sol || 0), 0),
     };
 
     return { proving, funded, live, totals };
@@ -98,8 +83,14 @@ export default function Home() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
+      {/* New landing hero — full-viewport brand mark + 5-stat live ticker.
+          Sits above everything; "Enter Proving Grounds" smooth-scrolls to
+          #proving-grounds. The board below renders normally; on direct
+          deep-links to the homepage, users land on the hero first. */}
+      <LandingHero />
+
       {/* Hero — headline + two-line mechanic + CTAs below + live counts. */}
-      <div className="border border-[var(--border)] bg-[var(--card)]">
+      <div id="proving-grounds" className="scroll-mt-24 border border-[var(--border)] bg-[var(--card)]">
         <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
             {'// PROOF_LAUNCH.SYS // PROVING_GROUNDS'}
@@ -118,23 +109,13 @@ export default function Home() {
             &gt; SYSTEM
           </div>
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-mono font-semibold uppercase leading-[1.1] tracking-tight">
-            Launch infrastructure for token teams.<span className="cursor-blink" />
+            Shared <span className="text-[var(--accent)]">Pump.fun</span> Launches.
+            <br />
+            Equal entry. Shared trading fees.<span className="cursor-blink" />
           </h1>
 
-          {/* Action layer — preserves the Prove/Launch/Earn brand DNA
-              beneath the positioning headline. Smaller + separated by
-              a rule so the hierarchy reads as "what we are" / "what
-              you do with it". */}
-          <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-[var(--border)]">
-            <p className="font-mono text-lg sm:text-xl md:text-2xl uppercase tracking-tight font-semibold">
-              <span className="text-[var(--accent)]">Prove</span>.{' '}
-              <span className="text-[var(--accent-gold)]">Launch</span>.{' '}
-              <span className="text-[var(--success)]">Earn</span>.
-            </p>
-          </div>
-
           {/* Two-line mechanic — arrows read as a system diagram */}
-          <div className="mt-4 sm:mt-5 space-y-1.5 font-mono text-sm sm:text-base text-[var(--foreground)]/85 leading-relaxed">
+          <div className="mt-5 sm:mt-6 space-y-1.5 font-mono text-sm sm:text-base text-[var(--foreground)]/85 leading-relaxed">
             <p>
               <span className="text-[var(--muted)]">&gt;</span> Back a token{' '}
               <span className="text-[var(--accent)]">→</span> buy the first supply + earn from its trades.
@@ -159,28 +140,6 @@ export default function Home() {
             </Link>
           </div>
         </div>
-
-        {/* Live counts — terminal readout strip across the bottom */}
-        <div className="border-t border-[var(--border)] px-4 py-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-          <span><span className="text-[var(--accent)]">{totals.proving}</span> proving</span>
-          <span>·</span>
-          <span><span className="text-[var(--accent-gold)]">{totals.funded}</span> funded</span>
-          <span>·</span>
-          <span><span className="text-[var(--success)]">{totals.live}</span> live</span>
-          <span>·</span>
-          <span><span className="text-[var(--foreground)]">{totals.backers}</span> backers</span>
-          <span>·</span>
-          <span><span className="text-[var(--foreground)]">{totals.backed.toFixed(1)}</span> SOL backed</span>
-          {proofPaidOut !== null && (
-            <>
-              <span>·</span>
-              <span>
-                <span className="text-[var(--success)]">{proofPaidOut.toFixed(2)}</span>{' '}
-                SOL airdropped to <span className="text-[var(--accent-gold)]">$PROOF</span> holders
-              </span>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Search — single row (sort is per-column now, in column headers) */}
@@ -203,58 +162,108 @@ export default function Home() {
         </div>
       )}
 
-      {/* 3-column board */}
+      {/* Mobile-only column switcher — sticky beneath the navbar so
+          it stays thumb-accessible while you scroll through cards.
+          Hidden on md+ where the 3-column grid renders everything
+          side-by-side and a switcher would be redundant.
+          The 80px sticky offset matches the fixed chrome height
+          (24px top bar + 56px navbar). The mobile hamburger row
+          beneath the navbar is part of the inline nav, not fixed,
+          so it doesn't add to the offset. */}
+      {!loading && (
+        <div
+          className="md:hidden sticky top-20 z-30 -mx-4 sm:-mx-6 lg:-mx-8 border-y border-[var(--border)] bg-[var(--background)]/95"
+          style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+        >
+          <div className="flex">
+            {([
+              { key: 'proving' as const, label: 'Proving', count: totals.proving, color: 'var(--accent)' },
+              { key: 'funded' as const,  label: 'Funded',  count: totals.funded,  color: 'var(--accent-gold)' },
+              { key: 'live' as const,    label: 'Live',    count: totals.live,    color: 'var(--success)' },
+            ]).map((tab, i) => {
+              const active = mobileTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setMobileTab(tab.key)}
+                  className={`flex-1 py-3 text-[11px] font-mono uppercase tracking-widest transition-colors ${
+                    i > 0 ? 'border-l border-[var(--border)]' : ''
+                  } ${active ? 'bg-[var(--card)]' : ''}`}
+                  style={{ color: active ? tab.color : 'var(--muted)' }}
+                  aria-pressed={active}
+                >
+                  {tab.label}{' '}
+                  <span className="opacity-60">({tab.count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 3-column board.
+          On md+ the grid renders all three cells. On mobile the grid
+          becomes single-column; we toggle each cell's display so only
+          the active mobileTab is visible. Wrapping each Column in a
+          div (instead of editing Column itself) keeps the visibility
+          concern at the call site. */}
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Column
-            label="Proving"
-            icon={Flame}
-            iconColor="text-[var(--accent)]"
-            count={proving.length}
-            totalCount={totals.proving}
-            isFiltered={!!search.trim()}
-            memes={proving}
-            emptyHint={search ? 'No matches' : 'No active provings'}
-            sortValue={provingSort}
-            onSortChange={(v) => setProvingSort(v as ProvingSort)}
-            sortOptions={[
-              { value: 'ending_soon', label: 'ENDING_SOON' },
-              { value: 'progress', label: 'PROGRESS' },
-              { value: 'newest', label: 'NEWEST' },
-            ]}
-          />
-          <Column
-            label="Funded"
-            icon={Zap}
-            iconColor="text-[var(--accent-gold)]"
-            count={funded.length}
-            totalCount={totals.funded}
-            isFiltered={!!search.trim()}
-            memes={funded}
-            emptyHint={search ? 'No matches' : 'No funded tokens waiting'}
-            sortValue={fundedSort}
-            onSortChange={(v) => setFundedSort(v as FundedSort)}
-            sortOptions={[
-              { value: 'newest', label: 'NEWEST' },
-              { value: 'oldest', label: 'OLDEST' },
-            ]}
-          />
-          <Column
-            label="Live"
-            icon={Rocket}
-            iconColor="text-[var(--success)]"
-            count={live.length}
-            totalCount={totals.live}
-            isFiltered={!!search.trim()}
-            memes={live}
-            emptyHint={search ? 'No matches' : 'No launched tokens yet'}
-            sortValue={liveSort}
-            onSortChange={(v) => setLiveSort(v as LiveSort)}
-            sortOptions={[
-              { value: 'newest', label: 'NEWEST' },
-              { value: 'oldest', label: 'OLDEST' },
-            ]}
-          />
+          <div className={mobileTab === 'proving' ? 'block' : 'hidden md:block'}>
+            <Column
+              label="Proving"
+              icon={Flame}
+              iconColor="text-[var(--accent)]"
+              count={proving.length}
+              totalCount={totals.proving}
+              isFiltered={!!search.trim()}
+              memes={proving}
+              emptyHint={search ? 'No matches' : 'No active provings'}
+              sortValue={provingSort}
+              onSortChange={(v) => setProvingSort(v as ProvingSort)}
+              sortOptions={[
+                { value: 'ending_soon', label: 'ENDING_SOON' },
+                { value: 'progress', label: 'PROGRESS' },
+                { value: 'newest', label: 'NEWEST' },
+              ]}
+            />
+          </div>
+          <div className={mobileTab === 'funded' ? 'block' : 'hidden md:block'}>
+            <Column
+              label="Funded"
+              icon={Zap}
+              iconColor="text-[var(--accent-gold)]"
+              count={funded.length}
+              totalCount={totals.funded}
+              isFiltered={!!search.trim()}
+              memes={funded}
+              emptyHint={search ? 'No matches' : 'No funded tokens waiting'}
+              sortValue={fundedSort}
+              onSortChange={(v) => setFundedSort(v as FundedSort)}
+              sortOptions={[
+                { value: 'newest', label: 'NEWEST' },
+                { value: 'oldest', label: 'OLDEST' },
+              ]}
+            />
+          </div>
+          <div className={mobileTab === 'live' ? 'block' : 'hidden md:block'}>
+            <Column
+              label="Live"
+              icon={Rocket}
+              iconColor="text-[var(--success)]"
+              count={live.length}
+              totalCount={totals.live}
+              isFiltered={!!search.trim()}
+              memes={live}
+              emptyHint={search ? 'No matches' : 'No launched tokens yet'}
+              sortValue={liveSort}
+              onSortChange={(v) => setLiveSort(v as LiveSort)}
+              sortOptions={[
+                { value: 'newest', label: 'NEWEST' },
+                { value: 'oldest', label: 'OLDEST' },
+              ]}
+            />
+          </div>
         </div>
       )}
 

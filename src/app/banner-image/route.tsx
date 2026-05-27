@@ -53,6 +53,7 @@ export async function GET() {
             flex: 1,
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             padding: '0 80px',
             gap: 56,
           }}
@@ -115,7 +116,7 @@ export async function GET() {
                 display: 'flex',
               }}
             >
-              The proving grounds for meme coins
+              The proving grounds for tokens
             </div>
           </div>
         </div>

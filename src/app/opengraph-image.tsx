@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
-export const alt = 'Proof Launch — The Proving Grounds for Meme Coins';
+export const alt = 'Proof Launch — The Proving Grounds for Token Launches';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -119,7 +119,7 @@ export default async function OpenGraphImage() {
                 display: 'flex',
               }}
             >
-              The proving grounds for meme coins
+              The proving grounds for token launches
             </div>
           </div>
         </div>

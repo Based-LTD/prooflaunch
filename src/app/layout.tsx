@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import { ClientProviders } from "@/components/ClientProviders";
+import { GlassShell } from "@/components/GlassShell";
 
 const mono = IBM_Plex_Mono({
   subsets: ["latin"],
@@ -19,18 +20,18 @@ const sans = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://prooflaunch.fun"),
-  title: "Proof Launch | Community-Curated Meme Coin Launchpad",
-  description: "The first meme coin launchpad where communities form BEFORE tokens launch. Back memes you believe in, earn fees from trading.",
-  keywords: ["solana", "meme coin", "launchpad", "bonding curve", "defi", "proof launch"],
+  title: "Proof Launch | Community-Pre-Formed Token Launchpad",
+  description: "The launchpad where communities form BEFORE tokens launch. Back projects you believe in, earn SOL fees from every trade.",
+  keywords: ["solana", "token launchpad", "launchpad", "bonding curve", "defi", "proof launch", "pump.fun"],
   openGraph: {
-    title: "Proof Launch | Community-Curated Meme Coin Launchpad",
-    description: "Communities form BEFORE tokens launch. Back memes you believe in, earn fees from trading.",
+    title: "Proof Launch | Community-Pre-Formed Token Launchpad",
+    description: "Communities form BEFORE tokens launch. Back projects you believe in, earn SOL fees from every trade.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Proof Launch | Community-Curated Meme Coin Launchpad",
-    description: "Communities form BEFORE tokens launch. Back memes you believe in, earn fees from trading.",
+    title: "Proof Launch | Community-Pre-Formed Token Launchpad",
+    description: "Communities form BEFORE tokens launch. Back projects you believe in, earn SOL fees from every trade.",
   },
 };
 
@@ -44,7 +45,9 @@ export default function RootLayout({
       <body className={`${mono.variable} ${sans.variable} antialiased min-h-screen`}>
         <div className="terminal-grid" aria-hidden="true" />
         <ClientProviders>
-          {children}
+          <GlassShell>
+            {children}
+          </GlassShell>
         </ClientProviders>
       </body>
     </html>

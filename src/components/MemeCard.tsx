@@ -52,6 +52,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
     total_slots = 8,
     current_backing_sol,
     backing_deadline,
+    launch_deadline,
     creator_wallet,
     image_url,
     pump_fun_url,
@@ -73,6 +74,16 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
   const filledSlots = Number(backer_count) || 0;
   const timeRemaining = getTimeRemaining(backing_deadline);
   const { label: statusLabel, class: statusClass } = getStatusConfig(status);
+
+  // Launch-window countdown for funded memes (migration 027).
+  // Tight format — card has very limited space.
+  const launchTimeRemaining = launch_deadline ? getTimeRemaining(launch_deadline) : null;
+  const launchExpired = launchTimeRemaining === 'ENDED';
+  const launchLowTime = launchTimeRemaining
+    ? (launchTimeRemaining.endsWith('M') && !launchTimeRemaining.includes('H'))   // <1h
+      || (launchTimeRemaining.includes('H') && !launchTimeRemaining.includes('D') // <24h
+        && parseInt(launchTimeRemaining) < 6)                                      // and <6h
+    : false;
 
   return (
     <Link href={`/meme/${id}`} className="block">
@@ -188,10 +199,23 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
             </div>
           )}
 
-          {/* Funded block */}
+          {/* Funded block — countdown to launch deadline (migration 027) */}
           {status === 'funded' && (
-            <div className="border border-[var(--accent)] bg-[var(--background)] px-2 py-1.5 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] pulse-glow">
-              [!] Ready to deploy
+            <div className={`border bg-[var(--background)] px-2 py-1.5 text-[10px] font-mono uppercase tracking-widest ${
+              launchExpired
+                ? 'border-[var(--error)] text-[var(--error)]'
+                : launchLowTime
+                  ? 'border-[var(--warning)] text-[var(--warning)] pulse-glow'
+                  : 'border-[var(--accent)] text-[var(--accent)] pulse-glow'
+            }`}>
+              <div className="flex items-center justify-between gap-2">
+                <span>[!] {launchExpired ? 'Window expired' : 'Ready to deploy'}</span>
+                {launchTimeRemaining && (
+                  <span className="text-[9px] opacity-90">
+                    {launchExpired ? 'refund pending' : `${launchTimeRemaining} left`}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
