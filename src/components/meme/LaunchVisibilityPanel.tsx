@@ -35,6 +35,8 @@ interface Props {
   creatorWallet: string;
   /** Whether the meme is still in backing phase — visibility is locked otherwise */
   canEdit: boolean;
+  /** Optional per-backer cap set at submission. NULL = uncapped. */
+  maxBackingSol?: number | null;
 }
 
 const VISIBILITY_LABELS: Record<Visibility, { name: string; desc: string; color: string }> = {
@@ -55,7 +57,7 @@ const VISIBILITY_LABELS: Record<Visibility, { name: string; desc: string; color:
   },
 };
 
-export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet, canEdit }: Props) {
+export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet, canEdit, maxBackingSol }: Props) {
   const { publicKey, signMessage } = useWallet();
   const [visibility, setVisibility] = useState<Visibility>(currentVisibility);
   const [allowlist, setAllowlist] = useState<AllowlistEntry[]>([]);
@@ -244,6 +246,22 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
       {!canEdit && (
         <div className="text-xs text-[var(--muted)] italic">
           Visibility is locked — this launch is past the backing phase.
+        </div>
+      )}
+
+      {/* Team-fairness cap notice — visible when the creator set a
+          per-backer ceiling at submission. Public backers can only match
+          it, never exceed (allowlisted private backers are also bounded
+          equally, so the team can't pre-anchor with an outsized slot). */}
+      {maxBackingSol != null && (
+        <div className="border-t border-[var(--border)] pt-3">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            TEAM-FAIRNESS CAP
+          </div>
+          <div className="text-xs font-mono text-[var(--foreground)] mt-1">
+            Every backing is capped at {Number(maxBackingSol)} SOL. Team and
+            public are bounded equally — no whale can out-back your team.
+          </div>
         </div>
       )}
 

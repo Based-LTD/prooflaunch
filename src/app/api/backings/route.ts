@@ -166,6 +166,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Team-fairness cap (migration 032). Creator-set ceiling at submission.
+    // Universal: applies equally to allowlisted and public backers, so no
+    // wallet can out-back any other. NULL = no cap (default — casual launch).
+    const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+    if (cap !== null && amount_sol > cap + 1e-9) {
+      return NextResponse.json(
+        {
+          error: `This launch has a per-backer ceiling of ${cap} SOL (team-fairness cap). Your backing of ${amount_sol} SOL exceeds it.`,
+          max_backing_sol: cap,
+        },
+        { status: 400 },
+      );
+    }
+
     // Check if this wallet already has an active backing
     const { data: existingBacking } = await supabase
       .from('backings')

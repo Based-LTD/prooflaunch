@@ -127,6 +127,9 @@ function SubmitPageInner() {
     description: '',
     totalSlots: 4,
     minBackingSol: 0.1,
+    // Phase 3.5 — Optional per-backer ceiling. 0 (UI sentinel) = uncapped.
+    // When set, applies universally so no wallet can out-back any other.
+    maxBackingSol: 0,
     creatorTwitter: '',
     twitter: '',
     website: '',
@@ -329,6 +332,7 @@ function SubmitPageInner() {
           website: formData.website || undefined,
           total_slots: formData.totalSlots,
           min_backing_sol: formData.minBackingSol,
+          max_backing_sol: formData.maxBackingSol > 0 ? formData.maxBackingSol : null,
           backing_days: 3,
           creation_fee_signature: signature,
           creation_fee_sol: signature ? CREATION_FEE_SOL : undefined,
@@ -391,7 +395,7 @@ function SubmitPageInner() {
       ...prev,
       [name]: type === 'checkbox'
         ? checked
-        : ['totalSlots', 'minBackingSol'].includes(name) ? Number(value) : value
+        : ['totalSlots', 'minBackingSol', 'maxBackingSol'].includes(name) ? Number(value) : value
     }));
   };
 
@@ -835,6 +839,28 @@ function SubmitPageInner() {
                     &gt; Each backer pledges at least this
                   </span>
                 </div>
+              </div>
+
+              {/* Optional per-backer maximum (Phase 3.5).
+                  When set, applies to allowlisted + public alike — every
+                  backing is bounded by the same SOL ceiling, so no whale
+                  can out-back any team member. 0 = uncapped (default). */}
+              <div>
+                <label className={labelClass}>Maximum per backer (optional)</label>
+                <select
+                  name="maxBackingSol"
+                  value={formData.maxBackingSol}
+                  onChange={handleChange}
+                  className={inputClass()}
+                >
+                  <option value={0}>No cap — anyone can back any amount</option>
+                  {[0.1, 0.25, 0.5, 1, 2, 5, 10, 25].filter((n) => n >= formData.minBackingSol).map((n) => (
+                    <option key={n} value={n}>{n} SOL max per backer</option>
+                  ))}
+                </select>
+                <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                  &gt; Team-fairness lock: every backing bounded equally, no whale exceeds your team.
+                </span>
               </div>
 
               {/* Compact slot preview — single row of boxes + min raise line */}

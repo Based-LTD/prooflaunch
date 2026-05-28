@@ -532,6 +532,7 @@ export default function MemeDetailPage() {
             currentVisibility={(meme.visibility ?? 'open') as 'open' | 'stealth' | 'spectator'}
             creatorWallet={meme.creator_wallet}
             canEdit={meme.status === 'backing'}
+            maxBackingSol={meme.max_backing_sol ?? null}
           />
         )}
 

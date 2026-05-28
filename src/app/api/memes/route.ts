@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
       // New slot-based backing system
       total_slots,         // 2-24 backer slots
       min_backing_sol,     // Minimum SOL per backer
+      max_backing_sol,     // Optional per-backer ceiling (Phase 3.5). NULL = uncapped.
       // Legacy field (unused, kept for old client compatibility)
       backing_days,
       // Legacy trust score parameters (no longer used in fee distribution)
@@ -296,6 +297,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Optional per-backer ceiling (Phase 3.5). When set, must be ≥ min.
+    if (max_backing_sol !== undefined && max_backing_sol !== null) {
+      if (typeof max_backing_sol !== 'number' || max_backing_sol < min_backing_sol) {
+        return NextResponse.json(
+          { error: 'max_backing_sol must be a number ≥ min_backing_sol' },
+          { status: 400 },
+        );
+      }
+    }
+
     if (symbol.length > 10) {
       return NextResponse.json(
         { error: 'Symbol must be 10 characters or less' },
@@ -417,6 +428,7 @@ export async function POST(request: NextRequest) {
         // Slot-based backing system
         total_slots,
         min_backing_sol,
+        max_backing_sol: (typeof max_backing_sol === 'number') ? max_backing_sol : null,
         backing_goal_sol: min_backing_sol * total_slots, // Minimum possible raise (for compatibility)
         backing_deadline: deadline.toISOString(),
         status: 'backing', // Start in backing phase

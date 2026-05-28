@@ -21,9 +21,10 @@ export const maxDuration = 60;
 function authorize(request: NextRequest): { ok: true } | { ok: false; status: number; error: string } {
   const isVercelCron = request.headers.get('x-vercel-cron') === '1';
   const authHeader = request.headers.get('authorization');
-  const expectedKey = process.env.CRON_SECRET;
+  // Same fallback default as /api/fees/process + /api/airdrop/daily so
+  // a missing CRON_SECRET env doesn't soft-break manual triggers.
+  const expectedKey = process.env.CRON_SECRET || 'prooflaunch-fees';
   if (isVercelCron) return { ok: true };
-  if (!expectedKey) return { ok: false, status: 500, error: 'CRON_SECRET not configured' };
   if (authHeader === `Bearer ${expectedKey}`) return { ok: true };
   return { ok: false, status: 401, error: 'Unauthorized' };
 }

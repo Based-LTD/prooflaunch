@@ -61,6 +61,11 @@ export interface Meme {
   // spectator = public listing, allowlist-only backing
   visibility?: 'open' | 'stealth' | 'spectator';
 
+  // Team-fairness cap (migration 032). Optional creator-set max per backer.
+  // NULL = uncapped. When set, applies universally (allowlisted + public)
+  // so no wallet can out-back any other. Must be ≥ min_backing_sol.
+  max_backing_sol?: number | null;
+
   // Launch Configuration v2 — fee distribution config (migration 030).
   // NULL on legacy memes (use hardcoded distribution). When set, the
   // five _pct fields sum to 100 and override the legacy logic.
