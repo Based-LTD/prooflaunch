@@ -229,6 +229,27 @@ export async function GET(
         pool_token_balance: poolFields?.pool_token_balance ?? null,
         creator_subescrow_pubkey: poolFields?.creator_subescrow_pubkey ?? null,
         fee_distribution_mode: poolFields?.fee_distribution_mode ?? 'legacy_flat',
+        // Phase 2 — fee distribution
+        fee_preset: poolFields?.fee_preset ?? null,
+        fee_backer_pct: poolFields?.fee_backer_pct ?? null,
+        fee_holder_rewards_pct: poolFields?.fee_holder_rewards_pct ?? null,
+        fee_platform_pct: poolFields?.fee_platform_pct ?? null,
+        fee_burn_pct: poolFields?.fee_burn_pct ?? null,
+        fee_charity_pct: poolFields?.fee_charity_pct ?? null,
+        fee_charity_wallet: poolFields?.fee_charity_wallet ?? null,
+        // Phase 3 — buyback bot
+        buyback_bot_enabled: poolFields?.buyback_bot_enabled ?? false,
+        buyback_bot_action: poolFields?.buyback_bot_action ?? null,
+        buyback_bot_wallet: poolFields?.buyback_bot_wallet ?? null,
+        buyback_bot_last_run_at: poolFields?.buyback_bot_last_run_at ?? null,
+        buyback_bot_total_sol_spent: poolFields?.buyback_bot_total_sol_spent ?? 0,
+        buyback_bot_total_tokens_acted: poolFields?.buyback_bot_total_tokens_acted ?? 0,
+        // Phase 3.5 — team-fairness cap
+        max_backing_sol: poolFields?.max_backing_sol ?? null,
+        // Phase 4 — Keycard backer lounge (NEVER include keycard_admin_url)
+        keycard_gate_id: poolFields?.keycard_gate_id ?? null,
+        keycard_gate_url: poolFields?.keycard_gate_url ?? null,
+        keycard_synced_at: poolFields?.keycard_synced_at ?? null,
         vault_lamports: vaultLamports,
         backings: enrichedBackings,
       },
