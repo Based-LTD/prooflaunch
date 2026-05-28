@@ -38,7 +38,10 @@ BEGIN
         'encrypted_pool_key',
         'encrypted_creator_subescrow_key',
         'encrypted_buyback_bot_key',
-        'keycard_admin_url'
+        'keycard_admin_url',
+        -- Replaced by the aggregate LEFT JOIN below (duplicate column
+        -- error otherwise).
+        'current_backing_sol'
       );
 
   EXECUTE 'DROP VIEW IF EXISTS memes_with_stats';
