@@ -18,6 +18,7 @@ import { LaunchVisibilityPanel } from '@/components/meme/LaunchVisibilityPanel';
 import { FeeDistributionBadge } from '@/components/meme/FeeDistributionBadge';
 import { BuybackBotPanel } from '@/components/meme/BuybackBotPanel';
 import { BackerLoungePanel } from '@/components/meme/BackerLoungePanel';
+import { BackerVaultManager } from '@/components/meme/BackerVaultManager';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
 
@@ -523,9 +524,13 @@ export default function MemeDetailPage() {
             bot wallet, totals, recent runs (all on-chain auditable). */}
         <BuybackBotPanel meme={meme} />
 
-        {/* Phase 4 — Keycard backer lounge. Renders only after the
+        {/* Phase 4 — Keycard backer vault. Renders only after the
             keycard/sync cron has created a gate for this meme. */}
         <BackerLoungePanel meme={meme} />
+
+        {/* Phase 4 — Creator manager for the vault content. Hidden for
+            non-creators; hidden until the gate exists. */}
+        <BackerVaultManager meme={meme} isCreator={isCreator} />
 
         {/* Creator-only: launch visibility + allowlist controls.
             Shows during the backing phase (when visibility is mutable);

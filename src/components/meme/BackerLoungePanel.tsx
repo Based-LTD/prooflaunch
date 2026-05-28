@@ -2,14 +2,16 @@
 
 import type { Meme } from '@/types/database';
 
-// Renders the "Backer Lounge" card on the meme detail page once a
+// Renders the "Backer Vault" card on the meme detail page once a
 // Keycard gate has been created for this meme. Hidden until the cron
 // fires and writes meme.keycard_gate_url. Visible to EVERYONE (not just
 // backers/holders) — the gate itself does the access check when they
 // click through.
 //
-// Brand: every funded Proof Launch token ships with a holder lounge on
-// day one. Zero work for the creator, real utility for backers.
+// The "Vault" is a token-gated content drop: the creator (via the
+// BackerVaultManager panel) can replace the content at any time with
+// alpha, whitelist codes, holder-only links, surprise drops. Holders
+// unlock with their wallet to see whatever's inside right now.
 
 export function BackerLoungePanel({ meme }: { meme: Meme }) {
   if (!meme.keycard_gate_url) return null;
@@ -19,10 +21,10 @@ export function BackerLoungePanel({ meme }: { meme: Meme }) {
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            BACKER LOUNGE
+            BACKER VAULT
           </div>
           <div className="text-sm font-mono text-[var(--foreground)] mt-0.5">
-            Holder-only chat &amp; updates
+            Token-gated content drop
           </div>
         </div>
         <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] border border-[var(--accent-gold)]/40 px-2 py-1">
@@ -31,8 +33,8 @@ export function BackerLoungePanel({ meme }: { meme: Meme }) {
       </div>
 
       <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">
-        Any wallet holding ${meme.symbol} can enter. Connect, sign once,
-        and you&apos;re in. Access checked live against your on-chain balance.
+        Hold ${meme.symbol} to unlock whatever the creator has dropped in the vault — alpha, whitelist codes,
+        holder-only links. Updates anytime. Sign once, see what&apos;s inside right now.
       </p>
 
       <a
@@ -41,7 +43,7 @@ export function BackerLoungePanel({ meme }: { meme: Meme }) {
         rel="noreferrer"
         className="block text-center py-2 px-3 border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors text-xs font-mono uppercase tracking-wider"
       >
-        ENTER LOUNGE →
+        UNLOCK VAULT →
       </a>
     </div>
   );

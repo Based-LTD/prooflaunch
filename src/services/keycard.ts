@@ -63,45 +63,36 @@ export interface CreateGateResult {
 }
 
 interface ChallengeResponse {
-  challenge?: string;
-  id?: string;
-  challengeId?: string;
+  challengeId: string;
+  message: string;       // exact text to sign — server-authoritative, no client construction
+  issuedAt: string;
+  expiresAt: string;
 }
 
-async function requestChallenge(walletPubkey: string): Promise<string> {
+async function requestChallenge(
+  walletPubkey: string,
+  action: 'create-gate' | 'update-gate',
+  gateId: string,
+): Promise<ChallengeResponse> {
   const res = await fetch(`${KEYCARD_BASE}/v1/challenges`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       purpose: 'admin',
-      gateId: 'new',
+      gateId,
       wallet: walletPubkey,
-      action: 'create-gate',
+      action,
     }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`/v1/challenges ${res.status}: ${body.slice(0, 200)}`);
   }
-  const j: ChallengeResponse = await res.json();
-  const id = j.challengeId || j.challenge || j.id;
-  if (!id) throw new Error(`/v1/challenges response missing challenge id: ${JSON.stringify(j).slice(0, 200)}`);
-  return id;
-}
-
-function buildAdminMessage(wallet: string, challengeId: string): string {
-  // EXACT format from network capture — line order and spacing matter
-  // because the server signature-verifies the literal string.
-  return [
-    'KEYCARD admin action',
-    'Version: 2',
-    'Domain: keycardsol.xyz',
-    'Action: create-gate',
-    'Gate: new',
-    `Wallet: ${wallet}`,
-    `Issued At: ${new Date().toISOString()}`,
-    `Challenge: ${challengeId}`,
-  ].join('\n');
+  const j = await res.json();
+  if (!j.challengeId || !j.message) {
+    throw new Error(`/v1/challenges response missing fields: ${JSON.stringify(j).slice(0, 200)}`);
+  }
+  return j as ChallengeResponse;
 }
 
 function signMessage(message: string, secretKey: Uint8Array): string {
@@ -118,12 +109,9 @@ export async function createGate(opts: KeycardCreateOptions): Promise<CreateGate
     const owner = getOwnerKeypair();
     const ownerPubkey = owner.publicKey.toBase58();
 
-    // Step 1 — challenge
-    const challengeId = await requestChallenge(ownerPubkey);
-
-    // Step 2 — sign admin message
-    const adminMessage = buildAdminMessage(ownerPubkey, challengeId);
-    const adminSignature = signMessage(adminMessage, owner.secretKey);
+    // Step 1 — challenge. Server returns the exact message we must sign.
+    const ch = await requestChallenge(ownerPubkey, 'create-gate', 'new');
+    const adminSignature = signMessage(ch.message, owner.secretKey);
 
     // Step 3 — multipart POST /v1/gates with full field set
     const form = new FormData();
@@ -138,9 +126,9 @@ export async function createGate(opts: KeycardCreateOptions): Promise<CreateGate
     form.append('walletList', '');
     form.append('getAccessUrl', opts.getAccessUrl);
     form.append('ownerWallet', ownerPubkey);
-    form.append('adminMessage', adminMessage);
+    form.append('adminMessage', ch.message);
     form.append('adminSignature', adminSignature);
-    form.append('adminChallengeId', challengeId);
+    form.append('adminChallengeId', ch.challengeId);
 
     const fileName = opts.fileName ?? 'welcome.md';
     const fileMime = opts.fileMime ?? 'text/markdown';
@@ -168,6 +156,69 @@ export async function createGate(opts: KeycardCreateOptions): Promise<CreateGate
     return { ok: true, gate: { gateId, openUrl, adminUrl } };
   } catch (e) {
     return { ok: false, error: `keycard fetch: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+export interface UpdateGateOptions {
+  fileContent: string;       // text or binary as string (binary callers pass base64 via Buffer)
+  fileName: string;
+  fileMime?: string;
+  // Optional metadata changes — passed only if provided.
+  name?: string;
+  description?: string;
+  getAccessUrl?: string;
+}
+
+export interface UpdateGateResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Replace a gate's content + optional metadata. Uses the same SIWS
+ * challenge → sign → PATCH flow as create, but with action='update-gate'
+ * and the existing gateId.
+ *
+ * Requires the platform escrow keypair (the original ownerWallet from
+ * createGate) to sign. No per-creator wallet interaction — Proof Launch
+ * acts as the gate admin on behalf of every creator.
+ */
+export async function updateGateContent(
+  gateId: string,
+  opts: UpdateGateOptions,
+  fileBlob?: Blob,
+): Promise<UpdateGateResult> {
+  try {
+    const owner = getOwnerKeypair();
+    const ownerPubkey = owner.publicKey.toBase58();
+
+    const ch = await requestChallenge(ownerPubkey, 'update-gate', gateId);
+    const adminSignature = signMessage(ch.message, owner.secretKey);
+
+    const form = new FormData();
+    if (opts.name) form.append('name', opts.name);
+    if (opts.description) form.append('description', opts.description);
+    if (opts.getAccessUrl) form.append('getAccessUrl', opts.getAccessUrl);
+
+    const blob = fileBlob ?? new Blob([opts.fileContent], { type: opts.fileMime ?? 'text/markdown' });
+    form.append('file', blob, opts.fileName);
+
+    form.append('ownerWallet', ownerPubkey);
+    form.append('adminMessage', ch.message);
+    form.append('adminSignature', adminSignature);
+    form.append('adminChallengeId', ch.challengeId);
+
+    const res = await fetch(`${KEYCARD_BASE}/v1/gates/${gateId}`, {
+      method: 'PATCH',
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return { ok: false, error: `keycard PATCH ${res.status}: ${body.slice(0, 200)}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: `keycard update: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 
