@@ -173,6 +173,11 @@ export async function POST(request: NextRequest) {
       fee_burn_pct,
       fee_charity_pct,
       fee_charity_wallet,
+      // Phase 3 — Buyback bot (migration 031). When enabled, a system-
+      // controlled wallet takes one slot and accrues fees like any backer;
+      // a cron periodically buys + executes the chosen action.
+      buyback_bot_enabled = false,
+      buyback_bot_action,
     } = body;
 
     // ── Partner session lookup (optional) ──────────────────────────
@@ -344,6 +349,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Buyback bot validation (Phase 3 — migration 031). When enabled,
+    // action must be one of the four supported modes. Currently 'burn'
+    // and 'hold' are wired end-to-end; distribute_* return early in the
+    // cron with a "Phase 3.1" notice but are accepted at submit so the
+    // creator can flip later via dashboard.
+    const VALID_BOT_ACTIONS = new Set(['burn', 'hold', 'distribute_holders', 'distribute_backers']);
+    if (buyback_bot_enabled) {
+      if (typeof buyback_bot_action !== 'string' || !VALID_BOT_ACTIONS.has(buyback_bot_action)) {
+        return NextResponse.json(
+          { error: 'buyback_bot_action must be one of: burn, hold, distribute_holders, distribute_backers' },
+          { status: 400 },
+        );
+      }
+    }
+
     // For gated launches, parse + validate the initial allowlist (if any).
     // Creator's own wallet gets auto-added after the meme insert so they
     // can always back their own launch — don't require it in the input.
@@ -425,6 +445,11 @@ export async function POST(request: NextRequest) {
         fee_burn_pct:           fee_preset ? fee_burn_pct : null,
         fee_charity_pct:        fee_preset ? fee_charity_pct : null,
         fee_charity_wallet:     fee_preset && fee_charity_pct > 0 ? fee_charity_wallet : null,
+        // Phase 3 — Buyback bot. The wallet + key are filled in
+        // immediately below via a follow-up UPDATE so the insert stays
+        // small if the keygen fails for any reason.
+        buyback_bot_enabled: !!buyback_bot_enabled,
+        buyback_bot_action:  buyback_bot_enabled ? buyback_bot_action : null,
       })
       .select()
       .single();
@@ -484,6 +509,15 @@ export async function POST(request: NextRequest) {
     const subPub = subKp.publicKey.toBase58();
     const encryptedSubKey = encryptPrivateKey(bs58.encode(subKp.secretKey));
 
+    // Phase 3 — Buyback bot keypair (only when enabled).
+    let buybackBotWallet: string | null = null;
+    let encryptedBuybackBotKey: string | null = null;
+    if (buyback_bot_enabled) {
+      const botKp = Keypair.generate();
+      buybackBotWallet = botKp.publicKey.toBase58();
+      encryptedBuybackBotKey = encryptPrivateKey(bs58.encode(botKp.secretKey));
+    }
+
     const { error: poolErr } = await supabase
       .from('memes')
       .update({
@@ -491,6 +525,8 @@ export async function POST(request: NextRequest) {
         encrypted_pool_key: encryptedPoolKey,
         creator_subescrow_pubkey: subPub,
         encrypted_creator_subescrow_key: encryptedSubKey,
+        buyback_bot_wallet: buybackBotWallet,
+        encrypted_buyback_bot_key: encryptedBuybackBotKey,
       })
       .eq('id', data.id);
     if (poolErr) {
@@ -501,8 +537,9 @@ export async function POST(request: NextRequest) {
       await supabase.from('memes').delete().eq('id', data.id);
       return NextResponse.json({ error: `Wallet provisioning failed: ${poolErr.message}` }, { status: 500 });
     }
-    (data as { pool_wallet?: string; creator_subescrow_pubkey?: string }).pool_wallet = poolWallet;
+    (data as { pool_wallet?: string; creator_subescrow_pubkey?: string; buyback_bot_wallet?: string | null }).pool_wallet = poolWallet;
     (data as { creator_subescrow_pubkey?: string }).creator_subescrow_pubkey = subPub;
+    (data as { buyback_bot_wallet?: string | null }).buyback_bot_wallet = buybackBotWallet;
 
     // Note: Creation fee goes to escrow, not recorded as a backing
     // The creator's token wallet is stored on the meme itself, not as a backing record

@@ -153,6 +153,11 @@ function SubmitPageInner() {
     feeBurnPct: 0,
     feeCharityPct: 0,
     feeCharityWallet: '',
+    // Phase 3 — Per-meme buyback bot. Bot wallet takes one launch slot
+    // and reinvests its claimable_fees_sol into the token. Disabled by
+    // default; creator chooses an action when they flip it on.
+    buybackBotEnabled: false,
+    buybackBotAction: 'burn' as 'burn' | 'hold' | 'distribute_holders' | 'distribute_backers',
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -348,6 +353,9 @@ function SubmitPageInner() {
           fee_burn_pct: formData.feeBurnPct,
           fee_charity_pct: formData.feeCharityPct,
           fee_charity_wallet: formData.feeCharityPct > 0 ? formData.feeCharityWallet : null,
+          // Phase 3 — Buyback bot
+          buyback_bot_enabled: formData.buybackBotEnabled,
+          buyback_bot_action: formData.buybackBotEnabled ? formData.buybackBotAction : null,
         }),
       });
       if (!response.ok) {
@@ -1069,6 +1077,78 @@ function SubmitPageInner() {
                 </div>
               );
             })()}
+          </div>
+
+          {/* ── Buyback Bot (Phase 3) ── */}
+          <div className="border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  BUYBACK BOT
+                </div>
+                <div className="text-sm font-mono text-[var(--foreground)]">
+                  Optional autonomous backer
+                </div>
+                <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
+                  Adds a system-controlled wallet as a backer slot. It earns
+                  trading fees like any backer, then uses those SOL to buy
+                  your token and execute the action you choose. Fully
+                  on-chain &amp; auditable.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.buybackBotEnabled}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, buybackBotEnabled: e.target.checked }))}
+                  className="w-4 h-4 accent-[var(--accent)]"
+                />
+                <span className="text-xs font-mono uppercase tracking-wider text-[var(--foreground)]">
+                  {formData.buybackBotEnabled ? 'ON' : 'OFF'}
+                </span>
+              </label>
+            </div>
+
+            {formData.buybackBotEnabled && (
+              <div className="space-y-3 pt-2 border-t border-[var(--border)]">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  ACTION ON BOUGHT TOKENS
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {([
+                    { value: 'burn',                label: 'BURN',                tag: 'Deflationary',  desc: 'Send each buyback to a burn address. Permanent supply reduction.', ready: true },
+                    { value: 'hold',                label: 'HOLD',                tag: 'Treasury',      desc: 'Park in the bot wallet. Acts as a treasury you can deploy later.', ready: true },
+                    { value: 'distribute_holders',  label: 'AIRDROP HOLDERS',     tag: 'Phase 3.1',     desc: 'Snapshot current holders, transfer pro-rata. Wiring in next release.', ready: false },
+                    { value: 'distribute_backers',  label: 'AIRDROP BACKERS',     tag: 'Phase 3.1',     desc: 'Transfer pro-rata to genesis backers. Wiring in next release.', ready: false },
+                  ] as const).map((opt) => {
+                    const selected = formData.buybackBotAction === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, buybackBotAction: opt.value }))}
+                        className={`text-left p-3 border transition-colors ${
+                          selected
+                            ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                            : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--accent)]/60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs font-mono font-semibold text-[var(--foreground)]">{opt.label}</span>
+                          <span className={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 ${opt.ready ? 'text-[var(--accent)] border border-[var(--accent)]/40' : 'text-[var(--muted)] border border-[var(--border)]'}`}>
+                            {opt.tag}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-[var(--muted)] leading-snug">{opt.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-[10px] font-mono text-[var(--muted)] italic leading-snug border-t border-[var(--border)] pt-2">
+                  The bot wallet is auto-generated when you submit. You can change the action later from your meme dashboard.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Submit ── */}

@@ -16,6 +16,7 @@ import { CreatorPastLaunches } from '@/components/CreatorPastLaunches';
 import { ClaimRewards } from '@/components/ClaimRewards';
 import { LaunchVisibilityPanel } from '@/components/meme/LaunchVisibilityPanel';
 import { FeeDistributionBadge } from '@/components/meme/FeeDistributionBadge';
+import { BuybackBotPanel } from '@/components/meme/BuybackBotPanel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
 
@@ -515,6 +516,11 @@ export default function MemeDetailPage() {
             token. Renders only when meme.fee_preset is set (Phase 2+
             memes). Legacy memes with NULL config render nothing here. */}
         <FeeDistributionBadge meme={meme} />
+
+        {/* Buyback bot status — visible to everyone for transparency.
+            Renders only when meme.buyback_bot_enabled. Shows action,
+            bot wallet, totals, recent runs (all on-chain auditable). */}
+        <BuybackBotPanel meme={meme} />
 
         {/* Creator-only: launch visibility + allowlist controls.
             Shows during the backing phase (when visibility is mutable);

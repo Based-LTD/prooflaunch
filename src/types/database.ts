@@ -71,6 +71,17 @@ export interface Meme {
   fee_burn_pct?: number | null;
   fee_charity_pct?: number | null;
   fee_charity_wallet?: string | null;
+
+  // Phase 3 — Per-meme buyback bot (migration 031).
+  // When enabled, a system-controlled wallet takes one of the launch slots
+  // and accrues claimable_fees_sol like any backer. A cron periodically
+  // claims, swaps SOL → meme token via Jupiter, and executes the action.
+  buyback_bot_enabled?: boolean;
+  buyback_bot_action?: 'burn' | 'hold' | 'distribute_holders' | 'distribute_backers' | null;
+  buyback_bot_wallet?: string | null;
+  buyback_bot_last_run_at?: string | null;
+  buyback_bot_total_sol_spent?: number;
+  buyback_bot_total_tokens_acted?: number;
 }
 
 export interface Backing {
