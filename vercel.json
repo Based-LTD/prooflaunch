@@ -23,6 +23,10 @@
     {
       "path": "/api/buyback/process",
       "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/keycard/sync",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

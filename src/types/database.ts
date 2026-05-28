@@ -66,6 +66,13 @@ export interface Meme {
   // so no wallet can out-back any other. Must be ≥ min_backing_sol.
   max_backing_sol?: number | null;
 
+  // Phase 4 — Keycard backer-lounge gate (migration 033). Populated by
+  // /api/keycard/sync after the meme goes live and a gate is created
+  // for ">0 balance of mint_address" holders. NULL = no gate yet.
+  keycard_gate_id?: string | null;
+  keycard_gate_url?: string | null;
+  keycard_synced_at?: string | null;
+
   // Launch Configuration v2 — fee distribution config (migration 030).
   // NULL on legacy memes (use hardcoded distribution). When set, the
   // five _pct fields sum to 100 and override the legacy logic.
