@@ -96,15 +96,20 @@ export function BackerVaultManager({ meme, isCreator }: { meme: Meme; isCreator:
     }
   }
 
+  const lastUpdated = meme.keycard_synced_at
+    ? new Date(meme.keycard_synced_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : null;
+
   return (
-    <div className="border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="border border-[var(--accent)]/40 bg-[var(--card)] p-4 sm:p-5 space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between flex-wrap gap-2">
         <div>
-          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            CREATOR CONTROLS · BACKER VAULT
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+            CREATOR ONLY · ${meme.symbol} HOLDER DROP
           </div>
-          <div className="text-sm font-mono text-[var(--foreground)] mt-0.5">
-            Drop content for ${meme.symbol} holders
+          <div className="text-sm font-mono text-[var(--foreground)] mt-1">
+            Drop content only your token holders can unlock
           </div>
         </div>
         {status && (
@@ -117,15 +122,41 @@ export function BackerVaultManager({ meme, isCreator }: { meme: Meme; isCreator:
         )}
       </div>
 
-      <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">
-        Whatever you put here, only ${meme.symbol} holders can unlock. Use it for alpha, whitelist codes,
-        holder-only links, surprise drops. Update as often as you want. Each update replaces the previous content.
-      </p>
+      {/* What this is */}
+      <div className="border-l-2 border-[var(--accent)]/40 pl-3 py-1 space-y-1">
+        <div className="text-[11px] font-mono text-[var(--foreground)] leading-relaxed">
+          You have a private slot on Keycard that only ${meme.symbol} holders can open. Drop anything in it:
+        </div>
+        <ul className="text-[11px] font-mono text-[var(--muted)] leading-relaxed list-disc pl-4 space-y-0.5">
+          <li>Alpha calls / market intel</li>
+          <li>Whitelist codes for upcoming drops</li>
+          <li>Private Zoom/Telegram/Discord links</li>
+          <li>Surprise giveaways or holder rewards</li>
+        </ul>
+        <div className="text-[11px] font-mono text-[var(--muted)] leading-relaxed pt-1">
+          Update as often as you want. Each update <strong className="text-[var(--foreground)]">replaces</strong> the previous content.
+        </div>
+      </div>
+
+      {/* Status bar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] border-t border-b border-[var(--border)] py-2">
+        <span>
+          {lastUpdated ? <>Last drop · <span className="text-[var(--foreground)]">{lastUpdated}</span></> : 'No drops yet'}
+        </span>
+        <a
+          href={meme.keycard_gate_url || '#'}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[var(--accent)] hover:underline normal-case"
+        >
+          Preview as a holder ↗
+        </a>
+      </div>
 
       {/* Quick templates */}
-      <div className="flex flex-wrap gap-2 pt-1">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] self-center">
-          Templates:
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+          Start from:
         </span>
         {PRESET_TEMPLATES.map((t) => (
           <button
@@ -142,21 +173,26 @@ export function BackerVaultManager({ meme, isCreator }: { meme: Meme; isCreator:
       <textarea
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        placeholder="Paste markdown, plain text, link, code, anything..."
+        placeholder="Write what you want holders to unlock. Markdown supported. Drop a link, paste a code, share a private invite — anything..."
         rows={10}
         className="w-full bg-[var(--background)] border border-[var(--border)] p-3 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-[var(--accent)] resize-y"
       />
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <input
-          type="text"
-          value={filename}
-          onChange={(e) => setFilename(e.target.value.replace(/[^a-zA-Z0-9._-]/g, ''))}
-          placeholder="filename"
-          className="bg-[var(--background)] border border-[var(--border)] px-2 py-1 text-xs font-mono w-40"
-        />
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            File:
+          </span>
+          <input
+            type="text"
+            value={filename}
+            onChange={(e) => setFilename(e.target.value.replace(/[^a-zA-Z0-9._-]/g, ''))}
+            placeholder="filename"
+            className="bg-[var(--background)] border border-[var(--border)] px-2 py-1 text-xs font-mono w-40"
+          />
+        </div>
         <div className="text-[10px] font-mono text-[var(--muted)]">
-          {Buffer.byteLength(content, 'utf8').toLocaleString()} bytes / 4 MB max
+          {Buffer.byteLength(content, 'utf8').toLocaleString()} / 4,194,304 bytes
         </div>
         <button
           type="button"
@@ -164,7 +200,7 @@ export function BackerVaultManager({ meme, isCreator }: { meme: Meme; isCreator:
           disabled={loading || !content.trim() || !publicKey}
           className="px-4 py-2 bg-[var(--accent)] text-[var(--background)] text-xs font-mono uppercase tracking-wider hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
         >
-          {loading ? 'Updating…' : 'Update vault'}
+          {loading ? 'Dropping…' : 'Drop to holders'}
         </button>
       </div>
     </div>

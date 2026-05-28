@@ -524,11 +524,11 @@ export default function MemeDetailPage() {
             bot wallet, totals, recent runs (all on-chain auditable). */}
         <BuybackBotPanel meme={meme} />
 
-        {/* Phase 4 — Keycard backer vault. Renders only after the
-            keycard/sync cron has created a gate for this meme. */}
-        <BackerLoungePanel meme={meme} />
+        {/* Phase 4 — Keycard "Holder Drop" public unlock card.
+            Returns null for the creator (they see the manager below). */}
+        <BackerLoungePanel meme={meme} isCreator={isCreator} />
 
-        {/* Phase 4 — Creator manager for the vault content. Hidden for
+        {/* Phase 4 — Creator manager for the drop content. Hidden for
             non-creators; hidden until the gate exists. */}
         <BackerVaultManager meme={meme} isCreator={isCreator} />
 
