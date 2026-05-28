@@ -1,7 +1,8 @@
 'use client';
 
-import { Loader2, ExternalLink, Copy, Check, Clock, RefreshCw } from 'lucide-react';
+import { Loader2, ExternalLink, Copy, Check, Clock, RefreshCw, Lock } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import type { Meme } from '@/types/database';
 
 // All four status branches in one component because they share the same
@@ -314,12 +315,57 @@ const FundedPanel: React.FC<FundedProps> = ({
 
 // ── BACKING ──────────────────────────────────────────────────────────
 const BackingPanel: React.FC<BackingProps> = ({
+  meme,
   backerCount, totalBackingSol, slotsRemaining, totalSlots, timeRemaining,
   minBacking, amount, setAmount, onPledge, backing, backingStatus, backingPaused, connected,
   projectedSharePct,
 }) => {
   const filled = backerCount;
   const slotsFull = slotsRemaining <= 0;
+
+  // Launch Configuration v2 — visibility gating.
+  // For stealth/spectator launches, check if the connected wallet is on
+  // the backing_allowlist. If not, the backing UI is replaced with a
+  // "restricted round" state.
+  const { publicKey } = useWallet();
+  const visibility = meme.visibility ?? 'open';
+  const isGated = visibility === 'stealth' || visibility === 'spectator';
+
+  // Eligibility state: 'open' | 'checking' | 'eligible' | 'not_eligible'
+  const [eligibility, setEligibility] = useState<'open' | 'checking' | 'eligible' | 'not_eligible'>(
+    isGated ? 'checking' : 'open',
+  );
+
+  useEffect(() => {
+    if (!isGated) {
+      setEligibility('open');
+      return;
+    }
+    if (!publicKey) {
+      setEligibility('not_eligible'); // not connected = can't back
+      return;
+    }
+    setEligibility('checking');
+    let cancelled = false;
+    fetch(`/api/memes/${meme.id}/allowlist`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled) return;
+        const wallets: string[] = (d?.allowlist || []).map((e: { wallet: string }) => e.wallet);
+        const me = publicKey.toBase58();
+        setEligibility(wallets.includes(me) ? 'eligible' : 'not_eligible');
+      })
+      .catch(() => {
+        if (!cancelled) setEligibility('not_eligible'); // fail-closed
+      });
+    return () => { cancelled = true; };
+  }, [isGated, publicKey, meme.id]);
+
+  // Render the gated state instead of backing UI when:
+  //  - visibility is stealth/spectator
+  //  - AND the connected wallet (or absence) is not eligible
+  const showGatedState =
+    isGated && (eligibility === 'not_eligible' || eligibility === 'checking');
 
   return (
     <div className="border border-[var(--accent)] bg-[var(--card)]">
@@ -352,7 +398,32 @@ const BackingPanel: React.FC<BackingProps> = ({
           </div>
         </div>
 
-        {!connected ? (
+        {showGatedState ? (
+          <div className="border border-[var(--accent-gold)] bg-[var(--background)] p-5 space-y-3">
+            <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+              <Lock className="w-3 h-3" />
+              {visibility === 'stealth' ? 'INTERNAL ROUND' : 'RESTRICTED ROUND'}
+            </div>
+            <div className="text-xs font-mono text-[var(--foreground)] leading-relaxed">
+              This launch is in a restricted backing round. Only approved wallets can back right now.
+            </div>
+            {!connected ? (
+              <div className="text-[11px] font-mono text-[var(--muted)]">
+                &gt; Connect your wallet to check eligibility
+              </div>
+            ) : eligibility === 'checking' ? (
+              <div className="text-[11px] font-mono text-[var(--muted)] flex items-center gap-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> Checking eligibility…
+              </div>
+            ) : (
+              <div className="text-[11px] font-mono text-[var(--muted)] leading-snug">
+                &gt; Your connected wallet is not on the allowlist.
+                <br />
+                &gt; The creator may flip this launch to open backing at any time. Once it does (or once the launch completes), full transparency is restored — that&apos;s the PROOF guarantee.
+              </div>
+            )}
+          </div>
+        ) : !connected ? (
           <div className="border border-[var(--border)] bg-[var(--background)] p-5 text-center">
             <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-1.5">
               [!] NO_WALLET

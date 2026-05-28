@@ -54,6 +54,23 @@ export interface Meme {
   dev_initial_buy_sol: number;   // Dev's planned initial buy (0 = no snipe)
   auto_refund: boolean;          // Whether backers auto-refunded on failure
   trust_score: number;           // Calculated 0-100 trust score
+
+  // Launch Configuration v2 — visibility mode (migration 029)
+  // open      = standard public launch (default for legacy + opt-out)
+  // stealth   = hidden from public listings, allowlist-only backing
+  // spectator = public listing, allowlist-only backing
+  visibility?: 'open' | 'stealth' | 'spectator';
+
+  // Launch Configuration v2 — fee distribution config (migration 030).
+  // NULL on legacy memes (use hardcoded distribution). When set, the
+  // five _pct fields sum to 100 and override the legacy logic.
+  fee_preset?: 'standard' | 'community_first' | 'deflationary' | 'charity_aligned' | 'custom' | null;
+  fee_backer_pct?: number | null;
+  fee_holder_rewards_pct?: number | null;
+  fee_platform_pct?: number | null;
+  fee_burn_pct?: number | null;
+  fee_charity_pct?: number | null;
+  fee_charity_wallet?: string | null;
 }
 
 export interface Backing {

@@ -10,8 +10,31 @@ import { CreatorPastLaunches } from '@/components/CreatorPastLaunches';
 // Creation fee in SOL (goes to escrow to cover launch costs like metadata rent)
 const CREATION_FEE_SOL = 0.02;
 
+// Launch Config v2 — fee distribution presets.
+//
+// SHIPPED v1 (only backer + platform splits are honored at distribution
+// time right now). Holder rewards / burn / charity will light up as
+// Phase 3 ships the infrastructure (buyback bot for burn, etc.).
+// Until then, the DB schema accepts them but UI only exposes the two
+// destinations we can actually move SOL to. No false promises.
+type FeePreset = 'standard' | 'community_first' | 'deflationary' | 'charity_aligned' | 'custom';
+const FEE_PRESETS: Record<'standard', {
+  label: string; tagline: string;
+  backer: number; holder: number; platform: number; burn: number; charity: number;
+}> = {
+  standard: {
+    label: 'STANDARD',
+    tagline: '90% to backers, 10% to platform. The default.',
+    backer: 90, holder: 0, platform: 10, burn: 0, charity: 0,
+  },
+};
+
 // Validation helpers
-const FORBIDDEN_WORDS = ['scam', 'rug', 'rugpull', 'hack', 'steal'];
+// Forbidden-words filter removed — created false positives on legit
+// token names like "Rug Proof", "Scam Protection", "Hack Defense",
+// "Stealth Mode", etc. Pump.fun + the broader market handle
+// quality/legitimacy signals already; we don't add value by
+// pre-filtering names here.
 const URL_PATTERN = /^https?:\/\/[^\s]+$/;
 const TWITTER_PATTERN = /^https?:\/\/(x\.com|twitter\.com)\/[^\s]+$/i;
 const TELEGRAM_PATTERN = /^https?:\/\/t\.me\/[^\s]+$/i;
@@ -32,9 +55,6 @@ function validateName(name: string): string | undefined {
   if (!name.trim()) return 'Name is required';
   if (name.trim().length < 2) return 'Name must be at least 2 characters';
   if (name.trim().length > 32) return 'Name must be 32 characters or less';
-  if (FORBIDDEN_WORDS.some(word => name.toLowerCase().includes(word))) {
-    return 'Name contains prohibited words';
-  }
   if (!/^[a-zA-Z0-9\s\-_]+$/.test(name)) {
     return 'Name can only contain letters, numbers, spaces, hyphens, and underscores';
   }
@@ -53,9 +73,6 @@ function validateSymbol(symbol: string): string | undefined {
 
 function validateDescription(description: string): string | undefined {
   if (description.length > 500) return 'Description must be 500 characters or less';
-  if (FORBIDDEN_WORDS.some(word => description.toLowerCase().includes(word))) {
-    return 'Description contains prohibited words';
-  }
   return undefined;
 }
 
@@ -115,6 +132,27 @@ function SubmitPageInner() {
     website: '',
     telegram: '',
     discord: '',
+    // Launch Configuration v2 — visibility mode
+    // 'open'      → standard public launch, anyone can back (default)
+    // 'stealth'   → hidden from proving grounds, allowlist-only backing
+    // 'spectator' → public listing, allowlist-only backing
+    visibility: 'open' as 'open' | 'stealth' | 'spectator',
+    // Newline-separated wallet addresses for the initial allowlist.
+    // Creator's own wallet is auto-added by the API so they don't need
+    // to include it here. Ignored when visibility === 'open'.
+    allowlistText: '',
+    // Launch Configuration v2 — fee distribution preset + percentages.
+    // Default 'standard' = 90 backer / 10 platform (matches what the
+    // existing non-legacy distribution code does today). Other destinations
+    // (holder rewards / burn / charity) require infrastructure shipping
+    // in Phase 3; UI hides those fields until they actually work.
+    feePreset: 'standard' as 'standard' | 'community_first' | 'deflationary' | 'charity_aligned' | 'custom',
+    feeBackerPct: 90,
+    feeHolderRewardsPct: 0,
+    feePlatformPct: 10,
+    feeBurnPct: 0,
+    feeCharityPct: 0,
+    feeCharityWallet: '',
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -294,6 +332,22 @@ function SubmitPageInner() {
           // attach partner_id/partner_session_id to the meme row, and mark
           // the session submitted (triggering any partner webhook).
           partner_session_id: partnerSession?.session_id,
+          // Launch Config v2 — visibility + initial allowlist
+          visibility: formData.visibility,
+          initial_allowlist: formData.visibility === 'open'
+            ? []
+            : formData.allowlistText
+                .split(/[\s,]+/)
+                .map((w) => w.trim())
+                .filter(Boolean),
+          // Launch Config v2 — fee distribution config
+          fee_preset: formData.feePreset,
+          fee_backer_pct: formData.feeBackerPct,
+          fee_holder_rewards_pct: formData.feeHolderRewardsPct,
+          fee_platform_pct: formData.feePlatformPct,
+          fee_burn_pct: formData.feeBurnPct,
+          fee_charity_pct: formData.feeCharityPct,
+          fee_charity_wallet: formData.feeCharityPct > 0 ? formData.feeCharityWallet : null,
         }),
       });
       if (!response.ok) {
@@ -832,10 +886,203 @@ function SubmitPageInner() {
             </div>
           )}
 
+          {/* ── Launch Visibility (Launch Config v2 — Phase 1) ──
+              Lets creators pick how their launch is exposed to the public.
+              `open` is the default + matches legacy behavior. `stealth` +
+              `spectator` add an allowlist gate the creator manages here. */}
+          <div className="border border-[var(--border)] bg-[var(--card)]/40 p-4 sm:p-5 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold uppercase tracking-wide">Launch Visibility</h3>
+              <p className="text-xs text-[var(--muted)]">
+                Pick how the public sees this launch. Stealth + spectator both gate backing to your allowlist.
+                All modes auto-flip to public the moment the token launches — that's the PROOF guarantee.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {[
+                { key: 'open', label: 'OPEN', desc: 'Anyone sees + backs. Standard launch.' },
+                { key: 'spectator', label: 'SPECTATOR', desc: 'Public listing, allowlist-only backing. Build hype while staying selective.' },
+                { key: 'stealth', label: 'INTERNAL', desc: 'Hidden from public board. Allowlist-only. Total control.' },
+              ].map((opt) => {
+                const selected = formData.visibility === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setFormData((prev) => ({ ...prev, visibility: opt.key as typeof prev.visibility }))}
+                    className={`border p-3 text-left transition-colors ${
+                      selected
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                        : 'border-[var(--border)] hover:border-[var(--muted)]'
+                    }`}
+                  >
+                    <div className={`text-xs font-mono font-semibold ${selected ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
+                      {opt.label}
+                    </div>
+                    <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
+                      {opt.desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Allowlist input — only shown for stealth + spectator */}
+            {formData.visibility !== 'open' && (
+              <div className="space-y-2">
+                <label className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
+                  Initial Allowlist (one wallet per line)
+                </label>
+                <textarea
+                  value={formData.allowlistText}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, allowlistText: e.target.value }))}
+                  placeholder={'Wallet1...\nWallet2...\nWallet3...'}
+                  rows={5}
+                  className="w-full text-xs font-mono"
+                />
+                <p className="text-[11px] text-[var(--muted)] leading-snug">
+                  Only these wallets can back during the restricted round. Your own wallet is added automatically — don't include it here.
+                  You can add or remove wallets anytime after launch via your creator dashboard.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Fee Distribution (Launch Config v2 — Phase 2 v1) ──
+              v1 only honors backer + platform splits. Other destinations
+              (holder rewards / burn / charity) need infrastructure that
+              ships in Phase 3 — UI hides those for now so we don't make
+              promises we can't keep. Schema already supports them. */}
+          <div className="border border-[var(--border)] bg-[var(--card)]/40 p-4 sm:p-5 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold uppercase tracking-wide">Fee Distribution</h3>
+              <p className="text-xs text-[var(--muted)]">
+                Configure your backer / platform split. Holder rewards, burn, and charity routing ship in Phase 3 — coming soon.
+              </p>
+            </div>
+
+            {/* Preset selector — standard + custom */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Standard preset */}
+              <button
+                type="button"
+                onClick={() => setFormData((prev) => ({
+                  ...prev,
+                  feePreset: 'standard',
+                  feeBackerPct: FEE_PRESETS.standard.backer,
+                  feeHolderRewardsPct: FEE_PRESETS.standard.holder,
+                  feePlatformPct: FEE_PRESETS.standard.platform,
+                  feeBurnPct: FEE_PRESETS.standard.burn,
+                  feeCharityPct: FEE_PRESETS.standard.charity,
+                }))}
+                className={`border p-3 text-left transition-colors ${
+                  formData.feePreset === 'standard'
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                    : 'border-[var(--border)] hover:border-[var(--muted)]'
+                }`}
+              >
+                <div className={`text-xs font-mono font-semibold ${formData.feePreset === 'standard' ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
+                  {FEE_PRESETS.standard.label}
+                </div>
+                <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
+                  {FEE_PRESETS.standard.tagline}
+                </div>
+                <div className="text-[10px] font-mono text-[var(--muted)] mt-1.5">
+                  {FEE_PRESETS.standard.backer}% backers · {FEE_PRESETS.standard.platform}% platform
+                </div>
+              </button>
+
+              {/* Custom — only backer + platform editable */}
+              <button
+                type="button"
+                onClick={() => setFormData((prev) => ({ ...prev, feePreset: 'custom' }))}
+                className={`border p-3 text-left transition-colors ${
+                  formData.feePreset === 'custom'
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                    : 'border-[var(--border)] hover:border-[var(--muted)]'
+                }`}
+              >
+                <div className={`text-xs font-mono font-semibold ${formData.feePreset === 'custom' ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
+                  CUSTOM
+                </div>
+                <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
+                  Set your own backer / platform %.
+                </div>
+              </button>
+            </div>
+
+            {/* Per-% editors — only backer + platform (the two we can honor today) */}
+            {(() => {
+              const total = formData.feeBackerPct + formData.feePlatformPct;
+              const sumOk = total === 100;
+              const isCustom = formData.feePreset === 'custom';
+              return (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">Backers %</label>
+                      <input
+                        type="number"
+                        min={0} max={100}
+                        value={formData.feeBackerPct}
+                        onChange={(e) => {
+                          const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                          setFormData((prev) => ({
+                            ...prev,
+                            feeBackerPct: v,
+                            feePlatformPct: 100 - v, // auto-balance the other half
+                            feePreset: 'custom',
+                          }));
+                        }}
+                        disabled={!isCustom}
+                        className="w-full text-sm font-mono text-center disabled:opacity-60"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">Platform %</label>
+                      <input
+                        type="number"
+                        min={0} max={100}
+                        value={formData.feePlatformPct}
+                        onChange={(e) => {
+                          const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                          setFormData((prev) => ({
+                            ...prev,
+                            feePlatformPct: v,
+                            feeBackerPct: 100 - v,
+                            feePreset: 'custom',
+                          }));
+                        }}
+                        disabled={!isCustom}
+                        className="w-full text-sm font-mono text-center disabled:opacity-60"
+                      />
+                    </div>
+                  </div>
+                  <div className={`text-xs font-mono flex items-center justify-between border-t border-[var(--border)] pt-2 ${sumOk ? 'text-[var(--muted)]' : 'text-[var(--error)]'}`}>
+                    <span>SUM</span>
+                    <span>{total}% {sumOk ? '✓' : '· must equal 100%'}</span>
+                  </div>
+                  <div className="text-[10px] font-mono text-[var(--muted)] italic leading-snug">
+                    Coming in Phase 3: routing for $PROOF holder rewards, auto-burn, and charity wallet allocations.
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
           {/* ── Submit ── */}
           <button
             type="submit"
-            disabled={isSubmitting || !formData.name || !formData.symbol || Object.keys(fieldErrors).some(k => fieldErrors[k as keyof ValidationErrors])}
+            disabled={
+              isSubmitting
+              || !formData.name
+              || !formData.symbol
+              || Object.keys(fieldErrors).some(k => fieldErrors[k as keyof ValidationErrors])
+              // Fee config must sum to 100, charity wallet present when needed
+              || (formData.feeBackerPct + formData.feeHolderRewardsPct + formData.feePlatformPct + formData.feeBurnPct + formData.feeCharityPct) !== 100
+              || (formData.feeCharityPct > 0 && (formData.feeCharityWallet.length < 32 || formData.feeCharityWallet.length > 50))
+            }
             className="btn-primary w-full text-sm sm:text-base py-3.5"
           >
             {isSubmitting ? (

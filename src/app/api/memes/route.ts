@@ -83,6 +83,11 @@ export async function GET(request: NextRequest) {
     //   - 'funded'   → always (filled pool, awaiting launch)
     //   - 'live'     → always (already launched, trading)
     //   - everything else (failed, refunded, etc.) → HIDDEN
+    // Plus visibility filter (Launch Config v2 — Phase 1):
+    //   - 'open'      → show normally
+    //   - 'spectator' → show (public listing, only backing is gated)
+    //   - 'stealth'   → HIDE from public listings (creator-scoped queries
+    //                   are exempt so creators see their own stealth launches)
     // Creator-scoped queries (Portfolio) and admin (includeStaleExpired)
     // remain exempt so refunds can still be tracked / handled.
     let filteredData = data;
@@ -91,6 +96,9 @@ export async function GET(request: NextRequest) {
       const PUBLIC_STATUSES = new Set(['backing', 'funded', 'live']);
       filteredData = data?.filter((meme) => {
         if (!PUBLIC_STATUSES.has(meme.status)) return false;
+        // Hide stealth launches from public listings — they only become
+        // visible when the creator flips visibility (manually or auto on funded)
+        if (meme.visibility === 'stealth') return false;
         // For backing memes, also require an unexpired deadline
         if (meme.status === 'backing') {
           const deadline = new Date(meme.backing_deadline);
@@ -147,6 +155,24 @@ export async function POST(request: NextRequest) {
       // hosted-checkout URL (?session=pls_xxx). The session row carries
       // the partner_id and validation context.
       partner_session_id,
+      // Launch Configuration v2 — visibility mode + initial allowlist.
+      // visibility defaults to 'open' (legacy behavior). Stealth and
+      // spectator require an allowlist; the creator's own wallet is
+      // auto-added below so they can always back their own launch.
+      visibility = 'open',
+      initial_allowlist = [],
+      // Launch Configuration v2 — fee distribution preset + percentages.
+      // All five _pct fields must sum to 100. fee_preset is the user's
+      // chosen template ('standard' | 'community_first' | ... | 'custom').
+      // If fee_preset is missing entirely we leave the columns NULL,
+      // which the distribution code treats as "use legacy hardcoded".
+      fee_preset,
+      fee_backer_pct,
+      fee_holder_rewards_pct,
+      fee_platform_pct,
+      fee_burn_pct,
+      fee_charity_pct,
+      fee_charity_wallet,
     } = body;
 
     // ── Partner session lookup (optional) ──────────────────────────
@@ -272,6 +298,75 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Visibility validation (Launch Config v2 — Phase 1) ──────────
+    const VALID_VISIBILITIES = new Set(['open', 'stealth', 'spectator']);
+    if (!VALID_VISIBILITIES.has(visibility)) {
+      return NextResponse.json(
+        { error: `visibility must be one of: open, stealth, spectator` },
+        { status: 400 },
+      );
+    }
+    // Fee distribution validation (Launch Config v2 — Phase 2). When
+    // fee_preset is supplied, all five _pct fields must be present,
+    // each 0-100, summing to exactly 100. Charity wallet required when
+    // fee_charity_pct > 0. Missing fee_preset = NULL row = legacy behavior.
+    const VALID_FEE_PRESETS = new Set(['standard', 'community_first', 'deflationary', 'charity_aligned', 'custom']);
+    if (fee_preset !== undefined && fee_preset !== null) {
+      if (!VALID_FEE_PRESETS.has(fee_preset)) {
+        return NextResponse.json(
+          { error: 'fee_preset must be one of: standard, community_first, deflationary, charity_aligned, custom' },
+          { status: 400 },
+        );
+      }
+      const pcts = [fee_backer_pct, fee_holder_rewards_pct, fee_platform_pct, fee_burn_pct, fee_charity_pct];
+      if (pcts.some((p) => typeof p !== 'number' || !Number.isInteger(p) || p < 0 || p > 100)) {
+        return NextResponse.json(
+          { error: 'All fee_*_pct fields must be integers 0-100' },
+          { status: 400 },
+        );
+      }
+      const sum = pcts.reduce((a: number, b: number) => a + b, 0);
+      if (sum !== 100) {
+        return NextResponse.json(
+          { error: `Fee percentages must sum to 100 (got ${sum})` },
+          { status: 400 },
+        );
+      }
+      if (fee_charity_pct > 0) {
+        if (typeof fee_charity_wallet !== 'string'
+            || fee_charity_wallet.length < 32
+            || fee_charity_wallet.length > 50) {
+          return NextResponse.json(
+            { error: 'fee_charity_wallet (valid Solana address) required when fee_charity_pct > 0' },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
+    // For gated launches, parse + validate the initial allowlist (if any).
+    // Creator's own wallet gets auto-added after the meme insert so they
+    // can always back their own launch — don't require it in the input.
+    let validatedAllowlist: string[] = [];
+    if (visibility !== 'open') {
+      if (!Array.isArray(initial_allowlist)) {
+        return NextResponse.json(
+          { error: 'initial_allowlist must be an array of wallet addresses' },
+          { status: 400 },
+        );
+      }
+      // Dedupe + filter empty + reject obvious non-pubkey shapes
+      // (full base58 validation would require a PublicKey import here;
+      //  the DB UNIQUE constraint will catch duplicates and any bad
+      //  insert would fail loud — this is a cheap pre-filter.)
+      validatedAllowlist = Array.from(new Set(
+        initial_allowlist
+          .filter((w: unknown): w is string => typeof w === 'string')
+          .map((w: string) => w.trim())
+          .filter((w: string) => w.length >= 32 && w.length <= 50),
+      ));
+    }
+
     // Calculate deadline
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + (backing_days || 7));
@@ -318,12 +413,54 @@ export async function POST(request: NextRequest) {
         // on the public token page and rev-share routing at fee distribution.
         partner_id: partnerSessionRow?.partner_id ?? null,
         partner_session_id: partnerSessionRow?.id ?? null,
+        // Launch Configuration v2 — visibility mode
+        visibility,
+        // Launch Configuration v2 — fee distribution config.
+        // When fee_preset is undefined we pass NULL across the board,
+        // which the distribution code treats as legacy hardcoded behavior.
+        fee_preset:             fee_preset ?? null,
+        fee_backer_pct:         fee_preset ? fee_backer_pct : null,
+        fee_holder_rewards_pct: fee_preset ? fee_holder_rewards_pct : null,
+        fee_platform_pct:       fee_preset ? fee_platform_pct : null,
+        fee_burn_pct:           fee_preset ? fee_burn_pct : null,
+        fee_charity_pct:        fee_preset ? fee_charity_pct : null,
+        fee_charity_wallet:     fee_preset && fee_charity_pct > 0 ? fee_charity_wallet : null,
       })
       .select()
       .single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // ── Allowlist setup (Launch Config v2 — Phase 1) ────────────────
+    // For stealth + spectator launches, seed the backing_allowlist with:
+    //   1. The creator's own wallet (always, so they can back their own launch)
+    //   2. Any wallets they supplied in initial_allowlist
+    // Failures here log but don't roll back the meme — the creator can
+    // re-add wallets via the dashboard if anything went wrong.
+    if (visibility !== 'open' && data) {
+      const allowlistRows = [
+        { meme_id: data.id, wallet: creator_wallet, added_by: creator_wallet, note: 'creator (auto)' },
+        ...validatedAllowlist
+          .filter((w) => w !== creator_wallet)
+          .map((wallet) => ({ meme_id: data.id, wallet, added_by: creator_wallet, note: null })),
+      ];
+      const { error: allowlistErr } = await supabase
+        .from('backing_allowlist')
+        .insert(allowlistRows);
+      if (allowlistErr) {
+        console.error('Allowlist seed failed (meme created, creator can re-add):', allowlistErr);
+      }
+
+      // Audit log the initial visibility state for the transparency trail.
+      await supabase.from('meme_visibility_changes').insert({
+        meme_id: data.id,
+        from_value: null,
+        to_value: visibility,
+        changed_by: creator_wallet,
+        reason: 'initial_at_submission',
+      });
     }
 
     // Provision this meme's POOL wallet — the wallet backers fund and

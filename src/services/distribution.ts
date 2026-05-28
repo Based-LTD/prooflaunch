@@ -249,7 +249,9 @@ export async function refundMemePool(
 // semantics if either step fails.
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-const PLATFORM_FEE_CUT = 0.10; // 10% platform / 90% backers (same ratio old feeTracker used)
+// Default split when a meme has no per-meme fee config (legacy / pre-Phase-2):
+// 10% platform / 90% backers. Phase-2+ memes override via meme.fee_backer_pct.
+const DEFAULT_PLATFORM_FEE_CUT = 0.10;
 const COLLECT_THRESHOLD_LAMPORTS = 50_000; // skip if vault < this (~$0.0075) — amortizes 2 × 5k tx fees with safety margin
 
 function loadEscrow(): Keypair {
@@ -280,7 +282,7 @@ export async function collectAndCreditFees(
 ): Promise<CollectAndCreditResult> {
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct')
     .eq('id', memeId)
     .single();
   if (memeErr || !meme) return { ok: false, error: 'meme not found' };
@@ -381,16 +383,25 @@ export async function collectAndCreditFees(
   }
 
   // Step C: credit backers proportionally.
-  // PLATFORM_FEE_CUT (10%) is the non-backer cut. The 90% backer pool is
-  // split by mode:
+  // Backer cut comes from the per-meme config (fee_backer_pct, Phase 2+).
+  // Legacy memes (no config) fall back to the historical 90/10 split.
+  // Everything not credited to backers stays in escrow as platform
+  // retention; unimplemented destinations (holder rewards, burn, charity)
+  // are not yet wired and the submit API blocks setting them above 0.
+  //
+  // Backer pool is then split by mode:
   //   legacy_flat:    pure pro-rata by stake (every backer earns regardless of hold)
   //   hold_weighted:  pro-rata × current hold % (capped 100%). The ENTIRE
   //                   freed-up portion from dumpers flows to the holder
   //                   airdrop pool. Brand: every backer dump on every meme
   //                   pays every PROOF holder.
+  const backerCut =
+    typeof meme.fee_backer_pct === 'number' && meme.fee_backer_pct >= 0 && meme.fee_backer_pct <= 100
+      ? meme.fee_backer_pct / 100
+      : 1 - DEFAULT_PLATFORM_FEE_CUT;
   const collectedLamports = transferLamports;
-  const platformLamports = Math.floor(collectedLamports * PLATFORM_FEE_CUT);
-  const backerPoolLamports = collectedLamports - platformLamports;
+  const backerPoolLamports = Math.floor(collectedLamports * backerCut);
+  const platformLamports = collectedLamports - backerPoolLamports;
 
   const { data: backings } = await supabase
     .from('backings')

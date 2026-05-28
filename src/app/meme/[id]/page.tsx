@@ -14,6 +14,8 @@ import { MemeTabs } from '@/components/meme/MemeTabs';
 import { MobileStickyCTA } from '@/components/meme/MobileStickyCTA';
 import { CreatorPastLaunches } from '@/components/CreatorPastLaunches';
 import { ClaimRewards } from '@/components/ClaimRewards';
+import { LaunchVisibilityPanel } from '@/components/meme/LaunchVisibilityPanel';
+import { FeeDistributionBadge } from '@/components/meme/FeeDistributionBadge';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
 
@@ -508,6 +510,24 @@ export default function MemeDetailPage() {
             />
           )}
         </div>
+
+        {/* Fee distribution split — visible to everyone viewing the
+            token. Renders only when meme.fee_preset is set (Phase 2+
+            memes). Legacy memes with NULL config render nothing here. */}
+        <FeeDistributionBadge meme={meme} />
+
+        {/* Creator-only: launch visibility + allowlist controls.
+            Shows during the backing phase (when visibility is mutable);
+            disabled UI when meme is past backing. Hidden entirely for
+            non-creators — they don't see this panel at all. */}
+        {isCreator && (
+          <LaunchVisibilityPanel
+            memeId={meme.id}
+            currentVisibility={(meme.visibility ?? 'open') as 'open' | 'stealth' | 'spectator'}
+            creatorWallet={meme.creator_wallet}
+            canEdit={meme.status === 'backing'}
+          />
+        )}
 
         {/* Rewards (post-launch, only if user is creator or distributed-backer) */}
         {isLaunched && (isCreator || isBacker) && (

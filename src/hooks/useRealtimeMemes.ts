@@ -59,8 +59,17 @@ export function useRealtimeMemes({ status = 'all', enabled = true }: UseRealtime
           (payload) => {
             console.log('Meme change received:', payload);
 
+            // Launch Config v2 visibility filter — this hook serves the
+            // public-facing board. Stealth launches must not appear here,
+            // even via realtime updates. (Spectator stays visible — only
+            // its backing flow is gated, not its listing.) Creator-scoped
+            // views should use a separate data source that bypasses this.
+            const isStealth = (m: Meme & { visibility?: string }) =>
+              m.visibility === 'stealth';
+
             if (payload.eventType === 'INSERT') {
               const newMeme = payload.new as Meme;
+              if (isStealth(newMeme)) return;
               // Only add if matches current filter
               if (status === 'all' || newMeme.status === status) {
                 setMemes((prev) => [newMeme, ...prev]);
@@ -68,11 +77,18 @@ export function useRealtimeMemes({ status = 'all', enabled = true }: UseRealtime
             } else if (payload.eventType === 'UPDATE') {
               const updatedMeme = payload.new as Meme;
               setMemes((prev) => {
-                // If meme no longer matches filter, remove it
+                // If meme transitioned to stealth, remove it from public view
+                if (isStealth(updatedMeme)) {
+                  return prev.filter((m) => m.id !== updatedMeme.id);
+                }
+                // If meme no longer matches status filter, remove it
                 if (status !== 'all' && updatedMeme.status !== status) {
                   return prev.filter((m) => m.id !== updatedMeme.id);
                 }
-                // Otherwise update it
+                // Otherwise update it (also handles stealth→open transitions:
+                // meme that was previously filtered out gets added back via
+                // the next refetch; until then UI may need a hard reload —
+                // acceptable for an admin-triggered flip event)
                 return prev.map((m) => (m.id === updatedMeme.id ? updatedMeme : m));
               });
             } else if (payload.eventType === 'DELETE') {

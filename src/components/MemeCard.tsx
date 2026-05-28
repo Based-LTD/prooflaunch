@@ -58,6 +58,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
     pump_fun_url,
     mint_address,
     backer_count = 0,
+    visibility,
   } = meme;
 
   const handleCopyCA = (e: React.MouseEvent) => {
@@ -88,12 +89,22 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
   return (
     <Link href={`/meme/${id}`} className="block">
       <div className="border border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] transition-colors">
-        {/* Top bar — system path + status */}
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
+        {/* Top bar — system path + status (+ visibility chip when gated) */}
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5 gap-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
             // {symbol.slice(0, 12)}
           </span>
-          <span className={statusClass}>{statusLabel}</span>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {visibility === 'spectator' && (
+              <span
+                className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent)]/60 text-[var(--accent)]"
+                title="Invite-only backing — only allowlisted wallets can back this launch"
+              >
+                INVITE ONLY
+              </span>
+            )}
+            <span className={statusClass}>{statusLabel}</span>
+          </div>
         </div>
 
         {/* Main */}

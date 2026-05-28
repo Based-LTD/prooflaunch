@@ -106,6 +106,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
     }
 
+    // ── Visibility gate (Launch Configuration v2 — Phase 1) ──────────
+    // `open` launches accept anyone (the default + legacy behavior).
+    // `stealth` and `spectator` launches require the backer's wallet
+    // to be in this meme's backing_allowlist. The creator controls the
+    // list via their dashboard. Auto-flips to open at funded status.
+    //
+    // We check this BEFORE pool / deadline / amount validation so
+    // un-allowlisted wallets don't leak any other meme state in errors.
+    if (meme.visibility === 'stealth' || meme.visibility === 'spectator') {
+      const { data: allowed } = await supabase
+        .from('backing_allowlist')
+        .select('id')
+        .eq('meme_id', meme_id)
+        .eq('wallet', backer_wallet)
+        .maybeSingle();
+
+      if (!allowed) {
+        return NextResponse.json(
+          {
+            error: 'This launch is in a restricted backing round. Your wallet is not on the allowlist.',
+            visibility: meme.visibility,
+          },
+          { status: 403 },
+        );
+      }
+    }
+
     // Pooled model: backers fund the meme's pool wallet. New memes are
     // provisioned with one at submission; reject if somehow missing.
     if (!meme.pool_wallet) {
