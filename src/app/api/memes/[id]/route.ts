@@ -66,12 +66,16 @@ export async function GET(
       return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
     }
 
-    // The view predates the pooled model and doesn't expose the pooled
-    // columns the client needs. Pull just the safe ones from the base
-    // table (NOT encrypted_pool_key) and merge them in.
+    // The view's `SELECT m.*` cached its column list when the view was
+    // created — columns added in later migrations don't auto-flow.
+    // Pull the SAFE public ones from the base table and merge them in.
+    // NEVER add encrypted_pool_key, encrypted_creator_subescrow_key,
+    // encrypted_buyback_bot_key, or keycard_admin_url to this list.
+    // NEVER add encrypted_pool_key, encrypted_creator_subescrow_key,
+    // encrypted_buyback_bot_key, or keycard_admin_url to this select.
     const { data: poolFields } = await supabase
       .from('memes')
-      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address, fee_distribution_mode')
+      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address, fee_distribution_mode, fee_preset, fee_backer_pct, fee_holder_rewards_pct, fee_platform_pct, fee_burn_pct, fee_charity_pct, fee_charity_wallet, buyback_bot_enabled, buyback_bot_action, buyback_bot_wallet, buyback_bot_last_run_at, buyback_bot_total_sol_spent, buyback_bot_total_tokens_acted, max_backing_sol, keycard_gate_id, keycard_gate_url, keycard_synced_at')
       .eq('id', id)
       .single();
 
