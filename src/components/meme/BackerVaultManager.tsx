@@ -198,7 +198,7 @@ export function BackerVaultManager({ meme, isCreator }: { meme: Meme; isCreator:
           type="button"
           onClick={handleUpdate}
           disabled={loading || !content.trim() || !publicKey}
-          className="px-4 py-2 bg-[var(--accent)] text-[var(--background)] text-xs font-mono uppercase tracking-wider hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+          className="btn-primary"
         >
           {loading ? 'Dropping…' : 'Drop to holders'}
         </button>
