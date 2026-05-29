@@ -27,6 +27,9 @@ export interface Meme {
 
   // Backing config (slot-based system)
   total_slots: number;           // 2-24 backer slots (raised from 8 in migration 021)
+  reserved_slots: number;        // 0..total_slots-1 (migration 037). When > 0, the last N
+                                 // slot positions are gated to backing_allowlist wallets.
+                                 // Open slots = total_slots - reserved_slots.
   min_backing_sol: number;       // Minimum SOL per backer (set by creator)
   current_backing_sol: number;   // Total amount backed (sum of all backings)
   backing_deadline: string;      // ISO date - when backing period ends (3 days default)

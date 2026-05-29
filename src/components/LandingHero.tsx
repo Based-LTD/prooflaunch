@@ -1,24 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import Link from 'next/link';
 
 /**
- * Full-viewport landing hero — the new front door.
+ * Landing hero — text-only, no wordmark, no video.
  *
- * Layout: brand mark up top (small line), then huge "PROOF LAUNCH"
- * centered, then the 5-stat live ticker, then the scroll/CTA cluster
- * at the bottom. Everything is text-only (no glass cards) so the
- * video background reads at full glory — the cards-as-frosted-glass
- * pattern lives in the proving grounds section below.
- *
- * The CTA + chevron both smooth-scroll to #proving-grounds. The two
- * affordances exist because some users won't intuit scrolling on a
- * full-bleed hero; the button reassures, the chevron animates.
- *
- * Stats come from /api/landing/stats (single round-trip, all five at
- * once). Each metric renders even if others 0-out so a partial outage
- * doesn't leave the hero looking broken.
+ * Stack (top → bottom):
+ *   1. MAINNET · LIVE · v0.2.0 status chip
+ *   2. Headline — types out terminal-style on each mount (2.8s ease-out),
+ *      then settles + a slow amber glow breathes underneath
+ *   3. Subtext — the $PROOF earnings hook
+ *   4. Live stats (4 tiles)
+ *   5. SUBMIT TOKEN CTA
  */
 
 interface LandingStats {
@@ -26,10 +20,6 @@ interface LandingStats {
   distributedSol: number;
   backersCount: number;
   launchedCount: number;
-  // marketCapUsd is still returned by the API but unused here —
-  // we dropped to 4 stats for visual rhythm. Leaving the API field
-  // in place avoids a route change for this UI cleanup; reinstate
-  // a 5th tile if a future ticker variant wants it.
 }
 
 const fmtCompact = (n: number) => {
@@ -52,100 +42,114 @@ const fmtInt = (n: number) => {
   return Math.round(n).toLocaleString();
 };
 
-function scrollToBoard() {
-  document.getElementById('proving-grounds')?.scrollIntoView({ behavior: 'smooth' });
-}
+const HEADLINE_PARTS = [
+  { text: 'Shared ', color: 'var(--foreground)' },
+  { text: 'Pump.fun', color: 'var(--accent)' },
+  { text: ' Launches. Equal entry. Shared trading fees.', color: 'var(--foreground)' },
+] as const;
+const HEADLINE_FULL = HEADLINE_PARTS.map((p) => p.text).join('');
+const TYPE_DURATION_MS = 2800;
 
 export function LandingHero() {
   const [stats, setStats] = useState<LandingStats | null>(null);
+  const [typedCount, setTypedCount] = useState<number>(0);
 
   useEffect(() => {
-    // Fire-and-forget: if it fails, hero shows "—" placeholders rather than spinners.
     fetch('/api/landing/stats')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setStats(d))
-      .catch(() => {/* silent */});
+      .catch(() => {/* silent — placeholders render */});
   }, []);
 
+  // Typewriter — runs on every mount (incl. client-side nav back to /).
+  // Cleanup cancels the raf so React's Strict Mode double-invoke can't
+  // leak a stuck animation. Skips entirely under prefers-reduced-motion.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setTypedCount(HEADLINE_FULL.length);
+      return;
+    }
+    const total = HEADLINE_FULL.length;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const elapsed = t - start;
+      const progress = Math.min(1, elapsed / TYPE_DURATION_MS);
+      // Ease-out so the tail slows like a typist finishing a thought.
+      const eased = 1 - Math.pow(1 - progress, 2);
+      const n = Math.floor(eased * total);
+      setTypedCount(n);
+      if (progress < 1) raf = requestAnimationFrame(tick);
+      else setTypedCount(total);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const typingDone = typedCount >= HEADLINE_FULL.length;
+
+  // Build TWO halves per part: typed-so-far (colored) and not-yet-typed
+  // (transparent). The transparent half holds layout space so nothing
+  // below jumps as the headline reveals. The caret sits at the boundary.
+  type PartRender = { typed: string; untyped: string; color: string; partIdx: number };
+  const parts: PartRender[] = [];
+  let consumed = 0;
+  for (let i = 0; i < HEADLINE_PARTS.length; i++) {
+    const part = HEADLINE_PARTS[i];
+    const remaining = Math.max(0, typedCount - consumed);
+    const typed = part.text.slice(0, remaining);
+    const untyped = part.text.slice(remaining);
+    parts.push({ typed, untyped, color: part.color, partIdx: i });
+    consumed += part.text.length;
+  }
+  // The caret goes after the LAST part that has typed chars (or the
+  // very first part if nothing typed yet).
+  let caretAfter = 0;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].typed.length > 0) { caretAfter = i; break; }
+  }
+
   return (
-    <section
-      // Full viewport minus the 24px top-bar + 56px navbar (= 80px chrome).
-      // Using min-h-[calc(100vh-80px)] instead of h-screen lets short
-      // viewports still scroll naturally if the ticker wraps.
-      //
-      // Full-bleed escape: parent <main> caps at max-w-7xl (1280px). On
-      // wide desktops the wordmark scales to ~11rem and its full width
-      // (≈1267px) exceeds the padded container, clipping the right edge.
-      // The w-screen + left-1/2 + -translate-x-1/2 trio breaks the
-      // section out of the max-width parent so it spans the actual
-      // viewport — no clipping at any breakpoint.
-      //
-      // overflow-x-clip: the wordmark's blurred halo (.hero-glow) extends
-      // inset:-25% past the text box. On narrow viewports that spill can
-      // trigger horizontal page scroll. Clipping x-only here keeps the
-      // halo visible vertically while preventing the side-scroll bug.
-      className="relative left-1/2 -translate-x-1/2 w-screen min-h-[calc(100vh-80px)] flex flex-col items-center justify-center px-4 sm:px-6 py-12 overflow-x-clip"
-    >
-      {/* SYSTEM line — anchors the brand mark in the same monospace
-          chrome the navbar uses. Tiny, deliberate. */}
-      <div className="text-[10px] sm:text-xs font-mono uppercase tracking-[0.4em] text-[var(--muted)] mb-6 sm:mb-8 flex items-center gap-3">
+    <section className="w-full flex flex-col items-center text-center py-10 sm:py-16 px-4">
+      {/* MAINNET · LIVE · v0.2.0 — system chip */}
+      <div className="inline-flex items-center gap-3 text-[10px] sm:text-xs font-mono uppercase tracking-[0.3em] text-[var(--muted)]">
         <span className="w-1.5 h-1.5 bg-[var(--success)] inline-block pulse-glow" aria-hidden />
-        <span>MAINNET · LIVE</span>
+        <span>MAINNET</span>
         <span className="opacity-50">·</span>
-        <span>v0.2.0</span>
+        <span>LIVE</span>
+        <span className="opacity-50">·</span>
+        <span>V0.2.0</span>
       </div>
 
-      {/* PROOF / LAUNCH wordmark — display-scale. Same font + casing
-          as the navbar brand mark, ~6-8x larger.
-          • -webkit-text-stroke paints a thin black edge along each
-            letterform — etches the wordmark out of the bg so the
-            amber glow has a hard line to bleed around (neon-signage
-            feel) rather than washing into the cream fill.
-          • Static text-shadow provides the close-in halo (no animation
-            → no per-frame paint).
-          • The pulsing wider halo lives on the absolute `.hero-glow`
-            sibling behind the text. Animating opacity + transform on a
-            pre-blurred radial-gradient stays on the GPU compositor —
-            zero paint cost per frame — so the video next to it doesn't
-            judder. Animating text-shadow directly DOES force a repaint
-            of the whole text region every frame; that's what caused
-            the visible video stutter when this pulse first shipped. */}
-      <div className="hero-wordmark-wrap relative inline-block">
-        <span className="hero-glow" aria-hidden />
-        <h1
-          className="relative font-mono font-semibold uppercase tracking-tight leading-[0.95] text-center"
-          style={{
-            // Sized to fit "Proof/Launch" (12 chars × ~0.6em width per
-            // char in IBM Plex Mono semibold) inside the section's
-            // px-4 padding on phones as narrow as 320px. Old formula
-            // (14vw, min 3.5rem) overflowed on 390-430px phones,
-            // pushing the slash and final "h" off the viewport edge.
-            // Desktop cap (11rem) unchanged — same max display size.
-            fontSize: 'clamp(2.25rem, 11.5vw, 11rem)',
-            WebkitTextStroke: '1.5px #0a0a0a',
-            textShadow: '0 0 18px rgba(255, 157, 0, 0.55), 0 0 40px rgba(255, 157, 0, 0.25)',
-          }}
-        >
-          <span className="text-[var(--foreground)]">Proof</span>
-          <span className="text-[var(--accent)]">/</span>
-          <span className="text-[var(--foreground)]">Launch</span>
-        </h1>
-      </div>
+      {/* Headline — typewriter on first load, then static + breathing
+          glow. Layout-stable: untyped chars render with transparent
+          color so the full headline always occupies its final height +
+          width. Caret sits at the typed/untyped boundary. */}
+      <h1
+        aria-label={HEADLINE_FULL}
+        className={`mt-6 sm:mt-8 max-w-4xl font-mono font-semibold uppercase leading-[1.05] tracking-tight ${typingDone ? 'hero-headline-glow' : ''}`}
+        style={{ fontSize: 'clamp(1.75rem, 5vw, 3.5rem)' }}
+      >
+        {parts.map((p, i) => (
+          <span key={i}>
+            {p.typed && <span style={{ color: p.color }}>{p.typed}</span>}
+            {/* Caret sits between the typed and untyped portions of the
+                last part that has typed chars. */}
+            {!typingDone && i === caretAfter && (
+              <span aria-hidden className="hero-caret" style={{ color: 'var(--accent)' }}>▌</span>
+            )}
+            {p.untyped && <span style={{ color: 'transparent' }} aria-hidden>{p.untyped}</span>}
+          </span>
+        ))}
+      </h1>
 
-      {/* One-liner subtitle — same copy as the action layer in the
-          proving grounds hero, brand-anchored. */}
-      <p className="mt-4 sm:mt-5 font-mono uppercase tracking-[0.2em] text-sm sm:text-base text-center">
-        <span className="text-[var(--accent)]">Prove</span>
-        <span className="text-[var(--muted)]">.</span>{' '}
-        <span className="text-[var(--accent-gold)]">Launch</span>
-        <span className="text-[var(--muted)]">.</span>{' '}
-        <span className="text-[var(--success)]">Earn</span>
-        <span className="text-[var(--muted)]">.</span>
+      {/* Subtext — the earnings hook */}
+      <p className="mt-5 sm:mt-6 max-w-2xl font-mono uppercase tracking-[0.15em] text-[var(--muted)]"
+         style={{ fontSize: 'clamp(0.875rem, 1.4vw, 1rem)' }}>
+        <span className="text-[var(--accent-gold)]">$PROOF</span> holders earn from every launch.
       </p>
 
-      {/* Live ticker — 4 stats. Clean 2x2 on mobile, 4-up on desktop.
-          Big numbers, tiny labels — readout aesthetic. No cards: text
-          floats over the video for maximum "demo reel" energy. */}
+      {/* Live stats */}
       <div className="mt-10 sm:mt-14 w-full max-w-4xl">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-2 gap-y-6 sm:gap-x-6">
           <Stat
@@ -175,80 +179,49 @@ export function LandingHero() {
         </div>
       </div>
 
-      {/* Gated-launch widget removed 2026-05-29 alongside hiding
-          stealth/spectator from the submit UI — those modes conflict
-          with PROOF's equal-entry thesis as-built. Backend still tracks
-          counts for legacy data; Phase 6 will rebuild as a properly-
-          disclosed "Team Round" surface. */}
-
-      {/* CTA + scroll affordance. Two affordances on purpose: the
-          button labels the action, the chevron animates the gesture.
-          Both go to the same anchor. */}
-      <div className="mt-12 sm:mt-16 flex flex-col items-center gap-4">
-        <button
-          onClick={scrollToBoard}
-          className="btn-primary inline-flex items-center gap-2 group"
-        >
-          Enter Proving Grounds
-          <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
-        </button>
-        <button
-          onClick={scrollToBoard}
-          aria-label="Scroll to proving grounds"
-          className="text-[var(--muted)] hover:text-[var(--accent)] transition-colors animate-bounce-slow"
-        >
-          <ChevronDown className="w-6 h-6" />
-        </button>
+      {/* Primary CTA */}
+      <div className="mt-12 sm:mt-16">
+        <Link href="/submit" className="btn-primary inline-flex items-center gap-2">
+          [&gt;] Submit Token
+        </Link>
       </div>
 
-      {/* Custom slower bounce — Tailwind's default is too fast/jittery for
-          a hero affordance. 2s feels intentional, not impatient.
-
-          hero-pulse-glow: subtle 4s breathe on the wordmark's amber halo.
-          Three text-shadow layers (close + mid + far) give the glow real
-          depth instead of a single flat ring. The pulse range is tight
-          (45% → 70% alpha at peak) so it reads as "alive" not "blinking". */}
       <style jsx>{`
-        @keyframes bounce-slow {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(8px); }
+        /* Caret blink during typing. */
+        .hero-caret {
+          display: inline-block;
+          margin-left: 0.05em;
+          animation: caret-blink 1s steps(1) infinite;
         }
-        .animate-bounce-slow {
-          animation: bounce-slow 2s ease-in-out infinite;
+        @keyframes caret-blink {
+          0%, 50%   { opacity: 1; }
+          51%, 100% { opacity: 0; }
         }
 
-        /* Wider pulsing amber halo. The blur (and gradient) are
-           rasterized ONCE when the layer is created; the animation
-           only changes opacity + transform, both of which are
-           composited on the GPU without triggering paint. Result: a
-           pulsing glow that doesn't compete with the video decoder. */
-        .hero-glow {
-          position: absolute;
-          /* Spill the glow well past the text box so the blur edge
-             feathers out instead of clipping at the wrap boundary. */
-          inset: -25%;
-          z-index: -1;
-          pointer-events: none;
-          background: radial-gradient(
-            ellipse at center,
-            rgba(255, 157, 0, 0.55) 0%,
-            rgba(255, 157, 0, 0.18) 40%,
-            rgba(255, 157, 0, 0) 70%
-          );
-          filter: blur(28px);
-          will-change: opacity, transform;
-          animation: hero-glow-pulse 4s ease-in-out infinite;
+        /* Amber breathing glow on the finished headline. Two stacked
+           shadows (close + wide) give the glow real depth, matching the
+           old wordmark treatment scaled down for body-size text. */
+        .hero-headline-glow {
+          animation: headline-pulse 5s ease-in-out infinite;
         }
-        @keyframes hero-glow-pulse {
-          0%, 100% { opacity: 0.65; transform: scale(1); }
-          50%      { opacity: 1;    transform: scale(1.06); }
+        @keyframes headline-pulse {
+          0%, 100% {
+            text-shadow:
+              0 0 14px rgba(255, 157, 0, 0.55),
+              0 0 32px rgba(255, 157, 0, 0.30);
+          }
+          50% {
+            text-shadow:
+              0 0 22px rgba(255, 157, 0, 0.80),
+              0 0 50px rgba(255, 157, 0, 0.45);
+          }
         }
-        /* Honor reduced-motion: hold at the brighter steady state. */
         @media (prefers-reduced-motion: reduce) {
-          .hero-glow {
-            animation: none;
-            opacity: 0.85;
-            transform: scale(1.03);
+          .hero-caret, .hero-headline-glow { animation: none; }
+          .hero-headline-glow {
+            text-shadow:
+              0 0 18px rgba(255, 157, 0, 0.65),
+              0 0 38px rgba(255, 157, 0, 0.35);
           }
         }
       `}</style>
@@ -256,32 +229,24 @@ export function LandingHero() {
   );
 }
 
-// Single stat block. Value gets the bold display size; unit + label sit
-// underneath in mono caps so each row reads as a Bloomberg-style readout.
 function Stat({
   value,
   unit,
   label,
   color,
-  spanMobile,
 }: {
   value: string;
   unit?: string;
   label: string;
   color: string;
-  spanMobile?: boolean;
 }) {
   return (
-    <div
-      className={`flex flex-col items-center text-center ${
-        spanMobile ? 'col-span-2 sm:col-span-1' : ''
-      }`}
-    >
+    <div className="flex flex-col items-center text-center">
       <div
         className="font-mono font-semibold leading-none tabular-nums"
         style={{
           color,
-          fontSize: 'clamp(1.75rem, 4vw, 2.75rem)',
+          fontSize: 'clamp(1.5rem, 3.5vw, 2.5rem)',
           textShadow: `0 0 20px ${color.replace('var(', 'rgba(').replace(')', ', 0.15)')}`,
         }}
       >

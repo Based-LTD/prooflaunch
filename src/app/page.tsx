@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import Link from 'next/link';
 import { MemeCard } from '@/components/MemeCard';
 import { LandingHero } from '@/components/LandingHero';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
@@ -83,64 +82,10 @@ export default function Home() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* New landing hero — full-viewport brand mark + 5-stat live ticker.
-          Sits above everything; "Enter Proving Grounds" smooth-scrolls to
-          #proving-grounds. The board below renders normally; on direct
-          deep-links to the homepage, users land on the hero first. */}
+      {/* Landing hero — MAINNET chip + headline + subtext + stats +
+          SUBMIT TOKEN CTA. Self-contained; no scroll-to-grounds button
+          (the board below scrolls into view naturally). */}
       <LandingHero />
-
-      {/* Hero — headline + two-line mechanic + CTAs below + live counts. */}
-      <div id="proving-grounds" className="scroll-mt-24 border border-[var(--border)] bg-[var(--card)]">
-        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {'// PROOF_LAUNCH.SYS // PROVING_GROUNDS'}
-          </span>
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-              LAUNCHES ON <span className="text-[var(--accent)]">pump.fun</span>
-            </span>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-              [ACTIVE]
-            </span>
-          </div>
-        </div>
-        <div className="p-5 sm:p-6">
-          <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-[var(--muted)] mb-2">
-            &gt; SYSTEM
-          </div>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-mono font-semibold uppercase leading-[1.1] tracking-tight">
-            Shared <span className="text-[var(--accent)]">Pump.fun</span> Launches.
-            <br />
-            Equal entry. Shared trading fees.<span className="cursor-blink" />
-          </h1>
-
-          {/* Two-line mechanic — arrows read as a system diagram */}
-          <div className="mt-5 sm:mt-6 space-y-1.5 font-mono text-sm sm:text-base text-[var(--foreground)]/85 leading-relaxed">
-            <p>
-              <span className="text-[var(--muted)]">&gt;</span> Back a token{' '}
-              <span className="text-[var(--accent)]">→</span> buy the first supply + earn from its trades.
-            </p>
-            <p>
-              <span className="text-[var(--muted)]">&gt;</span> Hold{' '}
-              <span className="text-[var(--accent-gold)]">$PROOF</span>{' '}
-              <span className="text-[var(--accent)]">→</span> earn from every launch on the platform.
-            </p>
-          </div>
-
-          {/* CTAs — full row beneath, full-width on mobile */}
-          <div className="mt-5 flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <Link href="/submit" className="btn-primary inline-flex items-center justify-center gap-2">
-              [&gt;] Submit Token
-            </Link>
-            <Link href="/docs" className="btn-secondary inline-flex items-center justify-center gap-2">
-              [?] Read Docs
-            </Link>
-            <Link href="/roadmap" className="btn-secondary inline-flex items-center justify-center gap-2">
-              [→] Roadmap
-            </Link>
-          </div>
-        </div>
-      </div>
 
       {/* Search — single row (sort is per-column now, in column headers) */}
       <div className="border border-[var(--border)] bg-[var(--card)] flex items-center gap-2 px-3 py-2">

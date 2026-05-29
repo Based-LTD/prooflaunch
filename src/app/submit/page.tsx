@@ -126,6 +126,11 @@ function SubmitPageInner() {
     symbol: '',
     description: '',
     totalSlots: 4,
+    // Reserved slots (Phase 7) — creator can pre-reserve N of total
+    // for specific allowlisted wallets; the launch stays publicly
+    // visible + publicly backable for the remaining (total - reserved)
+    // open slots. 0 = fully open launch.
+    reservedSlots: 0,
     minBackingSol: 0.1,
     // Phase 3.5 — Optional per-backer ceiling. 0 (UI sentinel) = uncapped.
     // When set, applies universally so no wallet can out-back any other.
@@ -333,6 +338,7 @@ function SubmitPageInner() {
           discord: formData.discord || undefined,
           website: formData.website || undefined,
           total_slots: formData.totalSlots,
+          reserved_slots: formData.reservedSlots,
           min_backing_sol: formData.minBackingSol,
           max_backing_sol: formData.maxBackingSol > 0 ? formData.maxBackingSol : null,
           backing_days: 3,
@@ -343,14 +349,18 @@ function SubmitPageInner() {
           // attach partner_id/partner_session_id to the meme row, and mark
           // the session submitted (triggering any partner webhook).
           partner_session_id: partnerSession?.session_id,
-          // Launch Config v2 — visibility + initial allowlist
+          // Launch Config v2 — visibility + initial allowlist.
+          // Allowlist is sent when EITHER visibility is gated OR there
+          // are reserved slots (Phase 7 reuses the allowlist table to
+          // gate the reserved positions within open launches).
           visibility: formData.visibility,
-          initial_allowlist: formData.visibility === 'open'
-            ? []
-            : formData.allowlistText
-                .split(/[\s,]+/)
-                .map((w) => w.trim())
-                .filter(Boolean),
+          initial_allowlist:
+            formData.visibility === 'open' && formData.reservedSlots === 0
+              ? []
+              : formData.allowlistText
+                  .split(/[\s,]+/)
+                  .map((w) => w.trim())
+                  .filter(Boolean),
           // Launch Config v2 — fee distribution config
           fee_preset: formData.feePreset,
           fee_backer_pct: formData.feeBackerPct,
@@ -398,7 +408,7 @@ function SubmitPageInner() {
       ...prev,
       [name]: type === 'checkbox'
         ? checked
-        : ['totalSlots', 'minBackingSol', 'maxBackingSol'].includes(name) ? Number(value) : value
+        : ['totalSlots', 'minBackingSol', 'maxBackingSol', 'reservedSlots'].includes(name) ? Number(value) : value
     }));
   };
 
@@ -864,6 +874,61 @@ function SubmitPageInner() {
                 <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
                   &gt; Team-fairness lock: every backing bounded equally, no whale exceeds your team.
                 </span>
+              </div>
+
+              {/* Reserved slots (Phase 7).
+                  Creator can reserve N of total_slots for specific
+                  allowlisted wallets. Launch stays publicly visible +
+                  publicly backable for the open (total - reserved)
+                  slots. Reserved positions can only be filled by
+                  wallets in the allowlist. Brand-aligned: public
+                  always has guaranteed slots, team gets guaranteed
+                  entry without blocking anyone. */}
+              <div className="border-t border-[var(--border)] pt-4 space-y-3">
+                <div>
+                  <label className={labelClass}>Reserved slots (optional)</label>
+                  <select
+                    name="reservedSlots"
+                    value={formData.reservedSlots}
+                    onChange={handleChange}
+                    className={inputClass()}
+                  >
+                    <option value={0}>0 — fully open launch (anyone backs any slot)</option>
+                    {Array.from({ length: Math.max(0, formData.totalSlots - 1) }).map((_, i) => {
+                      const n = i + 1;
+                      return (
+                        <option key={n} value={n}>
+                          {n} of {formData.totalSlots} reserved — {formData.totalSlots - n} open to public
+                        </option>
+                      );
+                    })}
+                    <option value={formData.totalSlots}>
+                      {formData.totalSlots} of {formData.totalSlots} reserved — TEAM ROUND (no public slots)
+                    </option>
+                  </select>
+                  <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                    &gt; Reserved slots can only be backed by wallets you list below. Picking all = TEAM ROUND label.
+                  </span>
+                </div>
+
+                {formData.reservedSlots > 0 && (
+                  <div className="space-y-2">
+                    <label className={labelClass}>
+                      Allowlist wallets (one per line, need at least {formData.reservedSlots})
+                    </label>
+                    <textarea
+                      name="allowlistText"
+                      value={formData.allowlistText}
+                      onChange={handleChange}
+                      placeholder={'Wallet1...\nWallet2...\nWallet3...'}
+                      rows={Math.max(3, Math.min(formData.reservedSlots + 1, 8))}
+                      className="w-full text-xs font-mono bg-[var(--background)] border border-[var(--border)] p-2 focus:outline-none focus:border-[var(--accent)]"
+                    />
+                    <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
+                      Your own wallet is auto-added — don't include it here. Allowlisted wallets can back either open OR reserved slots (their reservation guarantees entry). You can add/remove wallets later from your creator dashboard.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Compact slot preview — single row of boxes + min raise line */}

@@ -50,6 +50,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
     description,
     status,
     total_slots = 8,
+    reserved_slots = 0,
     current_backing_sol,
     backing_deadline,
     launch_deadline,
@@ -71,6 +72,9 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
   };
 
   const totalSlots = Number(total_slots) || 8;
+  const reservedSlots = Number(reserved_slots) || 0;
+  const isTeamRound = reservedSlots > 0 && reservedSlots === totalSlots;
+  const hasReservedSlots = reservedSlots > 0;
   const filledSlots = Number(backer_count) || 0;
   const timeRemaining = getTimeRemaining(backing_deadline);
   const { label: statusLabel, class: statusClass } = getStatusConfig(status);
@@ -88,15 +92,28 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
   return (
     <Link href={`/meme/${id}`} className="block">
       <div className="border border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] transition-colors">
-        {/* Top bar — system path + status. INVITE ONLY chip removed
-            2026-05-29 alongside hiding gated visibility from submit;
-            Phase 6 will reintroduce as a "Team Round" badge once the
-            disclosure + vesting requirements are in place. */}
+        {/* Top bar — system path + status + reservation/team-round chip */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5 gap-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
             // {symbol.slice(0, 12)}
           </span>
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {isTeamRound && (
+              <span
+                className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent-gold)]/60 text-[var(--accent-gold)] bg-[var(--accent-gold)]/5"
+                title="Team round — all slots reserved for declared wallets, no public slots"
+              >
+                TEAM ROUND
+              </span>
+            )}
+            {hasReservedSlots && !isTeamRound && (
+              <span
+                className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent)]/60 text-[var(--accent)]"
+                title={`${reservedSlots} of ${totalSlots} slots reserved for declared wallets · ${totalSlots - reservedSlots} open to public`}
+              >
+                {totalSlots - reservedSlots}/{totalSlots} OPEN
+              </span>
+            )}
             <span className={statusClass}>{statusLabel}</span>
           </div>
         </div>

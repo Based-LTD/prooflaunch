@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
       total_slots,         // 2-24 backer slots
       min_backing_sol,     // Minimum SOL per backer
       max_backing_sol,     // Optional per-backer ceiling (Phase 3.5). NULL = uncapped.
+      reserved_slots = 0,  // Reserved-for-allowlist slots (Phase 7). 0 = fully open.
       // Legacy field (unused, kept for old client compatibility)
       backing_days,
       // Legacy trust score parameters (no longer used in fee distribution)
@@ -309,6 +310,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Reserved slots (Phase 7). 0..total_slots inclusive.
+    //   0                          = fully open launch
+    //   1..total_slots - 1         = hybrid (some open, some reserved)
+    //   total_slots                = TEAM ROUND (no public slots; UI shows the
+    //                                "TEAM ROUND" badge so visitors see it upfront)
+    // When > 0, initial_allowlist must have at least reserved_slots wallets.
+    const reservedSlotsNum = Number.isFinite(Number(reserved_slots)) ? Math.floor(Number(reserved_slots)) : 0;
+    if (reservedSlotsNum < 0 || reservedSlotsNum > total_slots) {
+      return NextResponse.json(
+        { error: `reserved_slots must be between 0 and ${total_slots}` },
+        { status: 400 },
+      );
+    }
+    if (reservedSlotsNum > 0) {
+      const allowlistCount = Array.isArray(initial_allowlist)
+        ? initial_allowlist.filter((w: unknown) => typeof w === 'string' && w.trim().length >= 32).length
+        : 0;
+      if (allowlistCount < reservedSlotsNum) {
+        return NextResponse.json(
+          { error: `reserved_slots=${reservedSlotsNum} but only ${allowlistCount} wallets in allowlist. Provide at least ${reservedSlotsNum} wallets.` },
+          { status: 400 },
+        );
+      }
+    }
+
     if (symbol.length > 10) {
       return NextResponse.json(
         { error: 'Symbol must be 10 characters or less' },
@@ -386,11 +412,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // For gated launches, parse + validate the initial allowlist (if any).
-    // Creator's own wallet gets auto-added after the meme insert so they
-    // can always back their own launch — don't require it in the input.
+    // Parse + validate the initial allowlist. Used by:
+    //   - Gated launches (visibility = stealth | spectator) — controls ALL backing
+    //   - Reserved-slot launches (reserved_slots > 0) — controls reserved slot positions
+    // Creator's own wallet gets auto-added after the meme insert.
     let validatedAllowlist: string[] = [];
-    if (visibility !== 'open') {
+    const needsAllowlist = visibility !== 'open' || reservedSlotsNum > 0;
+    if (needsAllowlist) {
       if (!Array.isArray(initial_allowlist)) {
         return NextResponse.json(
           { error: 'initial_allowlist must be an array of wallet addresses' },
@@ -450,6 +478,7 @@ export async function POST(request: NextRequest) {
         website,
         // Slot-based backing system
         total_slots,
+        reserved_slots: reservedSlotsNum,
         min_backing_sol,
         max_backing_sol: (typeof max_backing_sol === 'number') ? max_backing_sol : null,
         backing_goal_sol: min_backing_sol * total_slots, // Minimum possible raise (for compatibility)
@@ -502,7 +531,7 @@ export async function POST(request: NextRequest) {
     //   2. Any wallets they supplied in initial_allowlist
     // Failures here log but don't roll back the meme — the creator can
     // re-add wallets via the dashboard if anything went wrong.
-    if (visibility !== 'open' && data) {
+    if (needsAllowlist && data) {
       const allowlistRows = [
         { meme_id: data.id, wallet: creator_wallet, added_by: creator_wallet, note: 'creator (auto)' },
         ...validatedAllowlist

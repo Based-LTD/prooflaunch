@@ -211,14 +211,39 @@ export async function POST(request: NextRequest) {
 
     const taken = new Set((activeSlotRows || []).map((r) => Number(r.slot_number)));
     const totalSlots = Number(meme.total_slots) || 8;
+    const reservedSlots = Number(meme.reserved_slots) || 0;
+    const openSlots = Math.max(0, totalSlots - reservedSlots);
+
+    // Reserved-slot gate (migration 037). When reserved_slots > 0, the
+    // LAST `reservedSlots` positions (slots openSlots+1 .. totalSlots)
+    // are reserved for wallets in the backing_allowlist. Non-allowlisted
+    // backers can only take slots 1..openSlots.
+    let isAllowlisted = true;
+    if (reservedSlots > 0) {
+      const { data: allowed } = await supabase
+        .from('backing_allowlist')
+        .select('id')
+        .eq('meme_id', meme_id)
+        .eq('wallet', backer_wallet)
+        .maybeSingle();
+      isAllowlisted = !!allowed;
+    }
+    const maxSlot = isAllowlisted ? totalSlots : openSlots;
 
     let slotNumber = 0;
-    for (let i = 1; i <= totalSlots; i++) {
+    for (let i = 1; i <= maxSlot; i++) {
       if (!taken.has(i)) { slotNumber = i; break; }
     }
     if (slotNumber === 0) {
+      const allOpenFilled = !isAllowlisted && reservedSlots > 0;
       return NextResponse.json(
-        { error: 'All backer slots are filled' },
+        {
+          error: allOpenFilled
+            ? `All ${openSlots} open slots are filled. The remaining ${reservedSlots} slots are reserved for allowlisted wallets.`
+            : 'All backer slots are filled',
+          reserved_slots: reservedSlots,
+          open_slots: openSlots,
+        },
         { status: 400 }
       );
     }
