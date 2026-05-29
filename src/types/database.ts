@@ -108,6 +108,35 @@ export interface Meme {
   buyback_bot_last_run_at?: string | null;
   buyback_bot_total_sol_spent?: number;
   buyback_bot_total_tokens_acted?: number;
+
+  // Phase B — bot stack. Populated by /api/memes/[id]; empty array for
+  // memes that haven't enabled any bots.
+  bots?: MemeBot[];
+}
+
+// Phase B — one row per bot in a meme's stack. A meme can have up to
+// 6 bots (one per distinct action). Each bot has its own dedicated
+// wallet for self-contained on-chain auditing.
+export interface MemeBot {
+  id: string;
+  meme_id: string;
+  slot_order: number;
+  action:
+    | 'burn'
+    | 'hold'
+    | 'distribute_tokens_holders'
+    | 'distribute_tokens_backers'
+    | 'distribute_sol_holders'
+    | 'distribute_sol_backers';
+  fee_pct: number;
+  bot_wallet: string;
+  // Required when action='hold' (vault label like "Marketing"); NULL
+  // for all other actions. Enforced by migration 042's CHECK constraint.
+  label: string | null;
+  last_run_at?: string | null;
+  total_sol_spent: number;
+  total_tokens_acted: number;
+  created_at: string;
 }
 
 export interface Backing {

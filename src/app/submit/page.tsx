@@ -1,6 +1,92 @@
 'use client';
 
 import { useState, useRef, useEffect, Suspense } from 'react';
+
+// Phase B — Bot stack action type. Keep in sync with VALID_BOT_ACTIONS
+// in /api/memes/route.ts and src/services/buybackBot.ts.
+type BotActionT =
+  | 'burn'
+  | 'hold'
+  | 'distribute_tokens_holders'
+  | 'distribute_tokens_backers'
+  | 'distribute_sol_holders'
+  | 'distribute_sol_backers';
+
+interface BotActionMeta {
+  value: BotActionT;
+  label: string;
+  tag: string;
+  short: string;
+  desc: string;
+  emoji: string;
+}
+// Action display metadata. DB enum value stays as `hold` but the UI
+// surfaces it as VAULT — vaults are labeled, multiple-per-meme, and
+// creator-withdrawable (operational bots are sealed).
+const BOT_ACTIONS: BotActionMeta[] = [
+  { value: 'burn',                       label: 'BURN',                short: 'Burn',                tag: 'Deflationary', emoji: '🔥', desc: 'Buy tokens, burn them. Permanent supply reduction.' },
+  { value: 'hold',                       label: 'VAULT',               short: 'Vault',               tag: 'Treasury',     emoji: '🏦', desc: 'Buy tokens, park them in a labeled vault wallet you can withdraw from anytime (e.g. Marketing, DAO, Liquidity).' },
+  { value: 'distribute_tokens_holders',  label: 'TOKENS → HOLDERS',    short: 'Tokens→Holders',      tag: 'Loyalty',      emoji: '🪙', desc: 'Buy tokens, airdrop pro-rata to every current holder. Drives volume + rewards holding.' },
+  { value: 'distribute_tokens_backers',  label: 'TOKENS → BACKERS',    short: 'Tokens→Backers',      tag: 'OG reward',    emoji: '🎯', desc: 'Buy tokens, airdrop pro-rata to the genesis backers who launched this token.' },
+  { value: 'distribute_sol_holders',     label: 'SOL → HOLDERS',       short: 'SOL→Holders',         tag: 'Yield',        emoji: '💸', desc: 'Skip the swap. Send delegated SOL pro-rata to every current holder. Pure cash flow.' },
+  { value: 'distribute_sol_backers',     label: 'SOL → BACKERS',       short: 'SOL→Backers',         tag: 'OG yield',     emoji: '💰', desc: 'Skip the swap. Send delegated SOL pro-rata to the genesis backers.' },
+];
+const BOT_ACTION_BY_VALUE = Object.fromEntries(BOT_ACTIONS.map((a) => [a.value, a]));
+
+// Label rules MUST match supabase/migrations/042_vault_labels.sql:
+// 1-24 chars, alphanumerics + space/underscore/hyphen only.
+const VAULT_LABEL_PATTERN = /^[A-Za-z0-9 _\-]+$/;
+function isValidVaultLabel(s: string): boolean {
+  return s.length >= 1 && s.length <= 24 && VAULT_LABEL_PATTERN.test(s);
+}
+
+// Bot stack item — `label` is required + non-empty for action='hold',
+// undefined for all other actions (DB CHECK enforces this).
+type BotStackItem = { action: BotActionT; fee_pct: number; label?: string };
+
+// Single source of truth for bot-stack validation. Used both inside the
+// stack-builder UI and to gate the submit button at the form level.
+function validateBotStack(stack: BotStackItem[]): { ok: boolean; reason?: string } {
+  const total = stack.reduce((s, b) => s + b.fee_pct, 0);
+  if (total > 90) return { ok: false, reason: 'total delegation > 90%' };
+  if (stack.some((b) => b.fee_pct < 5 || b.fee_pct > 90))
+    return { ok: false, reason: 'bot fee out of 5-90% range' };
+  // Non-hold actions must be unique (DB enforces). Vaults can repeat.
+  const seenNonHold = new Set<string>();
+  for (const b of stack) {
+    if (b.action === 'hold') continue;
+    if (seenNonHold.has(b.action)) return { ok: false, reason: 'duplicate non-vault action' };
+    seenNonHold.add(b.action);
+  }
+  // Every vault must have a valid label.
+  for (const b of stack) {
+    if (b.action === 'hold') {
+      if (!b.label || !isValidVaultLabel(b.label))
+        return { ok: false, reason: 'invalid vault label' };
+    } else if (b.label !== undefined) {
+      return { ok: false, reason: 'non-vault bot must not have a label' };
+    }
+  }
+  // Duplicate vault labels (UX, not DB).
+  const labelKeys = new Map<string, number>();
+  for (const b of stack) {
+    if (b.action === 'hold' && b.label) {
+      const k = b.label.trim().toLowerCase();
+      labelKeys.set(k, (labelKeys.get(k) || 0) + 1);
+    }
+  }
+  if ([...labelKeys.values()].some((n) => n > 1))
+    return { ok: false, reason: 'duplicate vault labels' };
+  return { ok: true };
+}
+
+// Quick presets — preloaded bot stacks creators can apply with one click.
+const BOT_PRESETS: { name: string; tagline: string; bots: BotStackItem[] }[] = [
+  { name: 'Deflationary Yield',  tagline: 'Burn supply + pay holders SOL',                bots: [ { action: 'burn', fee_pct: 30 }, { action: 'distribute_sol_holders', fee_pct: 20 } ] },
+  { name: 'OG Loyalty',          tagline: 'Recurring rewards for genesis backers',        bots: [ { action: 'distribute_tokens_backers', fee_pct: 15 }, { action: 'distribute_sol_backers', fee_pct: 15 } ] },
+  { name: 'Community First',     tagline: 'Tokens + SOL to holders + light burn',         bots: [ { action: 'distribute_tokens_holders', fee_pct: 25 }, { action: 'distribute_sol_holders', fee_pct: 15 }, { action: 'burn', fee_pct: 10 } ] },
+  { name: 'Treasury Stack',      tagline: 'Two labeled vaults for marketing + DAO',       bots: [ { action: 'hold', fee_pct: 20, label: 'Marketing' }, { action: 'hold', fee_pct: 20, label: 'DAO' } ] },
+];
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Upload, AlertCircle, X, CheckCircle, ChevronDown, Zap, Loader2 } from 'lucide-react';
@@ -161,19 +247,12 @@ function SubmitPageInner() {
     feeBurnPct: 0,
     feeCharityPct: 0,
     feeCharityWallet: '',
-    // Phase 5 — Per-meme buyback bot (fee-delegation model). When ON,
-    // buybackBotFeePct (0-100) of the BACKER POOL (the 90% normally
-    // distributed to backers) is routed to the bot wallet on chain.
-    // Bot uses it to swap → execute action (burn/hold/etc.).
-    buybackBotEnabled: false,
-    buybackBotAction: 'burn' as
-      | 'burn'
-      | 'hold'
-      | 'distribute_tokens_holders'
-      | 'distribute_tokens_backers'
-      | 'distribute_sol_holders'
-      | 'distribute_sol_backers',
-    buybackBotFeePct: 25,  // default — moderate buyback pressure when enabled
+    // Phase B — Bot stack (programmable tokenomics). The creator builds
+    // a stack of up to 6 bots; each bot picks one of 6 actions and a
+    // fee % delegation. Total stack delegation ≤ 90% (10% always to
+    // platform). Whatever's left after bots goes to backers.
+    botStackEnabled: false,
+    botStack: [] as BotStackItem[],
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -375,10 +454,17 @@ function SubmitPageInner() {
           fee_burn_pct: formData.feeBurnPct,
           fee_charity_pct: formData.feeCharityPct,
           fee_charity_wallet: formData.feeCharityPct > 0 ? formData.feeCharityWallet : null,
-          // Phase 5 — Buyback bot (fee-delegation model)
-          buyback_bot_enabled: formData.buybackBotEnabled,
-          buyback_bot_action: formData.buybackBotEnabled ? formData.buybackBotAction : null,
-          buyback_bot_fee_pct: formData.buybackBotEnabled ? formData.buybackBotFeePct : 0,
+          // Phase B — Bot stack (programmable tokenomics). API accepts
+          // either legacy single-bot fields or `bots[]`. We always send
+          // bots[] when the stack is enabled; backend handles legacy
+          // backfill for single-bot stacks automatically.
+          bots: formData.botStackEnabled
+            ? formData.botStack.map((b) =>
+                b.action === 'hold'
+                  ? { action: b.action, fee_pct: b.fee_pct, label: (b.label ?? '').trim() }
+                  : { action: b.action, fee_pct: b.fee_pct },
+              )
+            : [],
         }),
       });
       if (!response.ok) {
@@ -1017,125 +1103,392 @@ function SubmitPageInner() {
             </div>
           </div>
 
-          {/* ── Buyback Bot (Phase 5 — fee delegation model) ── */}
-          <div className="border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  BUYBACK BOT
-                </div>
-                <div className="text-sm font-mono text-[var(--foreground)]">
-                  Delegate part of backer fees to an automatic buyback
-                </div>
-                <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
-                  A system-controlled wallet receives a slice of the 90% backer fee stream,
-                  uses it to buy your token on Jupiter, and burns or holds what it buys.
-                  Backers trade some fee yield for token-supply pressure. Fully on-chain &amp; auditable.
-                </p>
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.buybackBotEnabled}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, buybackBotEnabled: e.target.checked }))}
-                  className="w-4 h-4 accent-[var(--accent)]"
-                />
-                <span className="text-xs font-mono uppercase tracking-wider text-[var(--foreground)]">
-                  {formData.buybackBotEnabled ? 'ON' : 'OFF'}
-                </span>
-              </label>
-            </div>
+          {/* ── Buyback Bots (Phase B — programmable bot stack) ──
+              Each meme can run BURN + 4 distribute actions (one of each)
+              plus UNLIMITED labeled VAULT bots. Each bot has its own
+              wallet on Solscan; vaults are creator-withdrawable, all
+              other bots are sealed. Total delegation ≤ 90%. */}
+          {(() => {
+            const totalBotPct = formData.botStack.reduce((sum, b) => sum + b.fee_pct, 0);
+            const backerPct = Math.max(0, 90 - totalBotPct);
+            // For UNIQUE-per-action: count only non-hold actions, since
+            // VAULTs (hold) can repeat unlimited times.
+            const usedNonHoldActions = new Set(
+              formData.botStack.filter((b) => b.action !== 'hold').map((b) => b.action),
+            );
+            const availableActions = BOT_ACTIONS.filter(
+              (a) => a.value === 'hold' || !usedNonHoldActions.has(a.value),
+            );
+            // Soft cap to prevent UI runaway; the real limit is the
+            // 90% budget. 12 = practical max under 90% / 5% min per bot,
+            // plus headroom for vault label experimentation.
+            const HARD_CAP = 12;
+            const canAddMore =
+              formData.botStack.length < HARD_CAP &&
+              availableActions.length > 0 &&
+              totalBotPct < 90;
+            const overBudget = totalBotPct > 90;
+            const anyInvalidPct = formData.botStack.some((b) => b.fee_pct < 5 || b.fee_pct > 90);
+            // Vault label validation — required + format-restricted (1-24
+            // chars, alphanumerics + space/_/-). Matches the DB CHECK in
+            // migration 042. Empty inputs are also collected here so the
+            // submit button stays disabled until every vault has a label.
+            const invalidVaultLabels = formData.botStack
+              .map((b, i) => ({ b, i }))
+              .filter(({ b }) => b.action === 'hold' && (!b.label || !isValidVaultLabel(b.label)));
+            // Duplicate vault labels within the same stack — DB allows
+            // duplicates (it doesn't enforce label uniqueness) but the
+            // creator's UX is worse with two "Marketing" vaults.
+            const labelCounts = new Map<string, number>();
+            for (const b of formData.botStack) {
+              if (b.action === 'hold' && b.label) {
+                const k = b.label.trim().toLowerCase();
+                labelCounts.set(k, (labelCounts.get(k) || 0) + 1);
+              }
+            }
+            const duplicateVaultLabels = [...labelCounts.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+            const botStackInvalid =
+              overBudget || anyInvalidPct || invalidVaultLabels.length > 0 || duplicateVaultLabels.length > 0;
 
-            {formData.buybackBotEnabled && (
-              <div className="space-y-4 pt-3 border-t border-[var(--border)]">
-                {/* Delegation slider — 0-100% of the 90% backer pool */}
-                {(() => {
-                  const botPct = formData.buybackBotFeePct;
-                  const backerShare = (90 * (100 - botPct)) / 100;   // % of total trading fees
-                  const botShare    = (90 * botPct) / 100;
-                  return (
+            const addBot = (action?: BotActionT) => {
+              if (!canAddMore) return;
+              const nextAction = action ?? availableActions[0]?.value;
+              if (!nextAction) return;
+              const remaining = Math.max(5, Math.min(20, 90 - totalBotPct));
+              setFormData((prev) => ({
+                ...prev,
+                botStack: [
+                  ...prev.botStack,
+                  nextAction === 'hold'
+                    ? { action: nextAction, fee_pct: remaining, label: '' }
+                    : { action: nextAction, fee_pct: remaining },
+                ],
+              }));
+            };
+            const removeBot = (idx: number) => {
+              setFormData((prev) => ({
+                ...prev,
+                botStack: prev.botStack.filter((_, i) => i !== idx),
+              }));
+            };
+            const updateBot = (idx: number, patch: Partial<BotStackItem>) => {
+              setFormData((prev) => ({
+                ...prev,
+                botStack: prev.botStack.map((b, i) => {
+                  if (i !== idx) return b;
+                  // When switching action to/from 'hold', sync the label field.
+                  const next: BotStackItem = { ...b, ...patch };
+                  if (next.action === 'hold' && next.label === undefined) next.label = '';
+                  if (next.action !== 'hold') delete next.label;
+                  return next;
+                }),
+              }));
+            };
+            const applyPreset = (preset: typeof BOT_PRESETS[number]) => {
+              const total = preset.bots.reduce((s, b) => s + b.fee_pct, 0);
+              if (total > 90) return;
+              setFormData((prev) => ({ ...prev, botStackEnabled: true, botStack: [...preset.bots] }));
+            };
+
+            return (
+              <div className="border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                      BUYBACK BOTS · PROGRAMMABLE TOKENOMICS
+                    </div>
+                    <div className="text-sm font-mono text-[var(--foreground)]">
+                      Stack actions + unlimited labeled vaults
+                    </div>
+                    <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
+                      Each bot gets its own Solscan wallet and a slice of trading fees,
+                      then runs one of 5 actions every cycle (burn / airdrop tokens or SOL
+                      to holders / backers) — plus any number of labeled VAULT bots that
+                      accumulate tokens you can withdraw anytime (Marketing, DAO, Liquidity).
+                      Fully on-chain &amp; auditable.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.botStackEnabled}
+                      onChange={(e) => {
+                        const enabled = e.target.checked;
+                        setFormData((prev) => ({
+                          ...prev,
+                          botStackEnabled: enabled,
+                          // Seed with one BURN bot at 20% when first enabled
+                          // (the most common starting config), but only if
+                          // the stack is empty. Toggling off keeps the stack
+                          // so creators can flip back and forth without losing work.
+                          botStack: enabled && prev.botStack.length === 0
+                            ? [{ action: 'burn', fee_pct: 20 }]
+                            : prev.botStack,
+                        }));
+                      }}
+                      className="w-4 h-4 accent-[var(--accent)]"
+                    />
+                    <span className="text-xs font-mono uppercase tracking-wider text-[var(--foreground)]">
+                      {formData.botStackEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </label>
+                </div>
+
+                {formData.botStackEnabled && (
+                  <div className="space-y-4 pt-3 border-t border-[var(--border)]">
+                    {/* Quick presets */}
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                          Bot Fee Delegation
-                        </label>
-                        <span className="text-xs font-mono text-[var(--accent)]">{botPct}% of backer pool</span>
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                        QUICK PRESETS
                       </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={formData.buybackBotFeePct}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, buybackBotFeePct: Number(e.target.value) }))}
-                        className="w-full accent-[var(--accent)]"
-                      />
-                      <div className="grid grid-cols-3 gap-2 text-[10px] font-mono uppercase tracking-widest text-center border-t border-[var(--border)] pt-2">
-                        <div>
-                          <div className="text-[var(--muted)]">Backers</div>
-                          <div className="text-[var(--foreground)] mt-0.5">{backerShare.toFixed(1)}%</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {BOT_PRESETS.map((preset) => (
+                          <button
+                            key={preset.name}
+                            type="button"
+                            onClick={() => applyPreset(preset)}
+                            className="text-left p-2.5 border border-[var(--border)] bg-[var(--background)] hover:border-[var(--accent)]/60 transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-xs font-mono font-semibold text-[var(--foreground)]">{preset.name}</span>
+                              <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--accent)]">
+                                {preset.bots.reduce((s, b) => s + b.fee_pct, 0)}%
+                              </span>
+                            </div>
+                            <div className="text-[10px] font-mono text-[var(--muted)] leading-snug mb-1.5">
+                              {preset.tagline}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {preset.bots.map((b, i) => (
+                                <span key={i} className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 border border-[var(--border)] text-[var(--muted)]">
+                                  {BOT_ACTION_BY_VALUE[b.action]?.emoji} {BOT_ACTION_BY_VALUE[b.action]?.short} {b.fee_pct}%
+                                </span>
+                              ))}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Bot cards */}
+                    <div className="space-y-2 pt-3 border-t border-[var(--border)]">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                          YOUR STACK · {formData.botStack.length} BOT{formData.botStack.length === 1 ? '' : 'S'}
                         </div>
+                        <div className={`text-[10px] font-mono uppercase tracking-wider ${overBudget ? 'text-red-400' : 'text-[var(--accent)]'}`}>
+                          Total: {totalBotPct}% / 90%
+                        </div>
+                      </div>
+
+                      {formData.botStack.length === 0 ? (
+                        <div className="border border-dashed border-[var(--border)] p-4 text-center">
+                          <div className="text-xs font-mono text-[var(--muted)]">
+                            No bots yet — add one below or pick a preset above.
+                          </div>
+                        </div>
+                      ) : (
+                        formData.botStack.map((bot, idx) => {
+                          const meta = BOT_ACTION_BY_VALUE[bot.action];
+                          // Action options for THIS bot:
+                          //   - 'hold' is always available (unlimited vaults)
+                          //   - For non-hold: only this bot's own action or any
+                          //     non-hold action not already used by another bot.
+                          const ownOptions = BOT_ACTIONS.filter(
+                            (a) =>
+                              a.value === 'hold' ||
+                              a.value === bot.action ||
+                              !usedNonHoldActions.has(a.value),
+                          );
+                          const isVault = bot.action === 'hold';
+                          const labelInvalid =
+                            isVault && (!bot.label || !isValidVaultLabel(bot.label));
+                          return (
+                            <div key={idx} className="border border-[var(--border)] bg-[var(--background)] p-3 space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                                    {isVault
+                                      ? <>VAULT{bot.label ? ` · ${bot.label}` : ''}</>
+                                      : <>BOT #{idx + 1}</>}
+                                  </span>
+                                  <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 text-[var(--accent)] border border-[var(--accent)]/40">
+                                    {meta?.tag}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeBot(idx)}
+                                  className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)] hover:text-red-400 transition-colors flex items-center gap-1"
+                                >
+                                  <X className="w-3 h-3" /> Remove
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* Action dropdown */}
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                                    Action
+                                  </label>
+                                  <select
+                                    value={bot.action}
+                                    onChange={(e) => updateBot(idx, { action: e.target.value as BotActionT })}
+                                    className="w-full bg-[var(--card)] border border-[var(--border)] px-2 py-2 text-xs font-mono text-[var(--foreground)] focus:border-[var(--accent)] outline-none"
+                                  >
+                                    {ownOptions.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.emoji} {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Fee % slider */}
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                                      Fee delegation
+                                    </label>
+                                    <span className="text-xs font-mono text-[var(--accent)]">{bot.fee_pct}%</span>
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min={5}
+                                    max={90}
+                                    step={5}
+                                    value={bot.fee_pct}
+                                    onChange={(e) => updateBot(idx, { fee_pct: Number(e.target.value) })}
+                                    className="w-full accent-[var(--accent)]"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Vault label input — required when action='hold'.
+                                  Becomes the wallet's public name (e.g. "Marketing")
+                                  and shows up on Solscan / the meme detail page. */}
+                              {isVault && (
+                                <div className="space-y-1.5">
+                                  <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                                    Vault label · public, on-chain
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={bot.label ?? ''}
+                                    onChange={(e) => updateBot(idx, { label: e.target.value })}
+                                    maxLength={24}
+                                    placeholder="e.g. Marketing, DAO, Liquidity"
+                                    className={`w-full bg-[var(--card)] border px-2 py-2 text-xs font-mono text-[var(--foreground)] outline-none focus:border-[var(--accent)] ${
+                                      labelInvalid ? 'border-red-400/60' : 'border-[var(--border)]'
+                                    }`}
+                                  />
+                                  {labelInvalid && (
+                                    <div className="text-[10px] font-mono text-red-400">
+                                      1-24 chars, letters / numbers / spaces / _ / - only
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="text-[10px] font-mono text-[var(--muted)] leading-snug border-t border-[var(--border)] pt-2">
+                                {meta?.desc}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+
+                      {/* Add bot button */}
+                      <button
+                        type="button"
+                        onClick={() => addBot()}
+                        disabled={!canAddMore}
+                        className="w-full p-2.5 border border-dashed border-[var(--border)] text-xs font-mono uppercase tracking-wider text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-[var(--border)] disabled:hover:text-[var(--muted)]"
+                      >
+                        {canAddMore
+                          ? `+ Add bot (${90 - totalBotPct}% budget available)`
+                          : totalBotPct >= 90
+                            ? '★ 90% delegation cap reached'
+                            : formData.botStack.length >= HARD_CAP
+                              ? `★ Reached UI cap of ${HARD_CAP} bots`
+                              : '★ All non-vault actions used (vaults still available)'}
+                      </button>
+                    </div>
+
+                    {/* Live distribution bar */}
+                    <div className="space-y-2 pt-3 border-t border-[var(--border)]">
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                        YOUR FEE DISTRIBUTION
+                      </div>
+                      <div className="flex h-6 border border-[var(--border)] overflow-hidden">
+                        <div
+                          className="bg-[var(--muted)]/40 flex items-center justify-center text-[9px] font-mono text-[var(--foreground)]"
+                          style={{ width: '10%' }}
+                          title="Platform 10%"
+                        >
+                          {/* Hidden on narrow segments */}
+                        </div>
+                        {formData.botStack.map((bot, idx) => {
+                          const meta = BOT_ACTION_BY_VALUE[bot.action];
+                          return (
+                            <div
+                              key={idx}
+                              className="bg-[var(--accent)]/60 border-l border-[var(--background)] flex items-center justify-center text-[9px] font-mono text-[#0a0a0a] overflow-hidden"
+                              style={{ width: `${bot.fee_pct}%` }}
+                              title={`${meta?.label} ${bot.fee_pct}%`}
+                            >
+                              {bot.fee_pct >= 10 ? `${meta?.emoji} ${bot.fee_pct}%` : ''}
+                            </div>
+                          );
+                        })}
+                        <div
+                          className="bg-[var(--foreground)]/20 border-l border-[var(--background)] flex items-center justify-center text-[9px] font-mono text-[var(--foreground)]"
+                          style={{ width: `${backerPct}%` }}
+                          title={`Backers ${backerPct}%`}
+                        >
+                          {backerPct >= 10 ? `B ${backerPct}%` : ''}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-[10px] font-mono uppercase tracking-widest text-center">
                         <div>
                           <div className="text-[var(--muted)]">Platform</div>
                           <div className="text-[var(--foreground)] mt-0.5">10%</div>
                         </div>
                         <div>
-                          <div className="text-[var(--accent)]">Bot</div>
-                          <div className="text-[var(--accent)] mt-0.5">{botShare.toFixed(1)}%</div>
+                          <div className="text-[var(--accent)]">Bots ({formData.botStack.length})</div>
+                          <div className="text-[var(--accent)] mt-0.5">{totalBotPct}%</div>
+                        </div>
+                        <div>
+                          <div className="text-[var(--muted)]">Backers</div>
+                          <div className="text-[var(--foreground)] mt-0.5">{backerPct}%</div>
                         </div>
                       </div>
                     </div>
-                  );
-                })()}
 
-                {/* Action picker — Phase A: 6 ready actions. The bot
-                    delegates a % of trading fees; this is what it DOES
-                    with that SOL each cycle. Mix-and-match later when
-                    Phase B ships multi-bot stacks. */}
-                <div className="space-y-2 pt-2 border-t border-[var(--border)]">
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                    BOT ACTION · WHAT IT DOES WITH ITS FEES EACH CYCLE
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {([
-                      { value: 'burn',                       label: 'BURN',                  tag: 'Deflationary',  desc: 'Buy tokens, burn them. Permanent supply reduction.', ready: true },
-                      { value: 'hold',                       label: 'HOLD',                  tag: 'Treasury',      desc: 'Buy tokens, park them in the bot wallet. Treasury you can deploy later.', ready: true },
-                      { value: 'distribute_tokens_holders',  label: 'TOKENS → HOLDERS',      tag: 'Loyalty',       desc: 'Buy tokens, airdrop pro-rata to every current holder. Drives volume + rewards holding.', ready: true },
-                      { value: 'distribute_tokens_backers',  label: 'TOKENS → BACKERS',      tag: 'OG reward',     desc: 'Buy tokens, airdrop pro-rata to the genesis backers who launched this token.', ready: true },
-                      { value: 'distribute_sol_holders',     label: 'SOL → HOLDERS',         tag: 'Yield',         desc: 'Skip the swap. Send delegated SOL pro-rata to every current holder. Pure cash flow.', ready: true },
-                      { value: 'distribute_sol_backers',     label: 'SOL → BACKERS',         tag: 'OG yield',      desc: 'Skip the swap. Send delegated SOL pro-rata to the genesis backers.', ready: true },
-                    ] as const).map((opt) => {
-                      const selected = formData.buybackBotAction === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setFormData((prev) => ({ ...prev, buybackBotAction: opt.value }))}
-                          className={`text-left p-3 border transition-colors ${
-                            selected
-                              ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                              : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--accent)]/60'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="text-xs font-mono font-semibold text-[var(--foreground)]">{opt.label}</span>
-                            <span className={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 ${opt.ready ? 'text-[var(--accent)] border border-[var(--accent)]/40' : 'text-[var(--muted)] border border-[var(--border)]'}`}>
-                              {opt.tag}
-                            </span>
-                          </div>
-                          <div className="text-[11px] font-mono text-[var(--muted)] leading-snug">{opt.desc}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                    {/* Validation messages */}
+                    {botStackInvalid && (
+                      <div className="border border-red-400/40 bg-red-400/5 p-2.5 text-[10px] font-mono text-red-400 leading-snug space-y-0.5">
+                        {overBudget && <div>★ Total bot delegation exceeds 90%. Reduce a slider.</div>}
+                        {anyInvalidPct && <div>★ Each bot must be between 5% and 90%.</div>}
+                        {invalidVaultLabels.length > 0 && (
+                          <div>★ Every vault needs a label (1-24 chars, alphanumerics / space / _ / -).</div>
+                        )}
+                        {duplicateVaultLabels.length > 0 && (
+                          <div>★ Duplicate vault labels: {duplicateVaultLabels.join(', ')}. Use unique names.</div>
+                        )}
+                      </div>
+                    )}
 
-                <div className="text-[10px] font-mono text-[var(--muted)] italic leading-snug border-t border-[var(--border)] pt-2">
-                  Bot wallet auto-generated on submit. Delegation %, action, and on/off can be changed later from your dashboard.
-                </div>
+                    <div className="text-[10px] font-mono text-[var(--muted)] italic leading-snug border-t border-[var(--border)] pt-2">
+                      One dedicated wallet auto-generated per bot. Each becomes a public,
+                      verifiable Solscan address. VAULT wallets are withdrawable by you;
+                      all other bots are sealed by design.
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* ── Submit ── */}
           <button
@@ -1145,6 +1498,7 @@ function SubmitPageInner() {
               || !formData.name
               || !formData.symbol
               || Object.keys(fieldErrors).some(k => fieldErrors[k as keyof ValidationErrors])
+              || (formData.botStackEnabled && !validateBotStack(formData.botStack).ok)
             }
             className="btn-primary w-full text-sm sm:text-base py-3.5"
           >

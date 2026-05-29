@@ -1,19 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { runBuybackBotsForAllLive, executeBuybackForMeme } from '@/services/buybackBot';
+import { executeBuybackBot } from '@/services/buybackBot';
 
-// Vercel cron + manual-trigger endpoint for per-meme buyback bots.
+// Vercel cron + manual-trigger endpoint for per-bot buyback execution.
 //
-// GET  → iterate every live meme with buyback_bot_enabled=true.
+// GET  → enumerate every bot in every live meme's stack and FAN OUT.
+//        Each bot's actual execution is dispatched as a fire-and-forget
+//        POST to this same route via Next.js `after()` (the official
+//        primitive for post-response background work). That gives every
+//        bot run its own 60s budget instead of all of them sharing
+//        ONE 60s budget. Coordinator returns quickly with the list of
+//        dispatched bots.
+//
 //        Auth: x-vercel-cron:1 (cron) OR Bearer CRON_SECRET (manual).
-//        ?force=1 ignored — runs are always idempotent (threshold + atomic
-//        drain guard against duplicates).
 //
-// POST → manual single-meme trigger. Same Bearer auth.
-//        Body: { meme_id }
+// POST → single-bot or single-meme trigger. Body:
+//          { bot_id }   → execute that one bot synchronously
+//          { meme_id }  → fan out every bot in that meme's stack
 //
 // The actual flow (claim escrow → swap via Jupiter → action) lives in
 // src/services/buybackBot.ts so it can be tested/triggered independently.
+//
+// SCALE NOTE — when total bots crosses ~50, swap the fan-out dispatcher
+// from self-POST + after() to an external queue (QStash). The worker
+// route shape (POST { bot_id }) already matches what a queue would
+// invoke, so the swap is a 30-min change.
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -29,21 +40,80 @@ function authorize(request: NextRequest): { ok: true } | { ok: false; status: nu
   return { ok: false, status: 401, error: 'Unauthorized' };
 }
 
+// Resolve the deployment's own origin so coordinator → worker self-POSTs
+// reach the same Vercel deployment they came from (preview vs prod).
+// Vercel sets VERCEL_URL automatically (e.g. proof-of-meme.vercel.app);
+// localhost falls back to the request's origin.
+function selfOrigin(request: NextRequest): string {
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  const url = new URL(request.url);
+  return `${url.protocol}//${url.host}`;
+}
+
+// Dispatch one fire-and-forget worker invocation. Each child gets its
+// own 60s budget. We pass the cron secret as the Bearer token so the
+// child's `authorize()` accepts it.
+async function dispatchBot(origin: string, botId: string): Promise<{ botId: string; dispatched: boolean; error?: string }> {
+  const secret = process.env.CRON_SECRET || 'prooflaunch-fees';
+  try {
+    const res = await fetch(`${origin}/api/buyback/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify({ bot_id: botId }),
+    });
+    return { botId, dispatched: res.ok };
+  } catch (e) {
+    return { botId, dispatched: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function GET(request: NextRequest) {
   const auth = authorize(request);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   try {
     const supabase = createServerClient();
-    const results = await runBuybackBotsForAllLive(supabase);
-    const completed = results.filter((r) => r.ok && !r.skipped).length;
-    const skipped = results.filter((r) => r.skipped).length;
-    const failed = results.filter((r) => !r.ok).length;
+
+    // Enumerate every bot belonging to a live meme.
+    const { data: bots, error } = await supabase
+      .from('meme_bots')
+      .select('id, meme_id, action, label, memes!inner(symbol, status)')
+      .eq('memes.status', 'live');
+    if (error) {
+      console.error('[buyback/process GET] enumerate error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const botIds = (bots || []).map((b) => b.id as string);
+    if (botIds.length === 0) {
+      return NextResponse.json({ success: true, dispatched: 0, bots: [] });
+    }
+
+    const origin = selfOrigin(request);
+
+    // Fan out via `after()` — Next.js' supported way to keep async work
+    // alive past the response. Each dispatch is independent; one failing
+    // doesn't cascade. The coordinator returns ~immediately.
+    after(async () => {
+      // Parallelize the dispatches but bound concurrency so we don't
+      // hit Vercel's per-deployment concurrent-invocation limit at high
+      // scale. 10 at a time is a safe default; each child finishes in
+      // 5-15s typically.
+      const CONCURRENCY = 10;
+      for (let i = 0; i < botIds.length; i += CONCURRENCY) {
+        const slice = botIds.slice(i, i + CONCURRENCY);
+        await Promise.all(slice.map((id) => dispatchBot(origin, id)));
+      }
+    });
+
     return NextResponse.json({
       success: true,
-      scanned: results.length,
-      completed, skipped, failed,
-      results,
+      dispatched: botIds.length,
+      bots: botIds,
+      mode: 'fanout',
     });
   } catch (e) {
     console.error('[buyback/process] top-level error:', e);
@@ -60,11 +130,38 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
+    const botId = typeof body?.bot_id === 'string' ? body.bot_id : null;
     const memeId = typeof body?.meme_id === 'string' ? body.meme_id : null;
-    if (!memeId) return NextResponse.json({ error: 'meme_id required' }, { status: 400 });
+    if (!botId && !memeId) {
+      return NextResponse.json({ error: 'bot_id or meme_id required' }, { status: 400 });
+    }
     const supabase = createServerClient();
-    const result = await executeBuybackForMeme(supabase, memeId);
-    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
+
+    if (botId) {
+      // Single-bot trigger — synchronous within this worker invocation.
+      const result = await executeBuybackBot(supabase, botId);
+      return NextResponse.json(result, { status: result.ok ? 200 : 500 });
+    }
+
+    // Per-meme — fan out every bot in that meme's stack via the same
+    // self-POST pattern as GET so each bot gets its own 60s budget.
+    const { data: bots } = await supabase
+      .from('meme_bots')
+      .select('id')
+      .eq('meme_id', memeId);
+    if (!bots || bots.length === 0) {
+      return NextResponse.json({ error: 'no bots configured for this meme' }, { status: 404 });
+    }
+    const botIds = bots.map((b) => b.id as string);
+    const origin = selfOrigin(request);
+    after(async () => {
+      const CONCURRENCY = 10;
+      for (let i = 0; i < botIds.length; i += CONCURRENCY) {
+        const slice = botIds.slice(i, i + CONCURRENCY);
+        await Promise.all(slice.map((id) => dispatchBot(origin, id)));
+      }
+    });
+    return NextResponse.json({ memeId, dispatched: botIds.length, bots: botIds });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'unknown error' },

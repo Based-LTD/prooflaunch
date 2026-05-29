@@ -402,40 +402,60 @@ export async function collectAndCreditFees(
   const collectedLamports = transferLamports;
   const rawBackerPoolLamports = Math.floor(collectedLamports * backerCut);
 
-  // Phase 5 — Buyback bot fee delegation. Creator opts in at submit;
-  // bot_fee_pct (0-100) is the % of the BACKER POOL (not of total) that
-  // gets routed to the bot wallet on chain instead of distributed to
-  // backers. Platform's cut stays unchanged. We transfer the bot's
-  // share NOW so the bot wallet has SOL ready for its next swap tick.
-  const botEnabled = !!meme.buyback_bot_enabled
-    && typeof meme.buyback_bot_fee_pct === 'number'
-    && meme.buyback_bot_fee_pct > 0
-    && !!meme.buyback_bot_wallet;
-  const botPct = botEnabled ? Number(meme.buyback_bot_fee_pct) / 100 : 0;
-  const botShareLamports = Math.floor(rawBackerPoolLamports * botPct);
-  const backerPoolLamports = rawBackerPoolLamports - botShareLamports;
-  const platformLamports = collectedLamports - backerPoolLamports - botShareLamports;
+  // Phase B — Bot stack fee delegation. Read the meme's bot stack from
+  // meme_bots and route each bot's share of the backer pool to its
+  // own dedicated wallet. Backer pool is reduced by the sum of all
+  // bot shares; platform's cut stays unchanged.
+  //
+  // Example for a stack of 2 bots at 20% (BURN) + 25% (SOL→HOLDERS):
+  //   - rawBackerPool = 90% of collected
+  //   - bot1 gets 20% of rawBackerPool, sent to bot1.wallet
+  //   - bot2 gets 25% of rawBackerPool, sent to bot2.wallet
+  //   - remaining 55% of rawBackerPool distributed to backers
+  //
+  // Each transfer is independent — if one bot's transfer fails, the
+  // others still happen. Failed transfers leave SOL in escrow for the
+  // next collection cycle to retry.
+  const { data: bots } = await supabase
+    .from('meme_bots')
+    .select('id, action, fee_pct, bot_wallet')
+    .eq('meme_id', meme.id)
+    .order('slot_order', { ascending: true });
 
-  let botShareSig: string | undefined;
-  if (botShareLamports > 0 && meme.buyback_bot_wallet) {
+  type BotPayout = { id: string; action: string; pct: number; wallet: string; lamports: number; sig?: string; error?: string };
+  const botPayouts: BotPayout[] = [];
+  let totalBotShareLamports = 0;
+  for (const bot of bots || []) {
+    const pct = Number(bot.fee_pct) / 100;
+    const shareLam = Math.floor(rawBackerPoolLamports * pct);
+    botPayouts.push({ id: bot.id, action: bot.action, pct, wallet: bot.bot_wallet, lamports: shareLam });
+    totalBotShareLamports += shareLam;
+  }
+
+  const backerPoolLamports = rawBackerPoolLamports - totalBotShareLamports;
+  const platformLamports = collectedLamports - backerPoolLamports - totalBotShareLamports;
+
+  // Transfer each bot its share. We use one tx per bot for clean
+  // per-bot tx receipts (auditable on Solscan). Total bot count is
+  // capped at 6 by UNIQUE (meme_id, action) so this loop is bounded.
+  for (const p of botPayouts) {
+    if (p.lamports <= 0) continue;
     try {
       const tx = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: escrow.publicKey,
-          toPubkey: new PublicKey(meme.buyback_bot_wallet),
-          lamports: botShareLamports,
+          toPubkey: new PublicKey(p.wallet),
+          lamports: p.lamports,
         })
       );
       tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
       tx.feePayer = escrow.publicKey;
-      botShareSig = await conn.sendTransaction(tx, [escrow]);
-      await conn.confirmTransaction(botShareSig, 'confirmed');
-      log('reconcile_recovered', { detail: { stage: 'bot_fee_delegation', sig: botShareSig, lamports: botShareLamports, botPct } });
+      p.sig = await conn.sendTransaction(tx, [escrow]);
+      await conn.confirmTransaction(p.sig, 'confirmed');
+      log('reconcile_recovered', { detail: { stage: 'bot_fee_delegation', botId: p.id, action: p.action, sig: p.sig, lamports: p.lamports, pct: p.pct } });
     } catch (e) {
-      // Non-fatal: bot wallet didn't get its share this round, SOL stays
-      // in escrow as platform revenue effectively. Backers still get
-      // their (reduced) cut. Next collection round, bot tries again.
-      log('reconcile_error', { ok: false, detail: { stage: 'bot_fee_delegation', err: e instanceof Error ? e.message : String(e), lamports: botShareLamports } });
+      p.error = e instanceof Error ? e.message : String(e);
+      log('reconcile_error', { ok: false, detail: { stage: 'bot_fee_delegation', botId: p.id, action: p.action, err: p.error, lamports: p.lamports } });
     }
   }
 

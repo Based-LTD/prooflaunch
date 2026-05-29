@@ -79,6 +79,16 @@ export async function GET(
       .eq('id', id)
       .single();
 
+    // Phase B — bot stack (programmable tokenomics). Public-safe columns
+    // only — NEVER select encrypted_bot_key. The meme_bots table is the
+    // source of truth post-Phase-B; legacy memes.buyback_bot_* columns
+    // remain populated for backward compat with single-bot stacks.
+    const { data: botsRows } = await supabase
+      .from('meme_bots')
+      .select('id, slot_order, action, fee_pct, bot_wallet, label, last_run_at, total_sol_spent, total_tokens_acted, created_at')
+      .eq('meme_id', id)
+      .order('slot_order', { ascending: true });
+
     // Get backings for this meme. Now includes both 'confirmed' (still
     // pre-launch) AND 'distributed' (post-launch holdings) so the meme
     // detail page can show its Genesis Backer Roster post-launch.
@@ -245,6 +255,9 @@ export async function GET(
         buyback_bot_last_run_at: poolFields?.buyback_bot_last_run_at ?? null,
         buyback_bot_total_sol_spent: poolFields?.buyback_bot_total_sol_spent ?? 0,
         buyback_bot_total_tokens_acted: poolFields?.buyback_bot_total_tokens_acted ?? 0,
+        // Phase B — bot stack. Empty array for legacy / no-bot memes;
+        // populated for any meme that has rows in meme_bots.
+        bots: botsRows ?? [],
         // Phase 3.5 — team-fairness cap
         max_backing_sol: poolFields?.max_backing_sol ?? null,
         // Phase 7 — reserved slots

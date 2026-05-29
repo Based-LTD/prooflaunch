@@ -16,9 +16,12 @@ export async function GET(request: NextRequest) {
     if (!memeId) return NextResponse.json({ error: 'meme_id required' }, { status: 400 });
 
     const supabase = createServerClient();
+    // bot_id is included so the panel can group runs per bot in a stack.
+    // NULL for legacy (pre-Phase-B) single-bot rows — the panel falls
+    // back to per-meme totals in that case.
     const { data, error } = await supabase
       .from('meme_buybacks')
-      .select('executed_at, action, status, sol_spent_lamports, tokens_acted_raw, swap_tx, action_tx')
+      .select('executed_at, action, status, sol_spent_lamports, tokens_acted_raw, swap_tx, action_tx, bot_id')
       .eq('meme_id', memeId)
       .order('executed_at', { ascending: false })
       .limit(limit);

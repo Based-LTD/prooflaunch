@@ -175,13 +175,14 @@ export async function POST(request: NextRequest) {
       fee_burn_pct,
       fee_charity_pct,
       fee_charity_wallet,
-      // Phase 5 — Buyback bot via fee delegation (migrations 031 + 036).
-      // When enabled, buyback_bot_fee_pct (0-100) routes that % of the
-      // backer pool to the bot wallet on chain. The bot cron drains it
-      // and executes the chosen action (burn / hold / distribute_*).
+      // Phase 5 — legacy single-bot fields (still accepted for back-compat
+      // with any clients on the previous wire shape).
       buyback_bot_enabled = false,
       buyback_bot_action,
       buyback_bot_fee_pct = 0,
+      // Phase B — bot stack array. Each item: { action, fee_pct }. If
+      // present and non-empty, supersedes the single-bot fields above.
+      bots = [],
     } = body;
 
     // ── Partner session lookup (optional) ──────────────────────────
@@ -422,6 +423,78 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Phase B — Bot stack validation. When `bots` array is supplied
+    // (and non-empty), it supersedes the single-bot field above.
+    // Constraints (must match what the UI enforces + migration 042):
+    //   - max 12 bots total (soft UI cap; real cap is the 90% budget)
+    //   - non-hold actions distinct (partial UNIQUE in DB enforces)
+    //   - HOLD (vault) can repeat — each requires a 1-24 char label
+    //     matching ^[A-Za-z0-9 _\-]+$ (CHECK constraint in DB)
+    //   - each fee_pct in [5, 90]
+    //   - total fee_pct across the stack ≤ 90
+    interface BotInput { action: string; fee_pct: number; label?: string | null }
+    const VAULT_LABEL_RE = /^[A-Za-z0-9 _\-]+$/;
+    const HARD_CAP = 12;
+    const botStack: BotInput[] = [];
+    if (Array.isArray(bots) && bots.length > 0) {
+      if (bots.length > HARD_CAP) {
+        return NextResponse.json({ error: `Bot stack capped at ${HARD_CAP}` }, { status: 400 });
+      }
+      let stackSum = 0;
+      const seenNonHold = new Set<string>();
+      for (const raw of bots) {
+        if (!raw || typeof raw !== 'object') {
+          return NextResponse.json({ error: 'each bot must be {action, fee_pct}' }, { status: 400 });
+        }
+        const action = (raw as { action?: unknown }).action;
+        const feePct = (raw as { fee_pct?: unknown }).fee_pct;
+        const labelRaw = (raw as { label?: unknown }).label;
+        if (typeof action !== 'string' || !VALID_BOT_ACTIONS.has(action)) {
+          return NextResponse.json({ error: `invalid bot action: ${String(action)}` }, { status: 400 });
+        }
+        if (action !== 'hold') {
+          if (seenNonHold.has(action)) {
+            return NextResponse.json(
+              { error: `duplicate non-vault action: ${action} (each non-vault action appears at most once)` },
+              { status: 400 },
+            );
+          }
+          if (labelRaw !== undefined && labelRaw !== null && labelRaw !== '') {
+            return NextResponse.json(
+              { error: `bot ${action}: only vault (hold) bots can have a label` },
+              { status: 400 },
+            );
+          }
+          seenNonHold.add(action);
+        }
+        if (typeof feePct !== 'number' || !Number.isFinite(feePct) || feePct < 5 || feePct > 90) {
+          return NextResponse.json({ error: `bot ${action}: fee_pct must be a number 5-90` }, { status: 400 });
+        }
+        let label: string | null = null;
+        if (action === 'hold') {
+          if (typeof labelRaw !== 'string') {
+            return NextResponse.json({ error: 'vault bot requires a string label' }, { status: 400 });
+          }
+          const trimmed = labelRaw.trim();
+          if (trimmed.length < 1 || trimmed.length > 24 || !VAULT_LABEL_RE.test(trimmed)) {
+            return NextResponse.json(
+              { error: `vault label "${trimmed}" must be 1-24 chars of letters / numbers / spaces / _ / -` },
+              { status: 400 },
+            );
+          }
+          label = trimmed;
+        }
+        botStack.push({ action, fee_pct: feePct, label });
+        stackSum += feePct;
+      }
+      if (stackSum > 90) {
+        return NextResponse.json(
+          { error: `Bot stack total ${stackSum}% exceeds the 90% cap (10% always to platform)` },
+          { status: 400 },
+        );
+      }
+    }
+
     // Parse + validate the initial allowlist. Used by:
     //   - Gated launches (visibility = stealth | spectator) — controls ALL backing
     //   - Reserved-slot launches (reserved_slots > 0) — controls reserved slot positions
@@ -460,17 +533,38 @@ export async function POST(request: NextRequest) {
       console.error('User upsert error:', userError);
     }
 
-    // Pre-generate the buyback bot keypair if the bot is being enabled.
-    // The DB constraint memes_buyback_bot_complete requires wallet + key
-    // to be non-null when enabled=true, so we MUST include them in the
-    // INSERT — can't defer to a follow-up UPDATE.
-    let buybackBotWallet: string | null = null;
-    let encryptedBuybackBotKey: string | null = null;
-    if (buyback_bot_enabled) {
-      const botKp = Keypair.generate();
-      buybackBotWallet = botKp.publicKey.toBase58();
-      encryptedBuybackBotKey = encryptPrivateKey(bs58.encode(botKp.secretKey));
-    }
+    // Phase B — If the caller supplied a bots[] stack, that's the source
+    // of truth and we generate one keypair per bot. Otherwise, fall back
+    // to the legacy single-bot shape and synthesize a 1-item stack.
+    const effectiveStack: { action: string; fee_pct: number; label?: string | null }[] = botStack.length > 0
+      ? botStack
+      : (buyback_bot_enabled
+          ? [{ action: buyback_bot_action as string, fee_pct: Number(buyback_bot_fee_pct) }]
+          : []);
+
+    const generatedBots: { action: string; fee_pct: number; label: string | null; wallet: string; encryptedKey: string }[] =
+      effectiveStack.map((bot) => {
+        const kp = Keypair.generate();
+        return {
+          action: bot.action,
+          fee_pct: bot.fee_pct,
+          // Legacy single-bot HOLD: default label so 042's CHECK accepts it.
+          // New stack with `label` field: preserved as-is.
+          label: bot.action === 'hold' ? (bot.label || 'Vault') : null,
+          wallet: kp.publicKey.toBase58(),
+          encryptedKey: encryptPrivateKey(bs58.encode(kp.secretKey)),
+        };
+      });
+
+    // The legacy memes.buyback_bot_* columns stay populated when there's
+    // EXACTLY one bot (so the DB CHECK constraint is satisfied). For
+    // multi-bot stacks we leave the legacy fields empty + enabled=false;
+    // the new meme_bots table is the source of truth from here on.
+    const legacyMode = generatedBots.length === 1;
+    const buybackBotWallet: string | null = legacyMode ? generatedBots[0].wallet : null;
+    const encryptedBuybackBotKey: string | null = legacyMode ? generatedBots[0].encryptedKey : null;
+    const legacyAction = legacyMode ? generatedBots[0].action : null;
+    const legacyFeePct = legacyMode ? generatedBots[0].fee_pct : 0;
 
     // Create meme with slot-based backing system
     const { data, error } = await supabase
@@ -519,12 +613,14 @@ export async function POST(request: NextRequest) {
         fee_burn_pct:           fee_preset ? fee_burn_pct : null,
         fee_charity_pct:        fee_preset ? fee_charity_pct : null,
         fee_charity_wallet:     fee_preset && fee_charity_pct > 0 ? fee_charity_wallet : null,
-        // Phase 5 — Buyback bot. Wallet + key generated pre-INSERT
-        // because the memes_buyback_bot_complete CHECK constraint
-        // requires them to be non-null when enabled=true.
-        buyback_bot_enabled:        !!buyback_bot_enabled,
-        buyback_bot_action:         buyback_bot_enabled ? buyback_bot_action : null,
-        buyback_bot_fee_pct:        buyback_bot_enabled ? Number(buyback_bot_fee_pct) : 0,
+        // Phase 5 → Phase B. Legacy single-bot fields stay populated
+        // ONLY when the stack has exactly 1 bot (so DB constraint passes
+        // + backwards-compat queries still work). For 2+ bots, legacy
+        // fields are NULL/false and the real source of truth is the
+        // meme_bots rows inserted below.
+        buyback_bot_enabled:        legacyMode,
+        buyback_bot_action:         legacyAction,
+        buyback_bot_fee_pct:        legacyFeePct,
         buyback_bot_wallet:         buybackBotWallet,
         encrypted_buyback_bot_key:  encryptedBuybackBotKey,
       })
@@ -533,6 +629,32 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // ── Bot stack rows (Phase B) ───────────────────────────────────
+    // Insert one meme_bots row per bot in the stack. Per-bot wallets
+    // already generated above. Slot_order matches the input order so
+    // the UI can render the stack consistently. Failure here surfaces
+    // but doesn't roll back the meme (creator can re-create bots from
+    // their dashboard).
+    if (generatedBots.length > 0 && data) {
+      const botRows = generatedBots.map((bot, i) => ({
+        meme_id: data.id,
+        slot_order: i,
+        action: bot.action,
+        fee_pct: bot.fee_pct,
+        bot_wallet: bot.wallet,
+        encrypted_bot_key: bot.encryptedKey,
+        // Label is required by the DB CHECK when action='hold', NULL
+        // otherwise. generatedBots already enforces this shape.
+        label: bot.label,
+      }));
+      const { error: botInsertErr } = await supabase
+        .from('meme_bots')
+        .insert(botRows);
+      if (botInsertErr) {
+        console.error('Bot stack insert failed (meme created, bots can be added via dashboard):', botInsertErr);
+      }
     }
 
     // ── Allowlist setup (Launch Config v2 — Phase 1) ────────────────

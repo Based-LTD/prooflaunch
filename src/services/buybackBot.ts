@@ -134,6 +134,7 @@ function needsSwap(action: BotAction): boolean {
 
 export interface BuybackResult {
   ok: boolean;
+  botId?: string;
   memeId: string;
   symbol?: string;
   skipped?: string;
@@ -148,51 +149,90 @@ export interface BuybackResult {
   error?: string;
 }
 
+// MemeRow now carries the meme's static fields. Per-bot fields (action,
+// wallet, key, totals, last_run) live in meme_bots — see executeBuybackBot.
 interface MemeRow {
   id: string;
   symbol: string;
   mint_address: string | null;
   status: string;
-  buyback_bot_enabled: boolean;
-  buyback_bot_action: BotAction | null;
-  buyback_bot_wallet: string | null;
-  encrypted_buyback_bot_key: string | null;
-  buyback_bot_total_sol_spent: number | null;
-  buyback_bot_total_tokens_acted: number | null;
 }
 
-export async function executeBuybackForMeme(
+interface BotRow {
+  id: string;
+  meme_id: string;
+  action: BotAction;
+  fee_pct: number;
+  bot_wallet: string;
+  encrypted_bot_key: string;
+  total_sol_spent: number | null;
+  total_tokens_acted: number | null;
+}
+
+// Phase B — execute one specific bot from a meme's stack. Replaces the
+// single-bot-per-meme executor; each row in meme_bots gets its own
+// independent run, wallet, audit trail.
+export async function executeBuybackBot(
   supabase: SupabaseClient,
-  memeId: string,
+  botId: string,
 ): Promise<BuybackResult> {
+  const { data: bot, error: botErr } = await supabase
+    .from('meme_bots')
+    .select('id, meme_id, action, fee_pct, bot_wallet, encrypted_bot_key, total_sol_spent, total_tokens_acted')
+    .eq('id', botId)
+    .single();
+  if (botErr || !bot) return { ok: false, memeId: '', error: 'bot not found' };
+  const b = bot as BotRow;
+
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select(`id, symbol, mint_address, status,
-             buyback_bot_enabled, buyback_bot_action,
-             buyback_bot_wallet, encrypted_buyback_bot_key,
-             buyback_bot_total_sol_spent, buyback_bot_total_tokens_acted`)
-    .eq('id', memeId)
+    .select('id, symbol, mint_address, status')
+    .eq('id', b.meme_id)
     .single();
-  if (memeErr || !meme) return { ok: false, memeId, error: 'meme not found' };
+  if (memeErr || !meme) return { ok: false, botId: b.id, memeId: b.meme_id, error: 'meme not found' };
   const m = meme as MemeRow;
 
-  if (!m.buyback_bot_enabled) return { ok: true, memeId, skipped: 'bot not enabled' };
-  if (m.status !== 'live')    return { ok: true, memeId, symbol: m.symbol, skipped: `not live (status=${m.status})` };
-  if (!m.mint_address)        return { ok: false, memeId, symbol: m.symbol, error: 'mint_address missing on live meme' };
-  if (!m.buyback_bot_wallet || !m.encrypted_buyback_bot_key)
-    return { ok: false, memeId, symbol: m.symbol, error: 'bot wallet missing despite enabled flag' };
-  if (!m.buyback_bot_action)  return { ok: false, memeId, symbol: m.symbol, error: 'bot action missing' };
+  if (m.status !== 'live')    return { ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, skipped: `not live (status=${m.status})` };
+  if (!m.mint_address)        return { ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, error: 'mint_address missing on live meme' };
 
-  const action = m.buyback_bot_action;
+  const action = b.action;
 
   let botKp: Keypair;
-  try { botKp = decryptKeypair(m.encrypted_buyback_bot_key); }
-  catch (e) { return { ok: false, memeId, symbol: m.symbol, action, error: `bot key decrypt: ${e instanceof Error ? e.message : String(e)}` }; }
-  if (botKp.publicKey.toBase58() !== m.buyback_bot_wallet) {
-    return { ok: false, memeId, symbol: m.symbol, action, error: 'bot key pubkey mismatch — refusing to touch' };
+  try { botKp = decryptKeypair(b.encrypted_bot_key); }
+  catch (e) { return { ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, action, error: `bot key decrypt: ${e instanceof Error ? e.message : String(e)}` }; }
+  if (botKp.publicKey.toBase58() !== b.bot_wallet) {
+    return { ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, action, error: 'bot key pubkey mismatch — refusing to touch' };
   }
 
   const conn = new Connection(RPC_URL, 'confirmed');
+
+  // ── PRE-FLIGHT: stranded-token recovery ──
+  // For swap-based actions (burn / token-distribute), a prior tick may
+  // have completed the swap step but failed the action step, leaving
+  // tokens stuck in the bot wallet. Finish that work BEFORE doing any
+  // new swap so the stranded balance gets reduced to zero. Logs as a
+  // separate "recovery" row in meme_buybacks; doesn't block the normal
+  // flow that follows.
+  //
+  // Skipped for:
+  //   - hold (vault): tokens are SUPPOSED to sit in the wallet
+  //   - distribute_sol_*: no swap = no stranded tokens possible
+  if (
+    m.mint_address &&
+    (action === 'burn' ||
+     action === 'distribute_tokens_holders' ||
+     action === 'distribute_tokens_backers' ||
+     action === 'distribute_holders' ||
+     action === 'distribute_backers')
+  ) {
+    try {
+      await tryRecoverStrandedTokens(supabase, m, b, botKp, conn, action);
+    } catch (e) {
+      // Recovery failures are non-fatal — log + continue with normal flow.
+      console.warn(`[buybackBot] recovery for bot ${b.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   const balance = await conn.getBalance(botKp.publicKey);
 
   // For swap-based actions, gas reserve is 0.01 SOL (BC overhead).
@@ -202,12 +242,12 @@ export async function executeBuybackForMeme(
   const gasReserve = isDistribute ? DIST_GAS_RESERVE_LAMPORTS : GAS_RESERVE_LAMPORTS;
   const usableLamports = balance - gasReserve;
   if (usableLamports < MIN_SWAP_LAMPORTS) {
-    return { ok: true, memeId, symbol: m.symbol, action, skipped: `bot wallet balance ${balance} below action threshold (need ${MIN_SWAP_LAMPORTS + gasReserve} lamports)` };
+    return { ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action, skipped: `bot wallet balance ${balance} below action threshold (need ${MIN_SWAP_LAMPORTS + gasReserve} lamports)` };
   }
 
   // ── SOL-only distribute actions skip the swap entirely ─────────────
   if (action === 'distribute_sol_holders' || action === 'distribute_sol_backers') {
-    return executeSolDistribute(supabase, m, botKp, conn, action, usableLamports);
+    return executeSolDistribute(supabase, m, b, botKp, conn, action, usableLamports);
   }
 
   // ── Swap branch (burn / hold / token-distribute) ──────────────────
@@ -254,30 +294,31 @@ export async function executeBuybackForMeme(
     if (actualTokensRaw === BigInt(0)) throw new Error('swap confirmed but ATA balance is 0');
   } catch (e) {
     await supabase.from('meme_buybacks').insert({
-      meme_id: m.id, action, sol_spent_lamports: usableLamports.toString(),
+      meme_id: m.id, bot_id: b.id, action, sol_spent_lamports: usableLamports.toString(),
       tokens_bought_raw: '0', tokens_acted_raw: '0',
       status: 'failed', error: `swap: ${e instanceof Error ? e.message : String(e)}`,
     });
-    await supabase.from('memes').update({ buyback_bot_last_run_at: new Date().toISOString() }).eq('id', m.id);
-    return { ok: false, memeId, symbol: m.symbol, action, error: `swap failed: ${e instanceof Error ? e.message : String(e)}` };
+    await supabase.from('meme_bots').update({ last_run_at: new Date().toISOString() }).eq('id', b.id);
+    return { ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, action, error: `swap failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 
   // Dispatch the action on the bought tokens.
   if (action === 'burn') {
-    return executeBurn(supabase, m, botKp, conn, action, actualTokensRaw, tokenProgramId, tokenDecimals, usableLamports, swapTx);
+    return executeBurn(supabase, m, b, botKp, conn, action, actualTokensRaw, tokenProgramId, tokenDecimals, usableLamports, swapTx);
   }
   if (action === 'hold') {
-    return executeHold(supabase, m, actualTokensRaw, action, usableLamports, swapTx);
+    return executeHold(supabase, m, b, actualTokensRaw, action, usableLamports, swapTx);
   }
   // distribute_tokens_* (current + legacy synonyms)
   return executeTokenDistribute(
-    supabase, m, botKp, conn, action, actualTokensRaw, tokenProgramId, tokenDecimals, usableLamports, swapTx,
+    supabase, m, b, botKp, conn, action, actualTokensRaw, tokenProgramId, tokenDecimals, usableLamports, swapTx,
   );
 }
 
 // ── BURN ───────────────────────────────────────────────────────────
 async function executeBurn(
-  supabase: SupabaseClient, m: MemeRow, botKp: Keypair, conn: Connection,
+  supabase: SupabaseClient, m: MemeRow, b: BotRow,
+  botKp: Keypair, conn: Connection,
   action: BotAction, actualTokensRaw: bigint,
   tokenProgramId: PublicKey, tokenDecimals: number,
   usableLamports: number, swapTx: string,
@@ -302,24 +343,25 @@ async function executeBurn(
     const burnConf = await conn.confirmTransaction({ signature: actionTx, blockhash, lastValidBlockHeight }, 'confirmed');
     if (burnConf.value.err) throw new Error(`burn failed: ${JSON.stringify(burnConf.value.err)}`);
   } catch (e) {
-    return finalizePartial(supabase, m, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, `action: ${e instanceof Error ? e.message : String(e)}`);
+    return finalizePartial(supabase, m, b, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, `action: ${e instanceof Error ? e.message : String(e)}`);
   }
-  return finalize(supabase, m, action, usableLamports, actualTokensRaw, actualTokensRaw, swapTx, actionTx);
+  return finalize(supabase, m, b, action, usableLamports, actualTokensRaw, actualTokensRaw, swapTx, actionTx);
 }
 
 // ── HOLD ───────────────────────────────────────────────────────────
 async function executeHold(
-  supabase: SupabaseClient, m: MemeRow,
+  supabase: SupabaseClient, m: MemeRow, b: BotRow,
   actualTokensRaw: bigint, action: BotAction,
   usableLamports: number, swapTx: string,
 ): Promise<BuybackResult> {
   // No-op — tokens stay in bot wallet.
-  return finalize(supabase, m, action, usableLamports, actualTokensRaw, actualTokensRaw, swapTx, undefined);
+  return finalize(supabase, m, b, action, usableLamports, actualTokensRaw, actualTokensRaw, swapTx, undefined);
 }
 
 // ── DISTRIBUTE SOL (no swap) ───────────────────────────────────────
 async function executeSolDistribute(
-  supabase: SupabaseClient, m: MemeRow, botKp: Keypair, conn: Connection,
+  supabase: SupabaseClient, m: MemeRow, b: BotRow,
+  botKp: Keypair, conn: Connection,
   action: BotAction, usableLamports: number,
 ): Promise<BuybackResult> {
   const recipients = await buildRecipientList(
@@ -327,16 +369,16 @@ async function executeSolDistribute(
     action === 'distribute_sol_holders' ? 'holders' : 'backers',
   );
   if (recipients.error) {
-    return finalizePartial(supabase, m, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, recipients.error);
+    return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, recipients.error);
   }
   if (recipients.list.length === 0) {
-    return finalizePartial(supabase, m, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'no recipients found');
+    return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'no recipients found');
   }
 
   // Pro-rata SOL allocation. weights are unitless — sum normalizes.
   const totalWeight = recipients.list.reduce((s, r) => s + r.weight, 0);
   if (totalWeight <= 0) {
-    return finalizePartial(supabase, m, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'total weight 0');
+    return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'total weight 0');
   }
 
   // Send per-recipient. Batch into multiple txes if needed.
@@ -377,7 +419,7 @@ async function executeSolDistribute(
   }
 
   return finalize(
-    supabase, m, action,
+    supabase, m, b, action,
     actualSent, // sol_spent
     BigInt(0),  // tokens_bought
     BigInt(0),  // tokens_acted (we sent SOL, not tokens)
@@ -391,7 +433,8 @@ async function executeSolDistribute(
 
 // ── DISTRIBUTE TOKENS (swap then airdrop) ──────────────────────────
 async function executeTokenDistribute(
-  supabase: SupabaseClient, m: MemeRow, botKp: Keypair, conn: Connection,
+  supabase: SupabaseClient, m: MemeRow, b: BotRow,
+  botKp: Keypair, conn: Connection,
   action: BotAction, actualTokensRaw: bigint,
   tokenProgramId: PublicKey, tokenDecimals: number,
   usableLamports: number, swapTx: string,
@@ -404,15 +447,15 @@ async function executeTokenDistribute(
 
   const recipients = await buildRecipientList(supabase, conn, m, botKp.publicKey, recipientKind);
   if (recipients.error) {
-    return finalizePartial(supabase, m, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, recipients.error);
+    return finalizePartial(supabase, m, b, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, recipients.error);
   }
   if (recipients.list.length === 0) {
-    return finalizePartial(supabase, m, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, 'no recipients found');
+    return finalizePartial(supabase, m, b, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, 'no recipients found');
   }
 
   const totalWeight = recipients.list.reduce((s, r) => s + r.weight, 0);
   if (totalWeight <= 0) {
-    return finalizePartial(supabase, m, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, 'total weight 0');
+    return finalizePartial(supabase, m, b, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, 'total weight 0');
   }
 
   const mintPub = new PublicKey(m.mint_address!);
@@ -459,7 +502,7 @@ async function executeTokenDistribute(
   }
 
   return finalize(
-    supabase, m, action, usableLamports, actualTokensRaw, actedRaw,
+    supabase, m, b, action, usableLamports, actualTokensRaw, actedRaw,
     swapTx, undefined,
     sigs.length > 0 ? sigs : undefined,
     credited,
@@ -576,7 +619,7 @@ async function buildRecipientList(
 
 // ── Audit row + rollup helpers ─────────────────────────────────────
 async function finalize(
-  supabase: SupabaseClient, m: MemeRow, action: BotAction,
+  supabase: SupabaseClient, m: MemeRow, b: BotRow, action: BotAction,
   solSpentLamports: number,
   tokensBoughtRaw: bigint, tokensActedRaw: bigint,
   swapTx: string | undefined, actionTx: string | undefined,
@@ -585,7 +628,7 @@ async function finalize(
   notes?: string,
 ): Promise<BuybackResult> {
   const insertRow: Record<string, unknown> = {
-    meme_id: m.id, action,
+    meme_id: m.id, bot_id: b.id, action,
     sol_spent_lamports: solSpentLamports.toString(),
     tokens_bought_raw: tokensBoughtRaw.toString(),
     tokens_acted_raw:  tokensActedRaw.toString(),
@@ -598,19 +641,21 @@ async function finalize(
   }
   await supabase.from('meme_buybacks').insert(insertRow);
 
-  const newSolSpent = Number(m.buyback_bot_total_sol_spent || 0) + (solSpentLamports / LAMPORTS_PER_SOL);
-  const newTokensActed = Number(m.buyback_bot_total_tokens_acted || 0) + Number(tokensActedRaw);
+  // Per-bot rollup stats (not per-meme) — each bot tracks its own
+  // lifetime spend + tokens acted independently.
+  const newSolSpent = Number(b.total_sol_spent || 0) + (solSpentLamports / LAMPORTS_PER_SOL);
+  const newTokensActed = Number(b.total_tokens_acted || 0) + Number(tokensActedRaw);
   await supabase
-    .from('memes')
+    .from('meme_bots')
     .update({
-      buyback_bot_last_run_at: new Date().toISOString(),
-      buyback_bot_total_sol_spent: newSolSpent,
-      buyback_bot_total_tokens_acted: newTokensActed,
+      last_run_at: new Date().toISOString(),
+      total_sol_spent: newSolSpent,
+      total_tokens_acted: newTokensActed,
     })
-    .eq('id', m.id);
+    .eq('id', b.id);
 
   return {
-    ok: true, memeId: m.id, symbol: m.symbol, action,
+    ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action,
     solSpentLamports,
     tokensBoughtRaw: tokensBoughtRaw.toString(),
     tokensActedRaw:  tokensActedRaw.toString(),
@@ -620,7 +665,7 @@ async function finalize(
 }
 
 async function finalizePartial(
-  supabase: SupabaseClient, m: MemeRow, action: BotAction,
+  supabase: SupabaseClient, m: MemeRow, b: BotRow, action: BotAction,
   solSpentLamports: number, tokensRaw: bigint,
   swapTx: string | undefined, actionTx: string | undefined,
   actionTxs: string[] | undefined,
@@ -628,7 +673,7 @@ async function finalizePartial(
   errorMsg: string,
 ): Promise<BuybackResult> {
   await supabase.from('meme_buybacks').insert({
-    meme_id: m.id, action,
+    meme_id: m.id, bot_id: b.id, action,
     sol_spent_lamports: solSpentLamports.toString(),
     tokens_bought_raw: tokensRaw.toString(),
     tokens_acted_raw:  '0',
@@ -636,30 +681,163 @@ async function finalizePartial(
     status: 'partial',
     error: errorMsg,
   });
-  await supabase.from('memes').update({ buyback_bot_last_run_at: new Date().toISOString() }).eq('id', m.id);
+  await supabase.from('meme_bots').update({ last_run_at: new Date().toISOString() }).eq('id', b.id);
   return {
-    ok: false, memeId: m.id, symbol: m.symbol, action,
+    ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, action,
     solSpentLamports, tokensBoughtRaw: tokensRaw.toString(),
     swapTx, actionTx, actionTxs, recipientCount,
     error: errorMsg,
   };
 }
 
+// ── Stranded-token recovery ────────────────────────────────────────
+// Reads the bot's on-chain token balance for the meme's mint. If it's
+// non-zero, runs the bot's action against that balance and writes a
+// dedicated meme_buybacks row tagged with status='completed' and a
+// "recovery: prior partial" note. Does NOT modify the original partial
+// row (audit-trail integrity — the chain of (partial → recovery) tells
+// the full story).
+//
+// Called from executeBuybackBot ONLY for swap-based actions:
+//   burn, distribute_tokens_holders, distribute_tokens_backers
+// (HOLD intentionally accumulates; SOL distribute has no swap.)
+async function tryRecoverStrandedTokens(
+  supabase: SupabaseClient, m: MemeRow, b: BotRow,
+  botKp: Keypair, conn: Connection, action: BotAction,
+): Promise<void> {
+  if (!m.mint_address) return;
+  const mintPub = new PublicKey(m.mint_address);
+
+  // Detect token program (SPL vs Token-2022).
+  const mintAcc = await conn.getAccountInfo(mintPub);
+  if (!mintAcc) return;
+  const tokenProgramId = mintAcc.owner.equals(TOKEN_2022_PROGRAM_ID)
+    ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+
+  const ata = getAssociatedTokenAddressSync(mintPub, botKp.publicKey, false, tokenProgramId);
+  const balRes = await conn.getTokenAccountBalance(ata).catch(() => null);
+  const strandedRaw = BigInt(balRes?.value?.amount || '0');
+  if (strandedRaw === BigInt(0)) return;
+
+  const mintInfo = await getMint(conn, mintPub, 'confirmed', tokenProgramId);
+  const tokenDecimals = mintInfo.decimals;
+
+  // Run the appropriate action against the stranded balance.
+  if (action === 'burn') {
+    const burnIx = createBurnCheckedInstruction(
+      ata, mintPub, botKp.publicKey, strandedRaw, tokenDecimals, [], tokenProgramId,
+    );
+    const priorityIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 });
+    const cuIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 80_000 });
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+    const msg = new TransactionMessage({
+      payerKey: botKp.publicKey, recentBlockhash: blockhash,
+      instructions: [cuIx, priorityIx, burnIx],
+    }).compileToV0Message();
+    const burnTx = new VersionedTransaction(msg);
+    burnTx.sign([botKp]);
+    const sig = await conn.sendTransaction(burnTx, { skipPreflight: false, maxRetries: 3 });
+    const conf = await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
+    if (conf.value.err) throw new Error(`recovery burn failed: ${JSON.stringify(conf.value.err)}`);
+
+    await supabase.from('meme_buybacks').insert({
+      meme_id: m.id, bot_id: b.id, action,
+      sol_spent_lamports: '0',                       // no new SOL spent
+      tokens_bought_raw:  '0',
+      tokens_acted_raw:   strandedRaw.toString(),
+      swap_tx: null, action_tx: sig,
+      status: 'completed',
+      notes: 'recovery: prior partial',
+    });
+    return;
+  }
+
+  // distribute_tokens_* (current + legacy)
+  const recipientKind: 'holders' | 'backers' =
+    action === 'distribute_tokens_holders' || action === 'distribute_holders'
+      ? 'holders'
+      : 'backers';
+  const recipients = await buildRecipientList(supabase, conn, m, botKp.publicKey, recipientKind);
+  if (recipients.error || recipients.list.length === 0) {
+    // Leave stranded tokens for the next tick — recipient set might fix.
+    return;
+  }
+  const totalWeight = recipients.list.reduce((s, r) => s + r.weight, 0);
+  if (totalWeight <= 0) return;
+
+  const senderAta = getAssociatedTokenAddressSync(mintPub, botKp.publicKey, false, tokenProgramId);
+  const transfersPerTx = 8;
+  const sigs: string[] = [];
+  let actedRaw = BigInt(0);
+  let credited = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < recipients.list.length; i += transfersPerTx) {
+    const batch = recipients.list.slice(i, i + transfersPerTx);
+    const tx = new Transaction();
+    let batchHasAny = false;
+    for (const r of batch) {
+      const shareBig =
+        strandedRaw * BigInt(Math.floor(r.weight * 1e6))
+        / BigInt(Math.floor(totalWeight * 1e6));
+      if (shareBig < MIN_TOKEN_RECIPIENT_RAW) continue;
+      const recipientPub = new PublicKey(r.wallet);
+      const recipientAta = getAssociatedTokenAddressSync(mintPub, recipientPub, false, tokenProgramId);
+      tx.add(createAssociatedTokenAccountIdempotentInstruction(
+        botKp.publicKey, recipientAta, recipientPub, mintPub, tokenProgramId,
+      ));
+      tx.add(createTransferCheckedInstruction(
+        senderAta, mintPub, recipientAta, botKp.publicKey,
+        shareBig, tokenDecimals, [], tokenProgramId,
+      ));
+      actedRaw += shareBig;
+      credited++;
+      batchHasAny = true;
+    }
+    if (!batchHasAny) continue;
+    try {
+      tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
+      tx.feePayer = botKp.publicKey;
+      const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+      await conn.confirmTransaction(sig, 'confirmed');
+      sigs.push(sig);
+    } catch (e) {
+      errors.push(`batch ${i}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  if (sigs.length === 0) {
+    // All batches failed — leave stranded for next tick.
+    return;
+  }
+
+  await supabase.from('meme_buybacks').insert({
+    meme_id: m.id, bot_id: b.id, action,
+    sol_spent_lamports: '0',
+    tokens_bought_raw:  '0',
+    tokens_acted_raw:   actedRaw.toString(),
+    swap_tx: null, action_tx: sigs[0],
+    status: errors.length === 0 ? 'completed' : 'partial',
+    notes: `recovery: prior partial · ${credited} recipients · ${sigs.length} txes${errors.length ? ` · ${errors.length} batch errors` : ''}`,
+  });
+}
+
+// Phase B — iterate over every bot in every live meme's stack, execute
+// each independently. Replaces the old per-meme execution path.
 export async function runBuybackBotsForAllLive(
   supabase: SupabaseClient,
 ): Promise<BuybackResult[]> {
-  const { data: memes } = await supabase
-    .from('memes')
-    .select('id')
-    .eq('buyback_bot_enabled', true)
-    .eq('status', 'live');
+  const { data: bots } = await supabase
+    .from('meme_bots')
+    .select('id, meme_id, memes!inner(status)')
+    .eq('memes.status', 'live');
   const out: BuybackResult[] = [];
-  for (const m of memes || []) {
+  for (const bot of bots || []) {
     try {
-      const r = await executeBuybackForMeme(supabase, m.id);
+      const r = await executeBuybackBot(supabase, bot.id);
       out.push(r);
     } catch (e) {
-      out.push({ ok: false, memeId: m.id, error: e instanceof Error ? e.message : String(e) });
+      out.push({ ok: false, botId: bot.id, memeId: bot.meme_id, error: e instanceof Error ? e.message : String(e) });
     }
   }
   return out;
