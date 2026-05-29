@@ -80,13 +80,6 @@ function validateBotStack(stack: BotStackItem[]): { ok: boolean; reason?: string
   return { ok: true };
 }
 
-// Quick presets — preloaded bot stacks creators can apply with one click.
-const BOT_PRESETS: { name: string; tagline: string; bots: BotStackItem[] }[] = [
-  { name: 'Deflationary Yield',  tagline: 'Burn supply + pay holders SOL',                bots: [ { action: 'burn', fee_pct: 30 }, { action: 'distribute_sol_holders', fee_pct: 20 } ] },
-  { name: 'OG Loyalty',          tagline: 'Recurring rewards for genesis backers',        bots: [ { action: 'distribute_tokens_backers', fee_pct: 15 }, { action: 'distribute_sol_backers', fee_pct: 15 } ] },
-  { name: 'Community First',     tagline: 'Tokens + SOL to holders + light burn',         bots: [ { action: 'distribute_tokens_holders', fee_pct: 25 }, { action: 'distribute_sol_holders', fee_pct: 15 }, { action: 'burn', fee_pct: 10 } ] },
-  { name: 'Treasury Stack',      tagline: 'Two labeled vaults for marketing + DAO',       bots: [ { action: 'hold', fee_pct: 20, label: 'Marketing' }, { action: 'hold', fee_pct: 20, label: 'DAO' } ] },
-];
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Upload, AlertCircle, X, CheckCircle, ChevronDown, Zap, Loader2 } from 'lucide-react';
@@ -1184,11 +1177,6 @@ function SubmitPageInner() {
                 }),
               }));
             };
-            const applyPreset = (preset: typeof BOT_PRESETS[number]) => {
-              const total = preset.bots.reduce((s, b) => s + b.fee_pct, 0);
-              if (total > 90) return;
-              setFormData((prev) => ({ ...prev, botStackEnabled: true, botStack: [...preset.bots] }));
-            };
 
             return (
               <div className="border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
@@ -1213,17 +1201,12 @@ function SubmitPageInner() {
                       type="checkbox"
                       checked={formData.botStackEnabled}
                       onChange={(e) => {
-                        const enabled = e.target.checked;
+                        // No auto-seed — creator picks their first action.
+                        // Toggling off preserves the stack so flipping
+                        // back doesn't lose work.
                         setFormData((prev) => ({
                           ...prev,
-                          botStackEnabled: enabled,
-                          // Seed with one BURN bot at 20% when first enabled
-                          // (the most common starting config), but only if
-                          // the stack is empty. Toggling off keeps the stack
-                          // so creators can flip back and forth without losing work.
-                          botStack: enabled && prev.botStack.length === 0
-                            ? [{ action: 'burn', fee_pct: 20 }]
-                            : prev.botStack,
+                          botStackEnabled: e.target.checked,
                         }));
                       }}
                       className="w-4 h-4 accent-[var(--accent)]"
@@ -1236,85 +1219,110 @@ function SubmitPageInner() {
 
                 {formData.botStackEnabled && (
                   <div className="space-y-4 pt-3 border-t border-[var(--border)]">
-                    {/* Quick presets */}
+                    {/* Sticky budget bar — pins to the top of the viewport
+                        as you scroll through bot cards, so the creator always
+                        sees how much delegation is left without scrolling
+                        back up. Shows bots / backers / platform inline. */}
+                    <div className={`sticky top-0 z-10 -mx-4 sm:-mx-5 px-4 sm:px-5 py-2 bg-[var(--card)] border-b border-[var(--border)] ${overBudget ? 'border-red-400/60' : ''}`}>
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest">
+                          <span className={overBudget ? 'text-red-400' : 'text-[var(--accent)]'}>
+                            Bots {totalBotPct}%
+                          </span>
+                          <span className="text-[var(--muted)]">/</span>
+                          <span className="text-[var(--foreground)]">
+                            Backers {backerPct}%
+                          </span>
+                          <span className="text-[var(--muted)]">/</span>
+                          <span className="text-[var(--muted)]">Platform 10%</span>
+                        </div>
+                        <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : totalBotPct >= 90 ? 'text-[var(--muted)]' : 'text-[var(--accent)]'}`}>
+                          {overBudget ? 'over budget' : totalBotPct >= 90 ? 'budget full' : `${90 - totalBotPct}% left`}
+                        </div>
+                      </div>
+                      <div className="flex h-1.5 mt-1.5 border border-[var(--border)] overflow-hidden">
+                        <div className="bg-[var(--accent)]/60" style={{ width: `${Math.min(totalBotPct, 90)}%` }} />
+                        <div className="bg-[var(--foreground)]/20" style={{ width: `${backerPct}%` }} />
+                        <div className="bg-[var(--muted)]/40" style={{ width: '10%' }} />
+                      </div>
+                    </div>
+
+                    {/* Action picker — always-visible tiles. Tap to add.
+                        Non-vault tiles disable once their action is in
+                        the stack (DB uniqueness on non-hold actions).
+                        VAULT tile always enabled (unlimited vaults). */}
                     <div className="space-y-2">
                       <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                        QUICK PRESETS
+                        ADD A BOT
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {BOT_PRESETS.map((preset) => (
-                          <button
-                            key={preset.name}
-                            type="button"
-                            onClick={() => applyPreset(preset)}
-                            className="text-left p-2.5 border border-[var(--border)] bg-[var(--background)] hover:border-[var(--accent)]/60 transition-colors"
-                          >
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="text-xs font-mono font-semibold text-[var(--foreground)]">{preset.name}</span>
-                              <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--accent)]">
-                                {preset.bots.reduce((s, b) => s + b.fee_pct, 0)}%
-                              </span>
-                            </div>
-                            <div className="text-[10px] font-mono text-[var(--muted)] leading-snug mb-1.5">
-                              {preset.tagline}
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {preset.bots.map((b, i) => (
-                                <span key={i} className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 border border-[var(--border)] text-[var(--muted)]">
-                                  {BOT_ACTION_BY_VALUE[b.action]?.emoji} {BOT_ACTION_BY_VALUE[b.action]?.short} {b.fee_pct}%
-                                </span>
-                              ))}
-                            </div>
-                          </button>
-                        ))}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {BOT_ACTIONS.map((opt) => {
+                          const isVaultTile = opt.value === 'hold';
+                          const alreadyUsed = !isVaultTile && usedNonHoldActions.has(opt.value);
+                          const disabled = alreadyUsed || totalBotPct >= 90 || formData.botStack.length >= HARD_CAP;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => addBot(opt.value)}
+                              disabled={disabled}
+                              className={`text-left p-2.5 border transition-colors ${
+                                disabled
+                                  ? 'border-[var(--border)] bg-[var(--background)] opacity-40 cursor-not-allowed'
+                                  : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--accent)] hover:bg-[var(--accent)]/5'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <span className="text-base" aria-hidden>{opt.emoji}</span>
+                                <span className="text-xs font-mono font-semibold text-[var(--foreground)] truncate">{opt.label}</span>
+                              </div>
+                              <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)]">
+                                {alreadyUsed ? 'added' : opt.tag}
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
                     {/* Bot cards */}
                     <div className="space-y-2 pt-3 border-t border-[var(--border)]">
-                      <div className="flex items-center justify-between">
-                        <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                          YOUR STACK · {formData.botStack.length} BOT{formData.botStack.length === 1 ? '' : 'S'}
-                        </div>
-                        <div className={`text-[10px] font-mono uppercase tracking-wider ${overBudget ? 'text-red-400' : 'text-[var(--accent)]'}`}>
-                          Total: {totalBotPct}% / 90%
-                        </div>
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                        YOUR STACK · {formData.botStack.length} BOT{formData.botStack.length === 1 ? '' : 'S'}
                       </div>
 
                       {formData.botStack.length === 0 ? (
                         <div className="border border-dashed border-[var(--border)] p-4 text-center">
                           <div className="text-xs font-mono text-[var(--muted)]">
-                            No bots yet — add one below or pick a preset above.
+                            Pick an action above to add your first bot.
                           </div>
                         </div>
                       ) : (
                         formData.botStack.map((bot, idx) => {
                           const meta = BOT_ACTION_BY_VALUE[bot.action];
-                          // Action options for THIS bot:
-                          //   - 'hold' is always available (unlimited vaults)
-                          //   - For non-hold: only this bot's own action or any
-                          //     non-hold action not already used by another bot.
-                          const ownOptions = BOT_ACTIONS.filter(
-                            (a) =>
-                              a.value === 'hold' ||
-                              a.value === bot.action ||
-                              !usedNonHoldActions.has(a.value),
-                          );
                           const isVault = bot.action === 'hold';
                           const labelInvalid =
                             isVault && (!bot.label || !isValidVaultLabel(bot.label));
+                          // Stepper bounds — min 5 (DB CHECK), max = this
+                          // bot's current + whatever's left of the 90%
+                          // budget. Stops at the edge; never overshoots.
+                          const remaining = Math.max(0, 90 - totalBotPct);
+                          const stepperMax = Math.min(90, bot.fee_pct + remaining);
+                          const canIncrement = bot.fee_pct < stepperMax;
+                          const canDecrement = bot.fee_pct > 5;
                           return (
                             <div key={idx} className="border border-[var(--border)] bg-[var(--background)] p-3 space-y-3">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                                    {isVault
-                                      ? <>VAULT{bot.label ? ` · ${bot.label}` : ''}</>
-                                      : <>BOT #{idx + 1}</>}
-                                  </span>
-                                  <span className="text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 text-[var(--accent)] border border-[var(--accent)]/40">
-                                    {meta?.tag}
-                                  </span>
+                                  <span className="text-base" aria-hidden>{meta?.emoji}</span>
+                                  <div>
+                                    <div className="text-xs font-mono font-semibold text-[var(--foreground)]">
+                                      {meta?.label}
+                                    </div>
+                                    <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                                      {meta?.tag}
+                                    </div>
+                                  </div>
                                 </div>
                                 <button
                                   type="button"
@@ -1325,42 +1333,36 @@ function SubmitPageInner() {
                                 </button>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {/* Action dropdown */}
-                                <div className="space-y-1.5">
-                                  <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                                    Action
-                                  </label>
-                                  <select
-                                    value={bot.action}
-                                    onChange={(e) => updateBot(idx, { action: e.target.value as BotActionT })}
-                                    className="w-full bg-[var(--card)] border border-[var(--border)] px-2 py-2 text-xs font-mono text-[var(--foreground)] focus:border-[var(--accent)] outline-none"
+                              {/* Fee % stepper — discrete 5% taps, never
+                                  rescales when other bots change. The +
+                                  is disabled when the global budget is
+                                  full; − is disabled at the 5% floor. */}
+                              <div className="flex items-center justify-between gap-3">
+                                <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                                  Fee delegation
+                                </label>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => canDecrement && updateBot(idx, { fee_pct: bot.fee_pct - 5 })}
+                                    disabled={!canDecrement}
+                                    className="w-7 h-7 border border-[var(--border)] text-sm font-mono text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-[var(--border)] disabled:hover:text-[var(--foreground)] transition-colors"
+                                    aria-label="Decrease 5%"
                                   >
-                                    {ownOptions.map((opt) => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.emoji} {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-
-                                {/* Fee % slider */}
-                                <div className="space-y-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                                      Fee delegation
-                                    </label>
-                                    <span className="text-xs font-mono text-[var(--accent)]">{bot.fee_pct}%</span>
+                                    −
+                                  </button>
+                                  <div className="min-w-[3rem] text-center text-sm font-mono text-[var(--accent)] tabular-nums">
+                                    {bot.fee_pct}%
                                   </div>
-                                  <input
-                                    type="range"
-                                    min={5}
-                                    max={90}
-                                    step={5}
-                                    value={bot.fee_pct}
-                                    onChange={(e) => updateBot(idx, { fee_pct: Number(e.target.value) })}
-                                    className="w-full accent-[var(--accent)]"
-                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => canIncrement && updateBot(idx, { fee_pct: bot.fee_pct + 5 })}
+                                    disabled={!canIncrement}
+                                    className="w-7 h-7 border border-[var(--border)] text-sm font-mono text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-[var(--border)] disabled:hover:text-[var(--foreground)] transition-colors"
+                                    aria-label="Increase 5%"
+                                  >
+                                    +
+                                  </button>
                                 </div>
                               </div>
 
@@ -1398,21 +1400,6 @@ function SubmitPageInner() {
                         })
                       )}
 
-                      {/* Add bot button */}
-                      <button
-                        type="button"
-                        onClick={() => addBot()}
-                        disabled={!canAddMore}
-                        className="w-full p-2.5 border border-dashed border-[var(--border)] text-xs font-mono uppercase tracking-wider text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-[var(--border)] disabled:hover:text-[var(--muted)]"
-                      >
-                        {canAddMore
-                          ? `+ Add bot (${90 - totalBotPct}% budget available)`
-                          : totalBotPct >= 90
-                            ? '★ 90% delegation cap reached'
-                            : formData.botStack.length >= HARD_CAP
-                              ? `★ Reached UI cap of ${HARD_CAP} bots`
-                              : '★ All non-vault actions used (vaults still available)'}
-                      </button>
                     </div>
 
                     {/* Live distribution bar */}
