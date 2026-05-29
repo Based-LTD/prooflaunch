@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/fees/process",
-      "schedule": "0 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/process-memes",
@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/buyback/process",
-      "schedule": "30 * * * *"
+      "schedule": "2-57/5 * * * *"
     },
     {
       "path": "/api/keycard/sync",
