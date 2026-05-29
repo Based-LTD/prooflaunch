@@ -393,11 +393,21 @@ export async function POST(request: NextRequest) {
     // and 'hold' are wired end-to-end; distribute_* return early in the
     // cron with a "Phase 3.1" notice but are accepted at submit so the
     // creator can flip later via dashboard.
-    const VALID_BOT_ACTIONS = new Set(['burn', 'hold', 'distribute_holders', 'distribute_backers']);
+    const VALID_BOT_ACTIONS = new Set([
+      'burn',
+      'hold',
+      'distribute_tokens_holders',
+      'distribute_tokens_backers',
+      'distribute_sol_holders',
+      'distribute_sol_backers',
+      // Legacy synonyms accepted for backwards compat.
+      'distribute_holders',
+      'distribute_backers',
+    ]);
     if (buyback_bot_enabled) {
       if (typeof buyback_bot_action !== 'string' || !VALID_BOT_ACTIONS.has(buyback_bot_action)) {
         return NextResponse.json(
-          { error: 'buyback_bot_action must be one of: burn, hold, distribute_holders, distribute_backers' },
+          { error: 'buyback_bot_action must be one of: burn, hold, distribute_tokens_holders, distribute_tokens_backers, distribute_sol_holders, distribute_sol_backers' },
           { status: 400 },
         );
       }

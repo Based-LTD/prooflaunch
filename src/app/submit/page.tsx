@@ -166,7 +166,13 @@ function SubmitPageInner() {
     // distributed to backers) is routed to the bot wallet on chain.
     // Bot uses it to swap → execute action (burn/hold/etc.).
     buybackBotEnabled: false,
-    buybackBotAction: 'burn' as 'burn' | 'hold' | 'distribute_holders' | 'distribute_backers',
+    buybackBotAction: 'burn' as
+      | 'burn'
+      | 'hold'
+      | 'distribute_tokens_holders'
+      | 'distribute_tokens_backers'
+      | 'distribute_sol_holders'
+      | 'distribute_sol_backers',
     buybackBotFeePct: 25,  // default — moderate buyback pressure when enabled
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -1082,17 +1088,22 @@ function SubmitPageInner() {
                   );
                 })()}
 
-                {/* Action picker */}
+                {/* Action picker — Phase A: 6 ready actions. The bot
+                    delegates a % of trading fees; this is what it DOES
+                    with that SOL each cycle. Mix-and-match later when
+                    Phase B ships multi-bot stacks. */}
                 <div className="space-y-2 pt-2 border-t border-[var(--border)]">
                   <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                    ACTION ON BOUGHT TOKENS
+                    BOT ACTION · WHAT IT DOES WITH ITS FEES EACH CYCLE
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {([
-                      { value: 'burn',                label: 'BURN',                tag: 'Deflationary',  desc: 'Burn each buyback. Permanent supply reduction.', ready: true },
-                      { value: 'hold',                label: 'HOLD',                tag: 'Treasury',      desc: 'Park in the bot wallet. Treasury you can deploy later.', ready: true },
-                      { value: 'distribute_holders',  label: 'AIRDROP HOLDERS',     tag: 'Phase 5.1',     desc: 'Snapshot holders, transfer pro-rata. Coming next.', ready: false },
-                      { value: 'distribute_backers',  label: 'AIRDROP BACKERS',     tag: 'Phase 5.1',     desc: 'Transfer pro-rata to genesis backers. Coming next.', ready: false },
+                      { value: 'burn',                       label: 'BURN',                  tag: 'Deflationary',  desc: 'Buy tokens, burn them. Permanent supply reduction.', ready: true },
+                      { value: 'hold',                       label: 'HOLD',                  tag: 'Treasury',      desc: 'Buy tokens, park them in the bot wallet. Treasury you can deploy later.', ready: true },
+                      { value: 'distribute_tokens_holders',  label: 'TOKENS → HOLDERS',      tag: 'Loyalty',       desc: 'Buy tokens, airdrop pro-rata to every current holder. Drives volume + rewards holding.', ready: true },
+                      { value: 'distribute_tokens_backers',  label: 'TOKENS → BACKERS',      tag: 'OG reward',     desc: 'Buy tokens, airdrop pro-rata to the genesis backers who launched this token.', ready: true },
+                      { value: 'distribute_sol_holders',     label: 'SOL → HOLDERS',         tag: 'Yield',         desc: 'Skip the swap. Send delegated SOL pro-rata to every current holder. Pure cash flow.', ready: true },
+                      { value: 'distribute_sol_backers',     label: 'SOL → BACKERS',         tag: 'OG yield',      desc: 'Skip the swap. Send delegated SOL pro-rata to the genesis backers.', ready: true },
                     ] as const).map((opt) => {
                       const selected = formData.buybackBotAction === opt.value;
                       return (

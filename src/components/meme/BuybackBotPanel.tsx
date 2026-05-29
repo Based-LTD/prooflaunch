@@ -14,10 +14,15 @@ import type { Meme } from '@/types/database';
 // from THIS address."
 
 const ACTION_LABELS: Record<string, { label: string; tag: string; tone: string }> = {
-  burn:                { label: 'BURN',             tag: 'Deflationary',  tone: 'var(--status-down)' },
-  hold:                { label: 'HOLD',             tag: 'Treasury',      tone: 'var(--accent-gold)' },
-  distribute_holders:  { label: 'AIRDROP HOLDERS',  tag: 'Phase 3.1',     tone: 'var(--muted)' },
-  distribute_backers:  { label: 'AIRDROP BACKERS',  tag: 'Phase 3.1',     tone: 'var(--muted)' },
+  burn:                        { label: 'BURN',              tag: 'Deflationary', tone: 'var(--status-down)' },
+  hold:                        { label: 'HOLD',              tag: 'Treasury',     tone: 'var(--accent-gold)' },
+  distribute_tokens_holders:   { label: 'TOKENS → HOLDERS',  tag: 'Loyalty',      tone: 'var(--accent)' },
+  distribute_tokens_backers:   { label: 'TOKENS → BACKERS',  tag: 'OG reward',    tone: 'var(--accent)' },
+  distribute_sol_holders:      { label: 'SOL → HOLDERS',     tag: 'Yield',        tone: 'var(--success)' },
+  distribute_sol_backers:      { label: 'SOL → BACKERS',     tag: 'OG yield',     tone: 'var(--success)' },
+  // Legacy enum values — surface the same way but tagged as such.
+  distribute_holders:          { label: 'TOKENS → HOLDERS',  tag: 'Legacy',       tone: 'var(--accent)' },
+  distribute_backers:          { label: 'TOKENS → BACKERS',  tag: 'Legacy',       tone: 'var(--accent)' },
 };
 
 interface BuybackRow {

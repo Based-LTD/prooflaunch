@@ -92,7 +92,17 @@ export interface Meme {
   // and accrues claimable_fees_sol like any backer. A cron periodically
   // claims, swaps SOL → meme token via Jupiter, and executes the action.
   buyback_bot_enabled?: boolean;
-  buyback_bot_action?: 'burn' | 'hold' | 'distribute_holders' | 'distribute_backers' | null;
+  buyback_bot_action?:
+    | 'burn'
+    | 'hold'
+    | 'distribute_tokens_holders'
+    | 'distribute_tokens_backers'
+    | 'distribute_sol_holders'
+    | 'distribute_sol_backers'
+    // Legacy/deprecated values kept so existing rows don't break the type:
+    | 'distribute_holders'
+    | 'distribute_backers'
+    | null;
   buyback_bot_wallet?: string | null;
   buyback_bot_fee_pct?: number;
   buyback_bot_last_run_at?: string | null;
