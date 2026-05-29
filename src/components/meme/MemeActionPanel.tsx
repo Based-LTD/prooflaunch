@@ -327,22 +327,42 @@ const BackingPanel: React.FC<BackingProps> = ({
   // For stealth/spectator launches, check if the connected wallet is on
   // the backing_allowlist. If not, the backing UI is replaced with a
   // "restricted round" state.
+  //
+  // Phase 7 — reservation gating. When `reserved_slots > 0`, the
+  // backing_allowlist also controls who can take the reserved slot
+  // positions even on visibility=open launches. Public can still
+  // back open slots until they fill; once filled, non-allowlisted
+  // backers can't take a reserved slot (would strand SOL otherwise).
   const { publicKey } = useWallet();
   const visibility = meme.visibility ?? 'open';
   const isGated = visibility === 'stealth' || visibility === 'spectator';
+  const reservedSlots = Number(meme.reserved_slots) || 0;
+  const totalSlotsCount = Number(meme.total_slots) || totalSlots;
+  const openSlotsCount = Math.max(0, totalSlotsCount - reservedSlots);
+  const isTeamRound = reservedSlots > 0 && reservedSlots === totalSlotsCount;
+  const hasReservedSlots = reservedSlots > 0;
+  // Whether the allowlist check is needed for backing at all.
+  const needsAllowlistCheck = isGated || hasReservedSlots;
+  // Whether all open (non-reserved) slots are filled — used to gate
+  // non-allowlisted backers from trying the API.
+  const allOpenSlotsFilled = filled >= openSlotsCount;
+  const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
 
   // Eligibility state: 'open' | 'checking' | 'eligible' | 'not_eligible'
   const [eligibility, setEligibility] = useState<'open' | 'checking' | 'eligible' | 'not_eligible'>(
-    isGated ? 'checking' : 'open',
+    needsAllowlistCheck ? 'checking' : 'open',
   );
 
   useEffect(() => {
-    if (!isGated) {
+    if (!needsAllowlistCheck) {
       setEligibility('open');
       return;
     }
     if (!publicKey) {
-      setEligibility('not_eligible'); // not connected = can't back
+      // For gated launches: not connected = can't back. For reserved
+      // launches: still allow rendering the open-slot path, the
+      // backing handler will block at sign time if they hit a reserved.
+      setEligibility(isGated ? 'not_eligible' : 'open');
       return;
     }
     setEligibility('checking');
@@ -356,16 +376,21 @@ const BackingPanel: React.FC<BackingProps> = ({
         setEligibility(wallets.includes(me) ? 'eligible' : 'not_eligible');
       })
       .catch(() => {
-        if (!cancelled) setEligibility('not_eligible'); // fail-closed
+        // Fail-closed only for fully-gated launches. For reservation-
+        // only launches we let the user try (server still enforces).
+        if (!cancelled) setEligibility(isGated ? 'not_eligible' : 'open');
       });
     return () => { cancelled = true; };
-  }, [isGated, publicKey, meme.id]);
+  }, [needsAllowlistCheck, isGated, publicKey, meme.id]);
 
   // Render the gated state instead of backing UI when:
-  //  - visibility is stealth/spectator
-  //  - AND the connected wallet (or absence) is not eligible
+  //  - visibility is stealth/spectator AND wallet is not eligible
+  //  - OR it's a TEAM ROUND (all slots reserved) AND wallet not allowlisted
+  //  - OR it's a hybrid reservation AND open slots are filled AND wallet not allowlisted
   const showGatedState =
-    isGated && (eligibility === 'not_eligible' || eligibility === 'checking');
+    (isGated && (eligibility === 'not_eligible' || eligibility === 'checking'))
+    || (isTeamRound && eligibility === 'not_eligible')
+    || (hasReservedSlots && !isTeamRound && allOpenSlotsFilled && eligibility === 'not_eligible');
 
   return (
     <div className="border border-[var(--accent)] bg-[var(--card)]">
@@ -387,25 +412,63 @@ const BackingPanel: React.FC<BackingProps> = ({
             <span className="text-[var(--muted)]">{totalBackingSol.toFixed(2)} SOL</span>
           </div>
           <div className="flex gap-1">
-            {Array.from({ length: totalSlots }).map((_, i) => (
-              <div
-                key={i}
-                className={`flex-1 h-3 transition-colors ${
-                  i < filled ? 'bg-[var(--accent)]' : 'border border-[var(--accent)]'
-                }`}
-              />
-            ))}
+            {Array.from({ length: totalSlots }).map((_, i) => {
+              // For reservation launches, slots are split into open
+              // (1..openSlotsCount) and reserved (the rest). Visually
+              // tint the reserved positions amber-gold so backers see
+              // the structure at a glance.
+              const isReserved = hasReservedSlots && i >= openSlotsCount;
+              const isFilled = i < filled;
+              if (isFilled) {
+                return <div key={i} className="flex-1 h-3 bg-[var(--accent)]" />;
+              }
+              if (isReserved) {
+                return <div key={i} className="flex-1 h-3 border border-[var(--accent-gold)] bg-[var(--accent-gold)]/10" />;
+              }
+              return <div key={i} className="flex-1 h-3 border border-[var(--accent)]" />;
+            })}
           </div>
         </div>
+
+        {/* Rules chip row — surfaces cap + reservation structure so
+            backers see them upfront, not as error messages. */}
+        {(cap !== null || hasReservedSlots) && (
+          <div className="flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-widest">
+            {cap !== null && (
+              <span className="border border-[var(--border)] px-2 py-1 text-[var(--muted)]">
+                Max <span className="text-[var(--foreground)]">{cap} SOL</span> per backer
+              </span>
+            )}
+            {isTeamRound ? (
+              <span className="border border-[var(--accent-gold)]/60 bg-[var(--accent-gold)]/5 px-2 py-1 text-[var(--accent-gold)]">
+                TEAM ROUND · 0 PUBLIC SLOTS
+              </span>
+            ) : hasReservedSlots && (
+              <span className="border border-[var(--accent)]/60 px-2 py-1 text-[var(--accent)]">
+                {openSlotsCount} OPEN · {reservedSlots} RESERVED
+              </span>
+            )}
+          </div>
+        )}
 
         {showGatedState ? (
           <div className="border border-[var(--accent-gold)] bg-[var(--background)] p-5 space-y-3">
             <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
               <Lock className="w-3 h-3" />
-              {visibility === 'stealth' ? 'INTERNAL ROUND' : 'RESTRICTED ROUND'}
+              {isTeamRound
+                ? 'TEAM ROUND'
+                : hasReservedSlots && allOpenSlotsFilled
+                ? 'OPEN SLOTS FILLED'
+                : visibility === 'stealth'
+                ? 'INTERNAL ROUND'
+                : 'RESTRICTED ROUND'}
             </div>
             <div className="text-xs font-mono text-[var(--foreground)] leading-relaxed">
-              This launch is in a restricted backing round. Only approved wallets can back right now.
+              {isTeamRound
+                ? `All ${totalSlotsCount} slots are reserved for declared wallets. Public can't back this launch — it's a transparent team round. Watch for liquidity on the secondary market post-launch.`
+                : hasReservedSlots && allOpenSlotsFilled
+                ? `All ${openSlotsCount} open slots are filled. The remaining ${reservedSlots} are reserved for the creator's allowlisted wallets.`
+                : 'This launch is in a restricted backing round. Only approved wallets can back right now.'}
             </div>
             {!connected ? (
               <div className="text-[11px] font-mono text-[var(--muted)]">
@@ -418,8 +481,12 @@ const BackingPanel: React.FC<BackingProps> = ({
             ) : (
               <div className="text-[11px] font-mono text-[var(--muted)] leading-snug">
                 &gt; Your connected wallet is not on the allowlist.
-                <br />
-                &gt; The creator may flip this launch to open backing at any time. Once it does (or once the launch completes), full transparency is restored — that&apos;s the PROOF guarantee.
+                {!hasReservedSlots && (
+                  <>
+                    <br />
+                    &gt; The creator may flip this launch to open backing at any time. Once it does (or once the launch completes), full transparency is restored — that&apos;s the PROOF guarantee.
+                  </>
+                )}
               </div>
             )}
           </div>

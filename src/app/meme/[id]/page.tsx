@@ -73,6 +73,22 @@ export default function MemeDetailPage() {
   const { backings, refetch: refetchBackings } = useRealtimeBackings(id as string);
 
   // ── Backing ──────────────────────────────────────────────────────
+  // Helper — checks whether the connected wallet is on the meme's
+  // backing_allowlist. Used to gate reserved-slot launches before the
+  // user signs (preventing the "SOL stranded in pool wallet" footgun
+  // when the backing API would have rejected post-deposit).
+  const checkAllowlistMembership = async (memeId: string, wallet: string): Promise<boolean> => {
+    try {
+      const r = await fetch(`/api/memes/${memeId}/allowlist`);
+      if (!r.ok) return false;
+      const j = await r.json();
+      const list: { wallet: string }[] = Array.isArray(j?.allowlist) ? j.allowlist : [];
+      return list.some((row) => row.wallet === wallet);
+    } catch {
+      return false;
+    }
+  };
+
   const submitBacking = async () => {
     if (!connected || !publicKey || !signTransaction || !amount || !meme) return;
 
@@ -88,6 +104,16 @@ export default function MemeDetailPage() {
       return;
     }
 
+    // Pre-check the team-fairness cap so the user doesn't sign a tx
+    // the API will reject (which would leave their SOL stranded in the
+    // pool wallet because the on-chain deposit lands BEFORE the API
+    // validates).
+    const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+    if (cap !== null && amountSol > cap + 1e-9) {
+      setBackingStatus(`Error: This launch has a per-backer cap of ${cap} SOL. Your amount exceeds it.`);
+      return;
+    }
+
     const myExisting = backings.find(
       (b) => b.backer_wallet === publicKey.toBase58() && b.status !== 'withdrawn',
     );
@@ -99,9 +125,34 @@ export default function MemeDetailPage() {
     }
 
     const totalSlots = Number(meme.total_slots) || 8;
-    if (backings.length >= totalSlots) {
+    const reservedSlots = Number(meme.reserved_slots) || 0;
+    const openSlots = Math.max(0, totalSlots - reservedSlots);
+    const activeBackings = backings.filter((b) => b.status !== 'withdrawn').length;
+    if (activeBackings >= totalSlots) {
       setBackingStatus('Error: All backer slots are filled.');
       return;
+    }
+
+    // Reserved-slot gate (Phase 7). When reserved_slots > 0, non-
+    // allowlisted backers can only take slots 1..openSlots. If those
+    // are all filled, they can't back at all. We check allowlist
+    // membership BEFORE Phantom prompts to prevent stranded SOL.
+    if (reservedSlots > 0) {
+      const isAllowlisted = await checkAllowlistMembership(meme.id, publicKey.toBase58());
+      if (!isAllowlisted) {
+        if (openSlots === 0) {
+          setBackingStatus(
+            `Error: This is a TEAM ROUND — all ${totalSlots} slots are reserved for declared wallets. Public can't back.`,
+          );
+          return;
+        }
+        if (activeBackings >= openSlots) {
+          setBackingStatus(
+            `Error: All ${openSlots} open slots are filled. The remaining ${reservedSlots} are reserved for allowlisted wallets.`,
+          );
+          return;
+        }
+      }
     }
 
     // Balance pre-check — saves the user a failed signature prompt.
@@ -176,7 +227,7 @@ export default function MemeDetailPage() {
     }
   };
 
-  const requestBack = () => {
+  const requestBack = async () => {
     const amountSol = parseFloat(amount);
     if (isNaN(amountSol) || amountSol <= 0) {
       setBackingStatus('Error: Please enter a valid amount');
@@ -187,6 +238,13 @@ export default function MemeDetailPage() {
       setBackingStatus(`Error: Minimum backing is ${minBacking} SOL.`);
       return;
     }
+    // Pre-check cap so the confirm dialog doesn't tease an action the
+    // submit step will block (and to avoid stranded-SOL post-deposit).
+    const cap = meme?.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+    if (cap !== null && amountSol > cap + 1e-9) {
+      setBackingStatus(`Error: This launch has a per-backer cap of ${cap} SOL. Your amount exceeds it.`);
+      return;
+    }
     const myExisting = backings.find(
       (b) => b.backer_wallet === publicKey?.toBase58() && b.status !== 'withdrawn',
     );
@@ -195,6 +253,27 @@ export default function MemeDetailPage() {
         `Error: You already have an active backing of ${Number(myExisting.amount_sol).toFixed(2)} SOL. Withdraw first to change your amount.`,
       );
       return;
+    }
+    // Reserved-slot gate — fetch allowlist BEFORE opening confirm
+    // dialog so non-allowlisted backers learn early, not at sign time.
+    if (meme && publicKey) {
+      const reservedSlots = Number(meme.reserved_slots) || 0;
+      if (reservedSlots > 0) {
+        const totalSlots = Number(meme.total_slots) || 8;
+        const openSlots = Math.max(0, totalSlots - reservedSlots);
+        const activeBackings = backings.filter((b) => b.status !== 'withdrawn').length;
+        const isAllowlisted = await checkAllowlistMembership(meme.id, publicKey.toBase58());
+        if (!isAllowlisted) {
+          if (openSlots === 0) {
+            setBackingStatus(`Error: This is a TEAM ROUND — all ${totalSlots} slots are reserved for declared wallets. Public can't back.`);
+            return;
+          }
+          if (activeBackings >= openSlots) {
+            setBackingStatus(`Error: All ${openSlots} open slots are filled. The remaining ${reservedSlots} are reserved for allowlisted wallets.`);
+            return;
+          }
+        }
+      }
     }
     setBackingStatus(null);
     setShowBackConfirm(true);
