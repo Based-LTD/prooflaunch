@@ -213,6 +213,14 @@ export default function MemeDetailPage() {
       });
       if (!res.ok) {
         const d = await res.json();
+        // If the server rejected but auto-refunded, tell the user
+        // explicitly so they see the SOL came back rather than guessing.
+        if (d?.refunded === true && d?.refund_tx) {
+          throw new Error(`${d.error || 'Backing rejected'} — your SOL was refunded automatically (tx ${String(d.refund_tx).slice(0, 8)}…).`);
+        }
+        if (d?.refunded === false) {
+          throw new Error(`${d.error || 'Backing rejected'} — auto-refund failed; contact support with deposit tx ${String(sig).slice(0, 8)}…`);
+        }
         throw new Error(d.error || 'Failed to register backing');
       }
 

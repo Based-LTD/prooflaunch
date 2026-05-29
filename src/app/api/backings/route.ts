@@ -1,7 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { verifyPoolDeposit, getEscrowAddress } from '@/services/pumpfun';
+import { verifyPoolDeposit, getEscrowAddress, refundFromPool } from '@/services/pumpfun';
 import { rateLimiters } from '@/lib/rateLimit';
+
+// Helper — refund a confirmed-but-rejected deposit straight from the pool
+// wallet back to the backer (0% fee since we're rejecting their backing
+// through no fault of theirs). Returns a NextResponse with both the
+// error context AND the refund tx so the client UI can show "rejected
+// → refunded" in one shot. Used by every post-verify rejection path so
+// SOL can't be stranded in a pool wallet after a server-side rule fires.
+async function rejectAndRefund(
+  meme: { id: string; pool_wallet: string; encrypted_pool_key: string },
+  backerWallet: string,
+  amountSol: number,
+  error: string,
+  status = 400,
+  extra: Record<string, unknown> = {},
+): Promise<NextResponse> {
+  try {
+    const result = await refundFromPool(
+      meme.encrypted_pool_key,
+      meme.pool_wallet,
+      backerWallet,
+      amountSol,
+      0,
+    );
+    if (result.success) {
+      return NextResponse.json(
+        {
+          error,
+          refunded: true,
+          refund_tx: result.signature,
+          refund_amount_sol: result.amountRefunded,
+          ...extra,
+        },
+        { status },
+      );
+    }
+    // Refund itself failed — surface both errors so support can act.
+    return NextResponse.json(
+      {
+        error: `${error} — auto-refund FAILED (${result.error || 'unknown'}). Contact support with your deposit tx so we can recover the funds manually.`,
+        refunded: false,
+        refund_failure: result.error,
+        ...extra,
+      },
+      { status: 500 },
+    );
+  } catch (e) {
+    return NextResponse.json(
+      {
+        error: `${error} — auto-refund crashed (${e instanceof Error ? e.message : 'unknown'}). Contact support with your deposit tx.`,
+        refunded: false,
+        ...extra,
+      },
+      { status: 500 },
+    );
+  }
+}
 
 // GET /api/backings - Get backings for a user or meme
 export async function GET(request: NextRequest) {
@@ -95,7 +151,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if meme exists and is in backing phase
+    // Check if meme exists.
     const { data: meme, error: memeError } = await supabase
       .from('memes')
       .select('*')
@@ -106,14 +162,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
     }
 
-    // ── Visibility gate (Launch Configuration v2 — Phase 1) ──────────
-    // `open` launches accept anyone (the default + legacy behavior).
-    // `stealth` and `spectator` launches require the backer's wallet
-    // to be in this meme's backing_allowlist. The creator controls the
-    // list via their dashboard. Auto-flips to open at funded status.
-    //
-    // We check this BEFORE pool / deadline / amount validation so
-    // un-allowlisted wallets don't leak any other meme state in errors.
+    // Pooled model: backers fund the meme's pool wallet. New memes are
+    // provisioned with one at submission; reject if somehow missing.
+    if (!meme.pool_wallet || !meme.encrypted_pool_key) {
+      return NextResponse.json(
+        { error: 'This meme has no pool wallet (legacy or misprovisioned) and cannot accept pooled backings' },
+        { status: 400 }
+      );
+    }
+
+    // ── Verify on-chain deposit FIRST ────────────────────────────────
+    // Everything after this point assumes SOL is confirmed in the pool
+    // wallet. Any subsequent rejection MUST refund via rejectAndRefund
+    // so SOL can't be stranded by a server-side rule fire. Pre-verify
+    // rejections (above) don't need to refund because we can't prove the
+    // deposit even landed.
+    let isValid = false;
+    try {
+      isValid = await verifyPoolDeposit(deposit_tx, amount_sol, backer_wallet, meme.pool_wallet);
+    } catch (verifyError) {
+      console.error('Verification error:', verifyError);
+    }
+    if (!isValid) {
+      return NextResponse.json(
+        { error: 'Could not verify deposit on-chain. Please try again.' },
+        { status: 400 }
+      );
+    }
+
+    // ── From here on, SOL is confirmed in the pool. Every reject MUST
+    //    use rejectAndRefund so the backer gets their SOL back. ─────────
+    const poolForRefund = {
+      id: meme.id,
+      pool_wallet: meme.pool_wallet,
+      encrypted_pool_key: meme.encrypted_pool_key,
+    };
+
+    if (meme.status !== 'backing') {
+      return rejectAndRefund(
+        poolForRefund, backer_wallet, amount_sol,
+        `Meme is not accepting backings (status: ${meme.status})`,
+      );
+    }
+
+    if (new Date(meme.backing_deadline) < new Date()) {
+      return rejectAndRefund(
+        poolForRefund, backer_wallet, amount_sol,
+        'Backing period has ended',
+      );
+    }
+
+    // Visibility gate — stealth/spectator launches restrict backing
+    // to allowlisted wallets. Refund non-allowlist deposits.
     if (meme.visibility === 'stealth' || meme.visibility === 'spectator') {
       const { data: allowed } = await supabase
         .from('backing_allowlist')
@@ -121,66 +221,37 @@ export async function POST(request: NextRequest) {
         .eq('meme_id', meme_id)
         .eq('wallet', backer_wallet)
         .maybeSingle();
-
       if (!allowed) {
-        return NextResponse.json(
-          {
-            error: 'This launch is in a restricted backing round. Your wallet is not on the allowlist.',
-            visibility: meme.visibility,
-          },
-          { status: 403 },
+        return rejectAndRefund(
+          poolForRefund, backer_wallet, amount_sol,
+          'This launch is in a restricted backing round. Your wallet is not on the allowlist.',
+          403,
+          { visibility: meme.visibility },
         );
       }
     }
 
-    // Pooled model: backers fund the meme's pool wallet. New memes are
-    // provisioned with one at submission; reject if somehow missing.
-    if (!meme.pool_wallet) {
-      return NextResponse.json(
-        { error: 'This meme has no pool wallet (legacy or misprovisioned) and cannot accept pooled backings' },
-        { status: 400 }
-      );
-    }
-
-    if (meme.status !== 'backing') {
-      return NextResponse.json(
-        { error: `Meme is not accepting backings (status: ${meme.status})` },
-        { status: 400 }
-      );
-    }
-
-    // Check if deadline passed
-    if (new Date(meme.backing_deadline) < new Date()) {
-      return NextResponse.json(
-        { error: 'Backing period has ended' },
-        { status: 400 }
-      );
-    }
-
-    // Validate minimum backing amount (set by creator)
+    // Min backing amount.
     const minBacking = Number(meme.min_backing_sol) || 0.05;
     if (amount_sol < minBacking) {
-      return NextResponse.json(
-        { error: `Minimum backing is ${minBacking} SOL` },
-        { status: 400 }
+      return rejectAndRefund(
+        poolForRefund, backer_wallet, amount_sol,
+        `Minimum backing is ${minBacking} SOL`,
       );
     }
 
-    // Team-fairness cap (migration 032). Creator-set ceiling at submission.
-    // Universal: applies equally to allowlisted and public backers, so no
-    // wallet can out-back any other. NULL = no cap (default — casual launch).
+    // Team-fairness cap.
     const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
     if (cap !== null && amount_sol > cap + 1e-9) {
-      return NextResponse.json(
-        {
-          error: `This launch has a per-backer ceiling of ${cap} SOL (team-fairness cap). Your backing of ${amount_sol} SOL exceeds it.`,
-          max_backing_sol: cap,
-        },
-        { status: 400 },
+      return rejectAndRefund(
+        poolForRefund, backer_wallet, amount_sol,
+        `This launch has a per-backer ceiling of ${cap} SOL (team-fairness cap). Your backing of ${amount_sol} SOL exceeds it.`,
+        400,
+        { max_backing_sol: cap },
       );
     }
 
-    // Check if this wallet already has an active backing
+    // Existing-backing check — one active backing per wallet per meme.
     const { data: existingBacking } = await supabase
       .from('backings')
       .select('id, amount_sol')
@@ -188,36 +259,24 @@ export async function POST(request: NextRequest) {
       .eq('backer_wallet', backer_wallet)
       .neq('status', 'withdrawn')
       .single();
-
-    // Don't allow multiple backings from the same wallet
     if (existingBacking) {
-      return NextResponse.json(
-        {
-          error: `You already have an active backing of ${Number(existingBacking.amount_sol).toFixed(2)} SOL. Withdraw first if you want to change your backing amount.`,
-        },
-        { status: 400 }
+      return rejectAndRefund(
+        poolForRefund, backer_wallet, amount_sol,
+        `You already have an active backing of ${Number(existingBacking.amount_sol).toFixed(2)} SOL. Withdraw first if you want to change your backing amount.`,
       );
     }
 
-    // Find the lowest unfilled slot — fixes a bug where the previous algorithm
-    // (count + 1) ignored withdrawn slots in the count but assigned sequential
-    // numbers, producing duplicate slot_numbers when an earlier slot was
-    // withdrawn and a new backer came in.
+    // Slot assignment + reserved-slot gate.
     const { data: activeSlotRows } = await supabase
       .from('backings')
       .select('slot_number')
       .eq('meme_id', meme_id)
       .neq('status', 'withdrawn');
-
     const taken = new Set((activeSlotRows || []).map((r) => Number(r.slot_number)));
     const totalSlots = Number(meme.total_slots) || 8;
     const reservedSlots = Number(meme.reserved_slots) || 0;
     const openSlots = Math.max(0, totalSlots - reservedSlots);
 
-    // Reserved-slot gate (migration 037). When reserved_slots > 0, the
-    // LAST `reservedSlots` positions (slots openSlots+1 .. totalSlots)
-    // are reserved for wallets in the backing_allowlist. Non-allowlisted
-    // backers can only take slots 1..openSlots.
     let isAllowlisted = true;
     if (reservedSlots > 0) {
       const { data: allowed } = await supabase
@@ -236,34 +295,17 @@ export async function POST(request: NextRequest) {
     }
     if (slotNumber === 0) {
       const allOpenFilled = !isAllowlisted && reservedSlots > 0;
-      return NextResponse.json(
-        {
-          error: allOpenFilled
-            ? `All ${openSlots} open slots are filled. The remaining ${reservedSlots} slots are reserved for allowlisted wallets.`
-            : 'All backer slots are filled',
-          reserved_slots: reservedSlots,
-          open_slots: openSlots,
-        },
-        { status: 400 }
+      return rejectAndRefund(
+        poolForRefund, backer_wallet, amount_sol,
+        allOpenFilled
+          ? `All ${openSlots} open slots are filled. The remaining ${reservedSlots} slots are reserved for allowlisted wallets.`
+          : 'All backer slots are filled',
+        400,
+        { reserved_slots: reservedSlots, open_slots: openSlots },
       );
     }
 
     const slotTier = slotNumber <= 4 ? 'Genesis' : 'Wave 2';
-
-    // Verify on-chain: backer sent amount_sol to THIS meme's pool wallet
-    let isValid = false;
-    try {
-      isValid = await verifyPoolDeposit(deposit_tx, amount_sol, backer_wallet, meme.pool_wallet);
-    } catch (verifyError) {
-      console.error('Verification error:', verifyError);
-    }
-
-    if (!isValid) {
-      return NextResponse.json(
-        { error: 'Could not verify deposit on-chain. Please try again.' },
-        { status: 400 }
-      );
-    }
 
     // Ensure user exists
     await supabase
@@ -288,14 +330,24 @@ export async function POST(request: NextRequest) {
     console.log(`Backing created: slot ${slotNumber} (${slotTier}) for ${amount_sol} SOL`);
 
     if (error) {
-      // Postgres unique violation: another backing claimed this slot in a race window
+      // Postgres unique violation: another backing claimed this slot
+      // in the race window between our slot-find and our insert.
+      // Both backers's SOL hit the pool wallet; the loser gets refunded
+      // here so they don't have to chase support.
       if ((error as { code?: string }).code === '23505') {
-        return NextResponse.json(
-          { error: 'That slot was just claimed by another backer. Please retry.' },
-          { status: 409 }
+        return rejectAndRefund(
+          poolForRefund, backer_wallet, amount_sol,
+          'That slot was just claimed by another backer. Please retry.',
+          409,
         );
       }
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      // Unknown DB failure — try to refund so the SOL isn't stranded,
+      // but surface the original error too for debugging.
+      return rejectAndRefund(
+        poolForRefund, backer_wallet, amount_sol,
+        `Backing insert failed: ${error.message}`,
+        500,
+      );
     }
 
     // Check if all slots are now filled - if so, update status to funded.
