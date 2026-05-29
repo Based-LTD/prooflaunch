@@ -74,24 +74,29 @@ const HOLDER_EXCLUSIONS = new Set<string>([
 ]);
 const PUMP_BC = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
 
-// Solana program IDs whose accounts are NEVER real community holders —
-// they're AMM pools, vesting escrows, bonding curves, etc. Used to
-// filter the on-chain holders snapshot in buildRecipientList so we
-// don't route distributions to liquidity pool wallets.
+// Program IDs whose accounts are AMM pools / bonding curves — never
+// real community holders. Filter applied to the on-chain holders
+// snapshot in buildRecipientList so distributions don't route to
+// liquidity pool wallets.
 //
-// Maintained as a known list (rather than a "anything not System
-// Program" filter) so legit multisigs / Squads / CEX deposit wallets
-// stay eligible. Add new AMM/DEX programs here as we encounter them.
+// SCOPE — verified correct for 100% of Proof Launch's user base
+// (every launch goes through Pump.fun BC and graduates to PumpSwap):
+//
+//   6EF8rrecthR5...  Pump.fun bonding curve — verified against V2TEST
+//                     BC vault owner (2ng4quRfkz...)
+//   pAMMBay6oce...   PumpSwap AMM — verified against the known PROOF
+//                     pool wallet (8xLcPgxcMtY...) owner
+//
+// NOTE: deliberately NOT adding Raydium / Orca / Meteora / Streamflow
+// / Squads / Token-Program IDs until each is verified against a real
+// on-chain account. Over-eager additions either get the ID wrong (no
+// effect — fine, just suboptimal) or worse, exclude legit users
+// (Squads multisig holders would lose their distributions). Add new
+// entries here as we encounter creators using other AMMs and can
+// verify the exact program ID.
 const NON_HOLDER_PROGRAMS = new Set<string>([
   '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P', // Pump.fun bonding curve
   'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA', // PumpSwap AMM
-  '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium V4
-  'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK', // Raydium CLMM
-  'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc', // Orca Whirlpools
-  'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo', // Meteora DLMM
-  'streamflowfundDH4VeKkVepDb7FxnzMJgGY4qXAhAaP',  // Streamflow (vesting escrows)
-  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',  // SPL Token Program (token accounts owned by program shouldn't be recipients)
-  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',  // Token-2022 Program (same reason)
 ]);
 
 function decryptKeypair(enc: string): Keypair {
