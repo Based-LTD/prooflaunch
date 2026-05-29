@@ -74,6 +74,26 @@ const HOLDER_EXCLUSIONS = new Set<string>([
 ]);
 const PUMP_BC = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
 
+// Solana program IDs whose accounts are NEVER real community holders —
+// they're AMM pools, vesting escrows, bonding curves, etc. Used to
+// filter the on-chain holders snapshot in buildRecipientList so we
+// don't route distributions to liquidity pool wallets.
+//
+// Maintained as a known list (rather than a "anything not System
+// Program" filter) so legit multisigs / Squads / CEX deposit wallets
+// stay eligible. Add new AMM/DEX programs here as we encounter them.
+const NON_HOLDER_PROGRAMS = new Set<string>([
+  '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P', // Pump.fun bonding curve
+  'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA', // PumpSwap AMM
+  '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium V4
+  'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK', // Raydium CLMM
+  'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc', // Orca Whirlpools
+  'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo', // Meteora DLMM
+  'streamflowfundDH4VeKkVepDb7FxnzMJgGY4qXAhAaP',  // Streamflow (vesting escrows)
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',  // SPL Token Program (token accounts owned by program shouldn't be recipients)
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',  // Token-2022 Program (same reason)
+]);
+
 function decryptKeypair(enc: string): Keypair {
   return Keypair.fromSecretKey(bs58.decode(decryptPrivateKey(enc)));
 }
@@ -511,21 +531,35 @@ async function buildRecipientList(
       } catch { /* skip unparseable */ }
     }
 
-    // Whale-exclusion heuristic: any holder >40% of total tracked
-    // supply is almost certainly the AMM pool, a treasury wallet,
-    // or some other system address — not a community holder we want
-    // to reward. Without this, distributions on pump.fun tokens
-    // (where the PumpSwap AMM pool holds ~99% of supply) would route
-    // almost all the SOL/tokens to a liquidity pool wallet instead
-    // of the actual community.
-    const totalTracked = [...byOwner.values()].reduce((a, b) => a + b, BigInt(0));
-    const whaleThreshold = totalTracked > BigInt(0)
-      ? (totalTracked * BigInt(40)) / BigInt(100)
-      : BigInt(0);
+    // Filter program-owned accounts (AMM pools, vesting escrows,
+    // bonding curves) by checking each candidate's account owner on
+    // chain. Permanent signal — doesn't drift as the token's
+    // distribution changes over time (which a "exclude top X%"
+    // heuristic would, since a real whale could eventually hold more
+    // than the AMM pool). Batched via getMultipleAccountsInfo to
+    // keep the RPC cost cheap (1-2 calls for up to 100 holders).
+    const candidateWallets = [...byOwner.keys()];
+    if (candidateWallets.length > 0) {
+      const BATCH = 100;
+      const allInfos: (Awaited<ReturnType<typeof conn.getAccountInfo>>)[] = [];
+      for (let i = 0; i < candidateWallets.length; i += BATCH) {
+        const batch = candidateWallets.slice(i, i + BATCH).map((w) => new PublicKey(w));
+        const infos = await conn.getMultipleAccountsInfo(batch, 'confirmed');
+        allInfos.push(...infos);
+      }
+      for (let i = 0; i < candidateWallets.length; i++) {
+        const info = allInfos[i];
+        if (!info) continue; // null = token-holder whose SOL account doesn't exist yet (first-time recipient); keep
+        const owner = info.owner.toBase58();
+        if (NON_HOLDER_PROGRAMS.has(owner)) {
+          byOwner.delete(candidateWallets[i]);
+        }
+      }
+    }
 
     // Convert to weighted list, sort desc, cap.
     const sorted = Array.from(byOwner.entries())
-      .filter(([, bal]) => bal > BigInt(0) && bal <= whaleThreshold)
+      .filter(([, bal]) => bal > BigInt(0))
       .map(([wallet, bal]) => ({ wallet, weight: Number(bal) }))
       .sort((a, b) => b.weight - a.weight)
       .slice(0, MAX_RECIPIENTS_PER_TICK);
