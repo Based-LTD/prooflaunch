@@ -422,6 +422,18 @@ export async function POST(request: NextRequest) {
       console.error('User upsert error:', userError);
     }
 
+    // Pre-generate the buyback bot keypair if the bot is being enabled.
+    // The DB constraint memes_buyback_bot_complete requires wallet + key
+    // to be non-null when enabled=true, so we MUST include them in the
+    // INSERT — can't defer to a follow-up UPDATE.
+    let buybackBotWallet: string | null = null;
+    let encryptedBuybackBotKey: string | null = null;
+    if (buyback_bot_enabled) {
+      const botKp = Keypair.generate();
+      buybackBotWallet = botKp.publicKey.toBase58();
+      encryptedBuybackBotKey = encryptPrivateKey(bs58.encode(botKp.secretKey));
+    }
+
     // Create meme with slot-based backing system
     const { data, error } = await supabase
       .from('memes')
@@ -468,12 +480,14 @@ export async function POST(request: NextRequest) {
         fee_burn_pct:           fee_preset ? fee_burn_pct : null,
         fee_charity_pct:        fee_preset ? fee_charity_pct : null,
         fee_charity_wallet:     fee_preset && fee_charity_pct > 0 ? fee_charity_wallet : null,
-        // Phase 5 — Buyback bot. The wallet + key are filled in
-        // immediately below via a follow-up UPDATE so the insert stays
-        // small if the keygen fails for any reason.
-        buyback_bot_enabled: !!buyback_bot_enabled,
-        buyback_bot_action:  buyback_bot_enabled ? buyback_bot_action : null,
-        buyback_bot_fee_pct: buyback_bot_enabled ? Number(buyback_bot_fee_pct) : 0,
+        // Phase 5 — Buyback bot. Wallet + key generated pre-INSERT
+        // because the memes_buyback_bot_complete CHECK constraint
+        // requires them to be non-null when enabled=true.
+        buyback_bot_enabled:        !!buyback_bot_enabled,
+        buyback_bot_action:         buyback_bot_enabled ? buyback_bot_action : null,
+        buyback_bot_fee_pct:        buyback_bot_enabled ? Number(buyback_bot_fee_pct) : 0,
+        buyback_bot_wallet:         buybackBotWallet,
+        encrypted_buyback_bot_key:  encryptedBuybackBotKey,
       })
       .select()
       .single();
@@ -533,15 +547,9 @@ export async function POST(request: NextRequest) {
     const subPub = subKp.publicKey.toBase58();
     const encryptedSubKey = encryptPrivateKey(bs58.encode(subKp.secretKey));
 
-    // Phase 3 — Buyback bot keypair (only when enabled).
-    let buybackBotWallet: string | null = null;
-    let encryptedBuybackBotKey: string | null = null;
-    if (buyback_bot_enabled) {
-      const botKp = Keypair.generate();
-      buybackBotWallet = botKp.publicKey.toBase58();
-      encryptedBuybackBotKey = encryptPrivateKey(bs58.encode(botKp.secretKey));
-    }
-
+    // Bot keypair already generated + inserted above (constraint required
+    // it to be present at INSERT time). Pool + sub-escrow get patched
+    // via UPDATE because they have no constraint forcing co-presence.
     const { error: poolErr } = await supabase
       .from('memes')
       .update({
@@ -549,8 +557,6 @@ export async function POST(request: NextRequest) {
         encrypted_pool_key: encryptedPoolKey,
         creator_subescrow_pubkey: subPub,
         encrypted_creator_subescrow_key: encryptedSubKey,
-        buyback_bot_wallet: buybackBotWallet,
-        encrypted_buyback_bot_key: encryptedBuybackBotKey,
       })
       .eq('id', data.id);
     if (poolErr) {
@@ -563,7 +569,6 @@ export async function POST(request: NextRequest) {
     }
     (data as { pool_wallet?: string; creator_subescrow_pubkey?: string; buyback_bot_wallet?: string | null }).pool_wallet = poolWallet;
     (data as { creator_subescrow_pubkey?: string }).creator_subescrow_pubkey = subPub;
-    (data as { buyback_bot_wallet?: string | null }).buyback_bot_wallet = buybackBotWallet;
 
     // Note: Creation fee goes to escrow, not recorded as a backing
     // The creator's token wallet is stored on the meme itself, not as a backing record
