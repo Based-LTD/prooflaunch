@@ -41,7 +41,11 @@ const SOL_MINT = 'So11111111111111111111111111111111111111112';
 // Skip thresholds. Below these we just leave SOL parked — sub-cent swaps
 // are pure tx-fee burn and tank the metrics. 0.01 SOL ≈ $1.50 at $150/SOL.
 const MIN_SWAP_LAMPORTS = 10_000_000;          // 0.01 SOL min to bother swapping
-const GAS_RESERVE_LAMPORTS = 5_000_000;        // 0.005 SOL reserved in bot wallet for tx fees
+// 0.01 SOL reserved: covers base tx fee (~5k lamports) + pump.fun BC's
+// in-program fee/rent transfers (up to ~5M lamports on top of the
+// wrapped SOL we swap). Earlier 0.005 reserve was too tight — BC needed
+// ~0.0006 SOL more than we'd left and the swap tx simulation failed.
+const GAS_RESERVE_LAMPORTS = 10_000_000;
 const SLIPPAGE_BPS = 2000;                     // 20% — meme tokens are thin
 
 function decryptKeypair(enc: string): Keypair {
