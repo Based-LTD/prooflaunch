@@ -511,10 +511,22 @@ async function buildRecipientList(
       } catch { /* skip unparseable */ }
     }
 
+    // Whale-exclusion heuristic: any holder >40% of total tracked
+    // supply is almost certainly the AMM pool, a treasury wallet,
+    // or some other system address — not a community holder we want
+    // to reward. Without this, distributions on pump.fun tokens
+    // (where the PumpSwap AMM pool holds ~99% of supply) would route
+    // almost all the SOL/tokens to a liquidity pool wallet instead
+    // of the actual community.
+    const totalTracked = [...byOwner.values()].reduce((a, b) => a + b, BigInt(0));
+    const whaleThreshold = totalTracked > BigInt(0)
+      ? (totalTracked * BigInt(40)) / BigInt(100)
+      : BigInt(0);
+
     // Convert to weighted list, sort desc, cap.
     const sorted = Array.from(byOwner.entries())
+      .filter(([, bal]) => bal > BigInt(0) && bal <= whaleThreshold)
       .map(([wallet, bal]) => ({ wallet, weight: Number(bal) }))
-      .filter((r) => r.weight > 0)
       .sort((a, b) => b.weight - a.weight)
       .slice(0, MAX_RECIPIENTS_PER_TICK);
     return { list: sorted };
