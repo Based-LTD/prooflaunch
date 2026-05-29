@@ -75,7 +75,7 @@ export async function GET(
     // encrypted_buyback_bot_key, or keycard_admin_url to this select.
     const { data: poolFields } = await supabase
       .from('memes')
-      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address, fee_distribution_mode, fee_preset, fee_backer_pct, fee_holder_rewards_pct, fee_platform_pct, fee_burn_pct, fee_charity_pct, fee_charity_wallet, buyback_bot_enabled, buyback_bot_action, buyback_bot_wallet, buyback_bot_last_run_at, buyback_bot_total_sol_spent, buyback_bot_total_tokens_acted, max_backing_sol, keycard_gate_id, keycard_gate_url, keycard_synced_at')
+      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address, fee_distribution_mode, fee_preset, fee_backer_pct, fee_holder_rewards_pct, fee_platform_pct, fee_burn_pct, fee_charity_pct, fee_charity_wallet, buyback_bot_enabled, buyback_bot_action, buyback_bot_wallet, buyback_bot_fee_pct, buyback_bot_last_run_at, buyback_bot_total_sol_spent, buyback_bot_total_tokens_acted, max_backing_sol, keycard_gate_id, keycard_gate_url, keycard_synced_at')
       .eq('id', id)
       .single();
 
@@ -237,10 +237,11 @@ export async function GET(
         fee_burn_pct: poolFields?.fee_burn_pct ?? null,
         fee_charity_pct: poolFields?.fee_charity_pct ?? null,
         fee_charity_wallet: poolFields?.fee_charity_wallet ?? null,
-        // Phase 3 — buyback bot
+        // Phase 5 — buyback bot (fee-delegation model)
         buyback_bot_enabled: poolFields?.buyback_bot_enabled ?? false,
         buyback_bot_action: poolFields?.buyback_bot_action ?? null,
         buyback_bot_wallet: poolFields?.buyback_bot_wallet ?? null,
+        buyback_bot_fee_pct: poolFields?.buyback_bot_fee_pct ?? 0,
         buyback_bot_last_run_at: poolFields?.buyback_bot_last_run_at ?? null,
         buyback_bot_total_sol_spent: poolFields?.buyback_bot_total_sol_spent ?? 0,
         buyback_bot_total_tokens_acted: poolFields?.buyback_bot_total_tokens_acted ?? 0,

@@ -156,11 +156,13 @@ function SubmitPageInner() {
     feeBurnPct: 0,
     feeCharityPct: 0,
     feeCharityWallet: '',
-    // Phase 3 — Per-meme buyback bot. Bot wallet takes one launch slot
-    // and reinvests its claimable_fees_sol into the token. Disabled by
-    // default; creator chooses an action when they flip it on.
+    // Phase 5 — Per-meme buyback bot (fee-delegation model). When ON,
+    // buybackBotFeePct (0-100) of the BACKER POOL (the 90% normally
+    // distributed to backers) is routed to the bot wallet on chain.
+    // Bot uses it to swap → execute action (burn/hold/etc.).
     buybackBotEnabled: false,
     buybackBotAction: 'burn' as 'burn' | 'hold' | 'distribute_holders' | 'distribute_backers',
+    buybackBotFeePct: 25,  // default — moderate buyback pressure when enabled
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -357,9 +359,10 @@ function SubmitPageInner() {
           fee_burn_pct: formData.feeBurnPct,
           fee_charity_pct: formData.feeCharityPct,
           fee_charity_wallet: formData.feeCharityPct > 0 ? formData.feeCharityWallet : null,
-          // Phase 3 — Buyback bot
+          // Phase 5 — Buyback bot (fee-delegation model)
           buyback_bot_enabled: formData.buybackBotEnabled,
           buyback_bot_action: formData.buybackBotEnabled ? formData.buybackBotAction : null,
+          buyback_bot_fee_pct: formData.buybackBotEnabled ? formData.buybackBotFeePct : 0,
         }),
       });
       if (!response.ok) {
@@ -983,129 +986,21 @@ function SubmitPageInner() {
             )}
           </div>
 
-          {/* ── Fee Distribution (Launch Config v2 — Phase 2 v1) ──
-              v1 only honors backer + platform splits. Other destinations
-              (holder rewards / burn / charity) need infrastructure that
-              ships in Phase 3 — UI hides those for now so we don't make
-              promises we can't keep. Schema already supports them. */}
-          <div className="border border-[var(--border)] bg-[var(--card)]/40 p-4 sm:p-5 space-y-4">
+          {/* ── Trading Fees (Phase 5: bot delegation lives in the bot section below) ──
+              Standard 90/10 split is fixed. If the creator enables the buyback
+              bot below, that section's slider routes part of the 90% backer
+              pool to the bot instead of distributing to backers. */}
+          <div className="border border-[var(--border)] bg-[var(--card)]/40 p-4 sm:p-5 space-y-3">
             <div className="space-y-1">
-              <h3 className="text-sm font-semibold uppercase tracking-wide">Fee Distribution</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wide">Trading Fees</h3>
               <p className="text-xs text-[var(--muted)]">
-                Configure your backer / platform split. Holder rewards, burn, and charity routing ship in Phase 3 — coming soon.
+                Standard split: <span className="text-[var(--foreground)]">90% to backers · 10% platform</span>.
+                Enable the buyback bot below to delegate part of the backer pool to automatic buy + burn / hold.
               </p>
             </div>
-
-            {/* Preset selector — standard + custom */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Standard preset */}
-              <button
-                type="button"
-                onClick={() => setFormData((prev) => ({
-                  ...prev,
-                  feePreset: 'standard',
-                  feeBackerPct: FEE_PRESETS.standard.backer,
-                  feeHolderRewardsPct: FEE_PRESETS.standard.holder,
-                  feePlatformPct: FEE_PRESETS.standard.platform,
-                  feeBurnPct: FEE_PRESETS.standard.burn,
-                  feeCharityPct: FEE_PRESETS.standard.charity,
-                }))}
-                className={`border p-3 text-left transition-colors ${
-                  formData.feePreset === 'standard'
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                    : 'border-[var(--border)] hover:border-[var(--muted)]'
-                }`}
-              >
-                <div className={`text-xs font-mono font-semibold ${formData.feePreset === 'standard' ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
-                  {FEE_PRESETS.standard.label}
-                </div>
-                <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
-                  {FEE_PRESETS.standard.tagline}
-                </div>
-                <div className="text-[10px] font-mono text-[var(--muted)] mt-1.5">
-                  {FEE_PRESETS.standard.backer}% backers · {FEE_PRESETS.standard.platform}% platform
-                </div>
-              </button>
-
-              {/* Custom — only backer + platform editable */}
-              <button
-                type="button"
-                onClick={() => setFormData((prev) => ({ ...prev, feePreset: 'custom' }))}
-                className={`border p-3 text-left transition-colors ${
-                  formData.feePreset === 'custom'
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                    : 'border-[var(--border)] hover:border-[var(--muted)]'
-                }`}
-              >
-                <div className={`text-xs font-mono font-semibold ${formData.feePreset === 'custom' ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
-                  CUSTOM
-                </div>
-                <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
-                  Set your own backer / platform %.
-                </div>
-              </button>
-            </div>
-
-            {/* Per-% editors — only backer + platform (the two we can honor today) */}
-            {(() => {
-              const total = formData.feeBackerPct + formData.feePlatformPct;
-              const sumOk = total === 100;
-              const isCustom = formData.feePreset === 'custom';
-              return (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">Backers %</label>
-                      <input
-                        type="number"
-                        min={0} max={100}
-                        value={formData.feeBackerPct}
-                        onChange={(e) => {
-                          const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                          setFormData((prev) => ({
-                            ...prev,
-                            feeBackerPct: v,
-                            feePlatformPct: 100 - v, // auto-balance the other half
-                            feePreset: 'custom',
-                          }));
-                        }}
-                        disabled={!isCustom}
-                        className="w-full text-sm font-mono text-center disabled:opacity-60"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">Platform %</label>
-                      <input
-                        type="number"
-                        min={0} max={100}
-                        value={formData.feePlatformPct}
-                        onChange={(e) => {
-                          const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                          setFormData((prev) => ({
-                            ...prev,
-                            feePlatformPct: v,
-                            feeBackerPct: 100 - v,
-                            feePreset: 'custom',
-                          }));
-                        }}
-                        disabled={!isCustom}
-                        className="w-full text-sm font-mono text-center disabled:opacity-60"
-                      />
-                    </div>
-                  </div>
-                  <div className={`text-xs font-mono flex items-center justify-between border-t border-[var(--border)] pt-2 ${sumOk ? 'text-[var(--muted)]' : 'text-[var(--error)]'}`}>
-                    <span>SUM</span>
-                    <span>{total}% {sumOk ? '✓' : '· must equal 100%'}</span>
-                  </div>
-                  <div className="text-[10px] font-mono text-[var(--muted)] italic leading-snug">
-                    Coming in Phase 3: routing for $PROOF holder rewards, auto-burn, and charity wallet allocations.
-                  </div>
-                </div>
-              );
-            })()}
           </div>
 
-          {/* ── Buyback Bot (Phase 3) ── */}
+          {/* ── Buyback Bot (Phase 5 — fee delegation model) ── */}
           <div className="border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
@@ -1113,13 +1008,12 @@ function SubmitPageInner() {
                   BUYBACK BOT
                 </div>
                 <div className="text-sm font-mono text-[var(--foreground)]">
-                  Optional autonomous backer
+                  Delegate part of backer fees to an automatic buyback
                 </div>
                 <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
-                  Adds a system-controlled wallet as a backer slot. It earns
-                  trading fees like any backer, then uses those SOL to buy
-                  your token and execute the action you choose. Fully
-                  on-chain &amp; auditable.
+                  A system-controlled wallet receives a slice of the 90% backer fee stream,
+                  uses it to buy your token on Jupiter, and burns or holds what it buys.
+                  Backers trade some fee yield for token-supply pressure. Fully on-chain &amp; auditable.
                 </p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -1136,42 +1030,86 @@ function SubmitPageInner() {
             </div>
 
             {formData.buybackBotEnabled && (
-              <div className="space-y-3 pt-2 border-t border-[var(--border)]">
-                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  ACTION ON BOUGHT TOKENS
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {([
-                    { value: 'burn',                label: 'BURN',                tag: 'Deflationary',  desc: 'Send each buyback to a burn address. Permanent supply reduction.', ready: true },
-                    { value: 'hold',                label: 'HOLD',                tag: 'Treasury',      desc: 'Park in the bot wallet. Acts as a treasury you can deploy later.', ready: true },
-                    { value: 'distribute_holders',  label: 'AIRDROP HOLDERS',     tag: 'Phase 3.1',     desc: 'Snapshot current holders, transfer pro-rata. Wiring in next release.', ready: false },
-                    { value: 'distribute_backers',  label: 'AIRDROP BACKERS',     tag: 'Phase 3.1',     desc: 'Transfer pro-rata to genesis backers. Wiring in next release.', ready: false },
-                  ] as const).map((opt) => {
-                    const selected = formData.buybackBotAction === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setFormData((prev) => ({ ...prev, buybackBotAction: opt.value }))}
-                        className={`text-left p-3 border transition-colors ${
-                          selected
-                            ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                            : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--accent)]/60'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="text-xs font-mono font-semibold text-[var(--foreground)]">{opt.label}</span>
-                          <span className={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 ${opt.ready ? 'text-[var(--accent)] border border-[var(--accent)]/40' : 'text-[var(--muted)] border border-[var(--border)]'}`}>
-                            {opt.tag}
-                          </span>
+              <div className="space-y-4 pt-3 border-t border-[var(--border)]">
+                {/* Delegation slider — 0-100% of the 90% backer pool */}
+                {(() => {
+                  const botPct = formData.buybackBotFeePct;
+                  const backerShare = (90 * (100 - botPct)) / 100;   // % of total trading fees
+                  const botShare    = (90 * botPct) / 100;
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                          Bot Fee Delegation
+                        </label>
+                        <span className="text-xs font-mono text-[var(--accent)]">{botPct}% of backer pool</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={formData.buybackBotFeePct}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, buybackBotFeePct: Number(e.target.value) }))}
+                        className="w-full accent-[var(--accent)]"
+                      />
+                      <div className="grid grid-cols-3 gap-2 text-[10px] font-mono uppercase tracking-widest text-center border-t border-[var(--border)] pt-2">
+                        <div>
+                          <div className="text-[var(--muted)]">Backers</div>
+                          <div className="text-[var(--foreground)] mt-0.5">{backerShare.toFixed(1)}%</div>
                         </div>
-                        <div className="text-[11px] font-mono text-[var(--muted)] leading-snug">{opt.desc}</div>
-                      </button>
-                    );
-                  })}
+                        <div>
+                          <div className="text-[var(--muted)]">Platform</div>
+                          <div className="text-[var(--foreground)] mt-0.5">10%</div>
+                        </div>
+                        <div>
+                          <div className="text-[var(--accent)]">Bot</div>
+                          <div className="text-[var(--accent)] mt-0.5">{botShare.toFixed(1)}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Action picker */}
+                <div className="space-y-2 pt-2 border-t border-[var(--border)]">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                    ACTION ON BOUGHT TOKENS
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {([
+                      { value: 'burn',                label: 'BURN',                tag: 'Deflationary',  desc: 'Burn each buyback. Permanent supply reduction.', ready: true },
+                      { value: 'hold',                label: 'HOLD',                tag: 'Treasury',      desc: 'Park in the bot wallet. Treasury you can deploy later.', ready: true },
+                      { value: 'distribute_holders',  label: 'AIRDROP HOLDERS',     tag: 'Phase 5.1',     desc: 'Snapshot holders, transfer pro-rata. Coming next.', ready: false },
+                      { value: 'distribute_backers',  label: 'AIRDROP BACKERS',     tag: 'Phase 5.1',     desc: 'Transfer pro-rata to genesis backers. Coming next.', ready: false },
+                    ] as const).map((opt) => {
+                      const selected = formData.buybackBotAction === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, buybackBotAction: opt.value }))}
+                          className={`text-left p-3 border transition-colors ${
+                            selected
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                              : 'border-[var(--border)] bg-[var(--background)] hover:border-[var(--accent)]/60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-xs font-mono font-semibold text-[var(--foreground)]">{opt.label}</span>
+                            <span className={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 ${opt.ready ? 'text-[var(--accent)] border border-[var(--accent)]/40' : 'text-[var(--muted)] border border-[var(--border)]'}`}>
+                              {opt.tag}
+                            </span>
+                          </div>
+                          <div className="text-[11px] font-mono text-[var(--muted)] leading-snug">{opt.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+
                 <div className="text-[10px] font-mono text-[var(--muted)] italic leading-snug border-t border-[var(--border)] pt-2">
-                  The bot wallet is auto-generated when you submit. You can change the action later from your meme dashboard.
+                  Bot wallet auto-generated on submit. Delegation %, action, and on/off can be changed later from your dashboard.
                 </div>
               </div>
             )}
@@ -1185,9 +1123,6 @@ function SubmitPageInner() {
               || !formData.name
               || !formData.symbol
               || Object.keys(fieldErrors).some(k => fieldErrors[k as keyof ValidationErrors])
-              // Fee config must sum to 100, charity wallet present when needed
-              || (formData.feeBackerPct + formData.feeHolderRewardsPct + formData.feePlatformPct + formData.feeBurnPct + formData.feeCharityPct) !== 100
-              || (formData.feeCharityPct > 0 && (formData.feeCharityWallet.length < 32 || formData.feeCharityWallet.length > 50))
             }
             className="btn-primary w-full text-sm sm:text-base py-3.5"
           >

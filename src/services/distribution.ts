@@ -282,7 +282,7 @@ export async function collectAndCreditFees(
 ): Promise<CollectAndCreditResult> {
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct, buyback_bot_enabled, buyback_bot_fee_pct, buyback_bot_wallet')
     .eq('id', memeId)
     .single();
   if (memeErr || !meme) return { ok: false, error: 'meme not found' };
@@ -400,8 +400,44 @@ export async function collectAndCreditFees(
       ? meme.fee_backer_pct / 100
       : 1 - DEFAULT_PLATFORM_FEE_CUT;
   const collectedLamports = transferLamports;
-  const backerPoolLamports = Math.floor(collectedLamports * backerCut);
-  const platformLamports = collectedLamports - backerPoolLamports;
+  const rawBackerPoolLamports = Math.floor(collectedLamports * backerCut);
+
+  // Phase 5 — Buyback bot fee delegation. Creator opts in at submit;
+  // bot_fee_pct (0-100) is the % of the BACKER POOL (not of total) that
+  // gets routed to the bot wallet on chain instead of distributed to
+  // backers. Platform's cut stays unchanged. We transfer the bot's
+  // share NOW so the bot wallet has SOL ready for its next swap tick.
+  const botEnabled = !!meme.buyback_bot_enabled
+    && typeof meme.buyback_bot_fee_pct === 'number'
+    && meme.buyback_bot_fee_pct > 0
+    && !!meme.buyback_bot_wallet;
+  const botPct = botEnabled ? Number(meme.buyback_bot_fee_pct) / 100 : 0;
+  const botShareLamports = Math.floor(rawBackerPoolLamports * botPct);
+  const backerPoolLamports = rawBackerPoolLamports - botShareLamports;
+  const platformLamports = collectedLamports - backerPoolLamports - botShareLamports;
+
+  let botShareSig: string | undefined;
+  if (botShareLamports > 0 && meme.buyback_bot_wallet) {
+    try {
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: escrow.publicKey,
+          toPubkey: new PublicKey(meme.buyback_bot_wallet),
+          lamports: botShareLamports,
+        })
+      );
+      tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
+      tx.feePayer = escrow.publicKey;
+      botShareSig = await conn.sendTransaction(tx, [escrow]);
+      await conn.confirmTransaction(botShareSig, 'confirmed');
+      log('reconcile_recovered', { detail: { stage: 'bot_fee_delegation', sig: botShareSig, lamports: botShareLamports, botPct } });
+    } catch (e) {
+      // Non-fatal: bot wallet didn't get its share this round, SOL stays
+      // in escrow as platform revenue effectively. Backers still get
+      // their (reduced) cut. Next collection round, bot tries again.
+      log('reconcile_error', { ok: false, detail: { stage: 'bot_fee_delegation', err: e instanceof Error ? e.message : String(e), lamports: botShareLamports } });
+    }
+  }
 
   const { data: backings } = await supabase
     .from('backings')

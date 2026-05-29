@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   Connection, PublicKey, Keypair, VersionedTransaction, LAMPORTS_PER_SOL,
-  TransactionMessage, ComputeBudgetProgram, SystemProgram, Transaction,
+  TransactionMessage, ComputeBudgetProgram,
 } from '@solana/web3.js';
 import {
   createBurnCheckedInstruction,
@@ -13,44 +13,37 @@ import {
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
 
-// Per-meme buyback bot executor (Phase 3).
+// Per-meme buyback bot executor (Phase 5 — fee-delegation model).
 //
-// Bot model: the creator opts in at submit time. When enabled, the meme's
-// `creator_claimable_fees_sol` is treated as the bot's purse — instead of
-// the creator personally claiming, the bot drains it periodically and:
+// The bot wallet accumulates SOL via the fee-delegation path in
+// collectAndCreditFees: when a meme has buyback_bot_enabled +
+// buyback_bot_fee_pct > 0, that % of the backer pool is transferred
+// to the bot wallet on chain at every fee-collection tick.
 //
-//   1) Wires the SOL from shared escrow → bot wallet
-//   2) Swaps SOL → meme token via Jupiter (PumpSwap route)
-//   3) Executes the creator-chosen action on the bought tokens:
-//        burn               → SPL burnChecked (works for Token / Token-2022)
-//        hold               → leaves them in the bot wallet
-//        distribute_holders → "Phase 3.1 — not wired yet" (logs skip, no-op)
-//        distribute_backers → "Phase 3.1 — not wired yet" (logs skip, no-op)
+// This cron does the BUY side: read bot wallet's on-chain SOL balance,
+// reserve gas, swap rest SOL → meme token via Jupiter (PumpSwap route),
+// execute creator-chosen action on the bought tokens:
+//   burn               → SPL burnChecked (Token or Token-2022)
+//   hold               → leave in bot wallet (treasury)
+//   distribute_holders → Phase 5.1 (not wired yet)
+//   distribute_backers → Phase 5.1 (not wired yet)
 //
-// Audit: every successful run writes a row to meme_buybacks. Failures
-// either write a 'failed' row or skip silently (when nothing to do).
-//
-// Idempotency: the creator_claimable_fees_sol field is the on-chain truth
-// of "what the bot has earned." Atomic optimistic-lock UPDATE pattern from
-// /api/fees/claim — drains-to-zero, reverts on any downstream failure.
+// Idempotency: the bot wallet's on-chain balance IS the source of truth.
+// If a previous tick swept everything, this tick sees nothing to do and
+// skips. If a previous tick failed mid-swap, SOL stays in the bot wallet
+// and the next tick picks it up.
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-const ESCROW_PRIVATE_KEY = process.env.ESCROW_WALLET_PRIVATE_KEY;
 const JUP_QUOTE_URL = 'https://lite-api.jup.ag/swap/v1/quote';
 const JUP_SWAP_URL = 'https://lite-api.jup.ag/swap/v1/swap';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
-const BURN_ADDRESS = '1nc1nerator11111111111111111111111111111111'; // SPL incinerator (PDA-derived, no key)
 
 // Skip thresholds. Below these we just leave SOL parked — sub-cent swaps
 // are pure tx-fee burn and tank the metrics. 0.01 SOL ≈ $1.50 at $150/SOL.
-const MIN_CLAIM_LAMPORTS = 10_000_000;        // 0.01 SOL
-const SLIPPAGE_BPS = 2000;                     // 20% — meme tokens are thin
+const MIN_SWAP_LAMPORTS = 10_000_000;          // 0.01 SOL min to bother swapping
 const GAS_RESERVE_LAMPORTS = 5_000_000;        // 0.005 SOL reserved in bot wallet for tx fees
+const SLIPPAGE_BPS = 2000;                     // 20% — meme tokens are thin
 
-function loadEscrow(): Keypair {
-  if (!ESCROW_PRIVATE_KEY) throw new Error('ESCROW_WALLET_PRIVATE_KEY not set');
-  return Keypair.fromSecretKey(bs58.decode(ESCROW_PRIVATE_KEY));
-}
 function decryptKeypair(enc: string): Keypair {
   return Keypair.fromSecretKey(bs58.decode(decryptPrivateKey(enc)));
 }
@@ -64,7 +57,6 @@ export interface BuybackResult {
   solSpentLamports?: number;
   tokensBoughtRaw?: string;
   tokensActedRaw?: string;
-  claimTx?: string;
   swapTx?: string;
   actionTx?: string;
   error?: string;
@@ -79,8 +71,6 @@ interface MemeRow {
   buyback_bot_action: 'burn' | 'hold' | 'distribute_holders' | 'distribute_backers' | null;
   buyback_bot_wallet: string | null;
   encrypted_buyback_bot_key: string | null;
-  creator_claimable_fees_sol: number | null;
-  creator_total_claimed_sol: number | null;
   buyback_bot_total_sol_spent: number | null;
   buyback_bot_total_tokens_acted: number | null;
 }
@@ -94,7 +84,6 @@ export async function executeBuybackForMeme(
     .select(`id, symbol, mint_address, status,
              buyback_bot_enabled, buyback_bot_action,
              buyback_bot_wallet, encrypted_buyback_bot_key,
-             creator_claimable_fees_sol, creator_total_claimed_sol,
              buyback_bot_total_sol_spent, buyback_bot_total_tokens_acted`)
     .eq('id', memeId)
     .single();
@@ -109,99 +98,39 @@ export async function executeBuybackForMeme(
   if (!m.buyback_bot_action)  return { ok: false, memeId, symbol: m.symbol, error: 'bot action missing' };
 
   const action = m.buyback_bot_action;
-  const observed = Number(m.creator_claimable_fees_sol || 0);
-  const observedLamports = Math.floor(observed * LAMPORTS_PER_SOL);
-  if (observedLamports < MIN_CLAIM_LAMPORTS) {
-    return { ok: true, memeId, symbol: m.symbol, action, skipped: `below threshold (${observed.toFixed(6)} SOL)` };
-  }
 
-  // Step 1: atomic drain of creator_claimable_fees_sol (optimistic lock).
-  const oldTotalClaimed = Number(m.creator_total_claimed_sol || 0);
-  const { data: drained, error: drainErr } = await supabase
-    .from('memes')
-    .update({
-      creator_claimable_fees_sol: 0,
-      creator_total_claimed_sol: oldTotalClaimed + observed,
-    })
-    .eq('id', m.id)
-    .eq('creator_claimable_fees_sol', observed)
-    .select('id');
-  if (drainErr) return { ok: false, memeId, symbol: m.symbol, action, error: `drain failed: ${drainErr.message}` };
-  if (!drained || drained.length === 0) {
-    return { ok: true, memeId, symbol: m.symbol, action, skipped: 'concurrent claim drained first' };
-  }
-
-  // From here on, restoreOnFail() must be called on any failure path so we
-  // don't strand the creator's accrued SOL.
-  const restoreOnFail = async (whyError: string) => {
-    await supabase
-      .from('memes')
-      .update({
-        creator_claimable_fees_sol: observed,
-        creator_total_claimed_sol: oldTotalClaimed,
-      })
-      .eq('id', m.id);
-    await supabase.from('meme_buybacks').insert({
-      meme_id: m.id, action, sol_spent_lamports: observedLamports.toString(),
-      tokens_bought_raw: '0', tokens_acted_raw: '0',
-      status: 'failed', error: whyError,
-    });
-  };
-
-  // Step 2: send SOL from escrow → bot wallet (less the TX fee that escrow will pay).
-  const conn = new Connection(RPC_URL, 'confirmed');
-  let escrow: Keypair, botKp: Keypair;
-  try {
-    escrow = loadEscrow();
-    botKp = decryptKeypair(m.encrypted_buyback_bot_key);
-  } catch (e) {
-    await restoreOnFail(`keypair load: ${e instanceof Error ? e.message : String(e)}`);
-    return { ok: false, memeId, symbol: m.symbol, action, error: 'key load failed' };
-  }
+  // Decrypt bot keypair + pubkey-match safety gate.
+  let botKp: Keypair;
+  try { botKp = decryptKeypair(m.encrypted_buyback_bot_key); }
+  catch (e) { return { ok: false, memeId, symbol: m.symbol, action, error: `bot key decrypt: ${e instanceof Error ? e.message : String(e)}` }; }
   if (botKp.publicKey.toBase58() !== m.buyback_bot_wallet) {
-    await restoreOnFail('bot key pubkey mismatch');
-    return { ok: false, memeId, symbol: m.symbol, action, error: 'bot key pubkey mismatch' };
+    return { ok: false, memeId, symbol: m.symbol, action, error: 'bot key pubkey mismatch — refusing to touch' };
   }
 
-  let claimTx: string;
-  try {
-    const tx = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: escrow.publicKey,
-        toPubkey: botKp.publicKey,
-        lamports: observedLamports,
-      })
-    );
-    tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
-    tx.feePayer = escrow.publicKey;
-    claimTx = await conn.sendTransaction(tx, [escrow]);
-    await conn.confirmTransaction(claimTx, 'confirmed');
-  } catch (e) {
-    await restoreOnFail(`escrow→bot transfer: ${e instanceof Error ? e.message : String(e)}`);
-    return { ok: false, memeId, symbol: m.symbol, action, error: 'escrow transfer failed' };
+  // Read bot wallet on-chain balance — the source of truth for "how much
+  // has been delegated since the last swap." No more DB-side counters.
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const balance = await conn.getBalance(botKp.publicKey);
+  const swapLamports = balance - GAS_RESERVE_LAMPORTS;
+  if (swapLamports < MIN_SWAP_LAMPORTS) {
+    return { ok: true, memeId, symbol: m.symbol, action, skipped: `bot wallet balance ${balance} below swap threshold (need ${MIN_SWAP_LAMPORTS + GAS_RESERVE_LAMPORTS} lamports)` };
   }
 
-  // Step 3: distribute_* not wired in MVP — log skip (SOL is in bot wallet,
-  // so on next cron tick the action might be flipped to burn/hold and used).
+  // distribute_* not wired yet (Phase 5.1) — log skip, SOL stays in bot
+  // wallet. On next tick the action might be flipped to burn/hold and
+  // get used.
   if (action === 'distribute_holders' || action === 'distribute_backers') {
     await supabase.from('meme_buybacks').insert({
-      meme_id: m.id, action, sol_spent_lamports: observedLamports.toString(),
+      meme_id: m.id, action, sol_spent_lamports: '0',
       tokens_bought_raw: '0', tokens_acted_raw: '0',
-      claim_tx: claimTx, status: 'partial',
-      notes: 'Phase 3.1: distribute action not wired yet. SOL parked in bot wallet pending implementation.',
+      status: 'partial',
+      notes: 'Phase 5.1: distribute action not wired yet. SOL parked in bot wallet pending implementation.',
     });
     await supabase.from('memes').update({ buyback_bot_last_run_at: new Date().toISOString() }).eq('id', m.id);
-    return { ok: true, memeId, symbol: m.symbol, action, claimTx, skipped: 'distribute_* action pending Phase 3.1 — SOL parked in bot wallet' };
+    return { ok: true, memeId, symbol: m.symbol, action, skipped: 'distribute_* action pending Phase 5.1 — SOL parked in bot wallet' };
   }
 
-  // Step 4: swap SOL → meme token via Jupiter (PumpSwap route).
-  // Reserve a little SOL for the action tx (burn/transfer) gas.
-  const swapLamports = observedLamports - GAS_RESERVE_LAMPORTS;
-  if (swapLamports <= 0) {
-    await restoreOnFail('claim amount below gas reserve');
-    return { ok: false, memeId, symbol: m.symbol, action, error: 'below gas reserve' };
-  }
-
+  // Swap SOL → meme token via Jupiter.
   let actualTokensRaw: bigint;
   let tokenProgramId: PublicKey;
   let tokenDecimals: number;
@@ -233,7 +162,7 @@ export async function executeBuybackForMeme(
     const swapConf = await conn.confirmTransaction(swapTx, 'confirmed');
     if (swapConf.value.err) throw new Error(`swap tx failed: ${JSON.stringify(swapConf.value.err)}`);
 
-    // Read actual amount received — slippage may have shaved off some.
+    // Read actual amount received (slippage may shave some off).
     // Detect which token program owns the mint (Token vs Token-2022).
     const mintPub = new PublicKey(m.mint_address);
     const mintAcc = await conn.getAccountInfo(mintPub);
@@ -246,20 +175,18 @@ export async function executeBuybackForMeme(
     actualTokensRaw = BigInt(ataBal.value.amount);
     if (actualTokensRaw === BigInt(0)) throw new Error('swap confirmed but ATA balance is 0');
   } catch (e) {
-    // Swap failed. SOL is in bot wallet — we don't restore creator_claimable
-    // (that would double-credit). Log partial: SOL accumulates in bot wallet
-    // and next cron tick will retry the swap with the bigger pile.
+    // Swap failed — SOL stays in bot wallet, next cron tick retries with
+    // the same (or larger) pile.
     await supabase.from('meme_buybacks').insert({
       meme_id: m.id, action, sol_spent_lamports: swapLamports.toString(),
       tokens_bought_raw: '0', tokens_acted_raw: '0',
-      claim_tx: claimTx, status: 'failed',
-      error: `swap: ${e instanceof Error ? e.message : String(e)}`,
+      status: 'failed', error: `swap: ${e instanceof Error ? e.message : String(e)}`,
     });
     await supabase.from('memes').update({ buyback_bot_last_run_at: new Date().toISOString() }).eq('id', m.id);
-    return { ok: false, memeId, symbol: m.symbol, action, claimTx, error: `swap failed: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, memeId, symbol: m.symbol, action, error: `swap failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 
-  // Step 5: action.
+  // Action.
   let actionTx: string | undefined;
   let actedRaw = actualTokensRaw;
   try {
@@ -282,27 +209,26 @@ export async function executeBuybackForMeme(
       const burnConf = await conn.confirmTransaction({ signature: actionTx, blockhash, lastValidBlockHeight }, 'confirmed');
       if (burnConf.value.err) throw new Error(`burn failed: ${JSON.stringify(burnConf.value.err)}`);
     } else if (action === 'hold') {
-      // No-op — tokens stay in bot wallet.
       actedRaw = actualTokensRaw;
     }
   } catch (e) {
     await supabase.from('meme_buybacks').insert({
       meme_id: m.id, action, sol_spent_lamports: swapLamports.toString(),
       tokens_bought_raw: actualTokensRaw.toString(), tokens_acted_raw: '0',
-      claim_tx: claimTx, swap_tx: swapTx, status: 'partial',
+      swap_tx: swapTx, status: 'partial',
       error: `action: ${e instanceof Error ? e.message : String(e)}`,
     });
     await supabase.from('memes').update({ buyback_bot_last_run_at: new Date().toISOString() }).eq('id', m.id);
-    return { ok: false, memeId, symbol: m.symbol, action, claimTx, swapTx, error: `action failed: ${e instanceof Error ? e.message : String(e)}` };
+    return { ok: false, memeId, symbol: m.symbol, action, swapTx, error: `action failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 
-  // Step 6: audit row + rollup stats.
+  // Audit row + rollup stats.
   await supabase.from('meme_buybacks').insert({
     meme_id: m.id, action,
     sol_spent_lamports: swapLamports.toString(),
     tokens_bought_raw: actualTokensRaw.toString(),
     tokens_acted_raw:  actedRaw.toString(),
-    claim_tx: claimTx, swap_tx: swapTx, action_tx: actionTx,
+    swap_tx: swapTx, action_tx: actionTx,
     status: 'completed',
   });
   const newSolSpent = Number(m.buyback_bot_total_sol_spent || 0) + (swapLamports / LAMPORTS_PER_SOL);
@@ -321,7 +247,7 @@ export async function executeBuybackForMeme(
     solSpentLamports: swapLamports,
     tokensBoughtRaw: actualTokensRaw.toString(),
     tokensActedRaw: actedRaw.toString(),
-    claimTx, swapTx, actionTx,
+    swapTx, actionTx,
   };
 }
 
@@ -344,8 +270,3 @@ export async function runBuybackBotsForAllLive(
   }
   return out;
 }
-
-// Reference: BURN_ADDRESS is unused for SPL burns (we use burnChecked which
-// destroys supply directly), but kept exported for future "transfer to
-// incinerator" flows in distribute_* actions.
-export { BURN_ADDRESS };

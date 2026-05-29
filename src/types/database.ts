@@ -91,6 +91,7 @@ export interface Meme {
   buyback_bot_enabled?: boolean;
   buyback_bot_action?: 'burn' | 'hold' | 'distribute_holders' | 'distribute_backers' | null;
   buyback_bot_wallet?: string | null;
+  buyback_bot_fee_pct?: number;
   buyback_bot_last_run_at?: string | null;
   buyback_bot_total_sol_spent?: number;
   buyback_bot_total_tokens_acted?: number;

@@ -174,11 +174,13 @@ export async function POST(request: NextRequest) {
       fee_burn_pct,
       fee_charity_pct,
       fee_charity_wallet,
-      // Phase 3 — Buyback bot (migration 031). When enabled, a system-
-      // controlled wallet takes one slot and accrues fees like any backer;
-      // a cron periodically buys + executes the chosen action.
+      // Phase 5 — Buyback bot via fee delegation (migrations 031 + 036).
+      // When enabled, buyback_bot_fee_pct (0-100) routes that % of the
+      // backer pool to the bot wallet on chain. The bot cron drains it
+      // and executes the chosen action (burn / hold / distribute_*).
       buyback_bot_enabled = false,
       buyback_bot_action,
+      buyback_bot_fee_pct = 0,
     } = body;
 
     // ── Partner session lookup (optional) ──────────────────────────
@@ -373,6 +375,15 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
+      if (typeof buyback_bot_fee_pct !== 'number'
+          || !Number.isFinite(buyback_bot_fee_pct)
+          || buyback_bot_fee_pct < 0
+          || buyback_bot_fee_pct > 100) {
+        return NextResponse.json(
+          { error: 'buyback_bot_fee_pct must be a number 0-100 (% of the backer pool routed to the bot)' },
+          { status: 400 },
+        );
+      }
     }
 
     // For gated launches, parse + validate the initial allowlist (if any).
@@ -457,11 +468,12 @@ export async function POST(request: NextRequest) {
         fee_burn_pct:           fee_preset ? fee_burn_pct : null,
         fee_charity_pct:        fee_preset ? fee_charity_pct : null,
         fee_charity_wallet:     fee_preset && fee_charity_pct > 0 ? fee_charity_wallet : null,
-        // Phase 3 — Buyback bot. The wallet + key are filled in
+        // Phase 5 — Buyback bot. The wallet + key are filled in
         // immediately below via a follow-up UPDATE so the insert stays
         // small if the keygen fails for any reason.
         buyback_bot_enabled: !!buyback_bot_enabled,
         buyback_bot_action:  buyback_bot_enabled ? buyback_bot_action : null,
+        buyback_bot_fee_pct: buyback_bot_enabled ? Number(buyback_bot_fee_pct) : 0,
       })
       .select()
       .single();
