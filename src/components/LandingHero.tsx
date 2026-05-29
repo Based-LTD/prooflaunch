@@ -58,20 +58,12 @@ function scrollToBoard() {
 
 export function LandingHero() {
   const [stats, setStats] = useState<LandingStats | null>(null);
-  const [gatedCounts, setGatedCounts] = useState<{ stealth: number; spectator: number } | null>(null);
 
   useEffect(() => {
     // Fire-and-forget: if it fails, hero shows "—" placeholders rather than spinners.
     fetch('/api/landing/stats')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && setStats(d))
-      .catch(() => {/* silent */});
-
-    // Gated launch counts — powers the "stealth in progress" widget.
-    // Silent fail-soft: widget just doesn't render if API is down.
-    fetch('/api/landing/visibility-counts')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setGatedCounts(d))
       .catch(() => {/* silent */});
   }, []);
 
@@ -183,27 +175,11 @@ export function LandingHero() {
         </div>
       </div>
 
-      {/* Internal/spectator widget — appears only when gated launches
-          are actively in progress. Aggregate-only, no identifying info
-          per the PROOF transparency-on-its-own-timeline framing. */}
-      {gatedCounts && (gatedCounts.stealth > 0 || gatedCounts.spectator > 0) && (
-        <div className="mt-8 sm:mt-10 flex flex-wrap items-center justify-center gap-3 text-[10px] sm:text-xs font-mono uppercase tracking-[0.2em] text-[var(--muted)]">
-          {gatedCounts.stealth > 0 && (
-            <span className="inline-flex items-center gap-2 border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 px-3 py-1.5">
-              <span className="w-1.5 h-1.5 bg-[var(--accent-gold)] inline-block pulse-glow" aria-hidden />
-              <span className="text-[var(--accent-gold)]">{gatedCounts.stealth}</span>
-              <span>internal launch{gatedCounts.stealth === 1 ? '' : 'es'} in progress</span>
-            </span>
-          )}
-          {gatedCounts.spectator > 0 && (
-            <span className="inline-flex items-center gap-2 border border-[var(--accent)]/40 bg-[var(--accent)]/5 px-3 py-1.5">
-              <span className="w-1.5 h-1.5 bg-[var(--accent)] inline-block pulse-glow" aria-hidden />
-              <span className="text-[var(--accent)]">{gatedCounts.spectator}</span>
-              <span>invite-only launch{gatedCounts.spectator === 1 ? '' : 'es'} live</span>
-            </span>
-          )}
-        </div>
-      )}
+      {/* Gated-launch widget removed 2026-05-29 alongside hiding
+          stealth/spectator from the submit UI — those modes conflict
+          with PROOF's equal-entry thesis as-built. Backend still tracks
+          counts for legacy data; Phase 6 will rebuild as a properly-
+          disclosed "Team Round" surface. */}
 
       {/* CTA + scroll affordance. Two affordances on purpose: the
           button labels the action, the chevron animates the gesture.

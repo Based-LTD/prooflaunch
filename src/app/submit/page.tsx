@@ -923,68 +923,14 @@ function SubmitPageInner() {
             </div>
           )}
 
-          {/* ── Launch Visibility (Launch Config v2 — Phase 1) ──
-              Lets creators pick how their launch is exposed to the public.
-              `open` is the default + matches legacy behavior. `stealth` +
-              `spectator` add an allowlist gate the creator manages here. */}
-          <div className="border border-[var(--border)] bg-[var(--card)]/40 p-4 sm:p-5 space-y-4">
-            <div className="space-y-1">
-              <h3 className="text-sm font-semibold uppercase tracking-wide">Launch Visibility</h3>
-              <p className="text-xs text-[var(--muted)]">
-                Pick how the public sees this launch. Stealth + spectator both gate backing to your allowlist.
-                All modes auto-flip to public the moment the token launches — that's the PROOF guarantee.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {[
-                { key: 'open', label: 'OPEN', desc: 'Anyone sees + backs. Standard launch.' },
-                { key: 'spectator', label: 'SPECTATOR', desc: 'Public listing, allowlist-only backing. Build hype while staying selective.' },
-                { key: 'stealth', label: 'INTERNAL', desc: 'Hidden from public board. Allowlist-only. Total control.' },
-              ].map((opt) => {
-                const selected = formData.visibility === opt.key;
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, visibility: opt.key as typeof prev.visibility }))}
-                    className={`border p-3 text-left transition-colors ${
-                      selected
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                        : 'border-[var(--border)] hover:border-[var(--muted)]'
-                    }`}
-                  >
-                    <div className={`text-xs font-mono font-semibold ${selected ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
-                      {opt.label}
-                    </div>
-                    <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
-                      {opt.desc}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Allowlist input — only shown for stealth + spectator */}
-            {formData.visibility !== 'open' && (
-              <div className="space-y-2">
-                <label className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
-                  Initial Allowlist (one wallet per line)
-                </label>
-                <textarea
-                  value={formData.allowlistText}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, allowlistText: e.target.value }))}
-                  placeholder={'Wallet1...\nWallet2...\nWallet3...'}
-                  rows={5}
-                  className="w-full text-xs font-mono"
-                />
-                <p className="text-[11px] text-[var(--muted)] leading-snug">
-                  Only these wallets can back during the restricted round. Your own wallet is added automatically — don't include it here.
-                  You can add or remove wallets anytime after launch via your creator dashboard.
-                </p>
-              </div>
-            )}
-          </div>
+          {/* Launch visibility removed from submit UI 2026-05-29.
+              Stealth + spectator modes conflict with Proof Launch's
+              "equal entry" thesis (insiders get curve-open prices
+              before the public, which reads as front-running regardless
+              of intent). Backend wiring + DB columns retained for a
+              future structured "Team Round" product (Phase 6) that
+              would require time-locked allocations + public disclosure.
+              All new submissions default to `open`. */}
 
           {/* ── Trading Fees (Phase 5: bot delegation lives in the bot section below) ──
               Standard 90/10 split is fixed. If the creator enables the buyback
