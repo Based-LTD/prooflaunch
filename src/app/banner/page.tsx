@@ -6,210 +6,151 @@ const MUTED = '#5a5a52';
 const FG = '#e8e6df';
 const FONT = "'IBM Plex Mono', ui-monospace, monospace";
 
-// X banner: 1500x500
-function BannerLarge() {
+// One-page brand assets gallery. Shows the new profile pic alongside
+// every banner variant so the team can pick the combo in one tab.
+// All banner variants except the main are served as PNGs via their
+// /banner/<name>/route.tsx ImageResponse endpoints — embed as <img>.
+
+const BANNER_VARIANTS = [
+  { slug: 'horizon',  label: 'Horizon',  desc: 'Single thin horizon line + subliminal dawn glow. Most minimal — perfect for overlaying the new P/L profile pic.' },
+  { slug: 'gradient', label: 'Gradient', desc: 'Abstract gradient. Quiet, no text.' },
+  { slug: 'staff',    label: 'Staff',    desc: 'Minimal staff design.' },
+  { slug: 'waveform', label: 'Waveform', desc: 'Subtle waveform pattern.' },
+];
+
+// Clean, self-rendered profile pic (no AI watermark, brand-locked colors).
+// /profile is a Next.js ImageResponse route → PNG. Original Gemini ref
+// kept below for side-by-side comparison.
+const PROFILE_SRC = '/profile';
+const PROFILE_REF_SRC = '/images/Gemini_Generated_Image_1hmdi21hmdi21hmd.jpg';
+
+// Compact card per banner / asset.
+function AssetCard({ title, url, desc, children }: {
+  title: string; url: string; desc?: string; children: React.ReactNode;
+}) {
   return (
-    <div
-      style={{
-        width: 1500,
-        height: 500,
-        background: BG,
-        position: 'relative',
-        fontFamily: FONT,
-        color: FG,
-        overflow: 'hidden',
-      }}
-    >
-      {/* Top status bar */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 40,
-          borderBottom: `1px solid ${MUTED}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 32px',
-          fontSize: 13,
-          color: MUTED,
-          letterSpacing: '0.2em',
-          textTransform: 'uppercase',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ width: 8, height: 8, background: '#00d97e', display: 'inline-block' }} />
-          <span>MAINNET · LIVE</span>
-        </div>
-        <span style={{ color: AMBER }}>// PROOF_LAUNCH.SYS</span>
-      </div>
-
-      {/* Bottom status bar */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 40,
-          borderTop: `1px solid ${MUTED}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 32px',
-          fontSize: 13,
-          color: MUTED,
-          letterSpacing: '0.2em',
-          textTransform: 'uppercase',
-        }}
-      >
-        <span>SLOTS · BACKERS · LAUNCH</span>
-        <span style={{ color: AMBER }}>prooflaunch.fun</span>
-      </div>
-
-      {/* Center content */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: '40px 0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0 80px',
-          gap: 56,
-        }}
-      >
-        {/* P/L mark */}
-        <div
-          style={{
-            width: 200,
-            height: 200,
-            border: `6px solid ${AMBER}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-          }}
+    <section className="border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <h3 className="font-mono uppercase tracking-tight text-base">{title}</h3>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:underline"
         >
-          <div
-            style={{
-              fontSize: 108,
-              color: AMBER,
-              letterSpacing: '-0.04em',
-              lineHeight: 1,
-              fontWeight: 600,
-            }}
-          >
-            P<span style={{ opacity: 0.55, margin: '0 4px' }}>/</span>L
-          </div>
-        </div>
-
-        {/* Wordmark + tagline */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div
-            style={{
-              fontSize: 16,
-              color: MUTED,
-              letterSpacing: '0.3em',
-              textTransform: 'uppercase',
-            }}
-          >
-            &gt; SYSTEM
-          </div>
-          <div
-            style={{
-              fontSize: 88,
-              color: FG,
-              letterSpacing: '-0.02em',
-              lineHeight: 1,
-              textTransform: 'uppercase',
-              fontWeight: 600,
-            }}
-          >
-            Proof<span style={{ color: AMBER }}>/</span>Launch
-          </div>
-          <div
-            style={{
-              fontSize: 22,
-              color: MUTED,
-              marginTop: 6,
-            }}
-          >
-            The proving grounds for tokens
-          </div>
-        </div>
+          {url} ↗
+        </a>
       </div>
-
-      {/* Corner brackets - top right */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 56,
-          right: 32,
-          width: 16,
-          height: 16,
-          borderTop: `2px solid ${AMBER}`,
-          borderRight: `2px solid ${AMBER}`,
-        }}
-      />
-      {/* Corner brackets - bottom right */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 56,
-          right: 32,
-          width: 16,
-          height: 16,
-          borderBottom: `2px solid ${AMBER}`,
-          borderRight: `2px solid ${AMBER}`,
-        }}
-      />
-    </div>
-  );
-}
-
-// Half-scale preview
-function BannerPreview() {
-  return (
-    <div style={{ transform: 'scale(0.5)', transformOrigin: 'top left', width: 1500, height: 500 }}>
-      <BannerLarge />
-    </div>
+      {desc && (
+        <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">{desc}</p>
+      )}
+      <div className="bg-black">{children}</div>
+      <p className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-widest">
+        right-click → Save image as…
+      </p>
+    </section>
   );
 }
 
 export default function BannerPage() {
   return (
-    <div className="min-h-screen p-8 space-y-12">
-      <div className="border border-[var(--border)] bg-[var(--card)] p-6">
+    <div className="min-h-screen p-4 sm:p-8 space-y-6 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
         <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">
-          // X_BANNER.PREVIEW
+          // BRAND_ASSETS
         </div>
-        <h1 className="text-2xl font-mono uppercase tracking-tight">X Banner</h1>
-        <p className="text-sm text-[var(--muted)] mt-3 font-mono">
-          1500 × 500px. Right-click the full size below to save, or take a screenshot.
+        <h1 className="text-2xl font-mono uppercase tracking-tight">Brand assets</h1>
+        <p className="text-sm text-[var(--muted)] mt-2 font-mono leading-relaxed">
+          Profile pic + every X banner variant in one place. All banner variants
+          render at 1500×500 (X spec). The minimal ones are designed to be overlaid
+          with the new P/L profile pic — pick whichever vibe.
         </p>
       </div>
 
-      {/* Half-scale preview */}
-      <div>
-        <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-3">
-          50% Preview (750 × 250)
+      {/* Profile pic — our clean self-rendered version */}
+      <AssetCard
+        title="Profile Pic · /profile · 1024×1024 PNG"
+        url={PROFILE_SRC}
+        desc="Our brand mark, no AI watermark. Right-click → Save image as → upload to X profile. Auto-matches the favicon and the brand orange (#ff9d00)."
+      >
+        <div className="flex items-center justify-center bg-black p-6">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={PROFILE_SRC}
+            alt="Profile pic"
+            style={{ width: 256, height: 256, display: 'block' }}
+          />
         </div>
-        <div style={{ width: 750, height: 250, overflow: 'hidden', border: '1px solid var(--border)' }}>
-          <BannerPreview />
+      </AssetCard>
+
+      {/* Reference (the Gemini original we matched against) — keep here
+          so you can side-by-side and confirm the new one matches the vibe. */}
+      <AssetCard
+        title="Reference (Gemini, with watermark) — for comparison only"
+        url={PROFILE_REF_SRC}
+        desc="The original AI-generated reference. Has a sparkle watermark bottom-right. Don't upload this — use /profile above."
+      >
+        <div className="flex items-center justify-center bg-black p-6 opacity-60">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={PROFILE_REF_SRC}
+            alt="Reference"
+            style={{ width: 256, height: 256, display: 'block' }}
+          />
         </div>
+      </AssetCard>
+
+      {/* Section: banners */}
+      <div className="border-l-2 border-[var(--accent)] pl-3 mt-8">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+          // X_BANNERS · 1500×500
+        </div>
+        <h2 className="text-lg font-mono uppercase tracking-tight">Banner variants</h2>
       </div>
 
-      {/* Full size */}
-      <div>
-        <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-3">
-          Full size (1500 × 500) — right-click to save
+      {/* Main banner — downloadable PNG via /banner-image so it's
+          right-click-saveable. Preview shows the live React render. */}
+      <AssetCard
+        title="Main banner — Proof/Launch wordmark"
+        url="/banner-image"
+        desc="The current banner: chrome + centered wordmark + tagline + corner brackets. Right-click → Save image as → upload to X."
+      >
+        <div className="bg-black overflow-hidden" style={{ width: 750, height: 250 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/banner-image"
+            alt="Main banner"
+            width={750}
+            height={250}
+            style={{ display: 'block' }}
+          />
         </div>
-        <div style={{ border: '1px solid var(--border)', display: 'inline-block', overflow: 'auto', maxWidth: '100%' }}>
-          <BannerLarge />
-        </div>
+      </AssetCard>
+
+      {/* Clean variants — already logo-free, just abstract backgrounds */}
+      {BANNER_VARIANTS.map((v) => (
+        <AssetCard
+          key={v.slug}
+          title={v.label}
+          url={`/banner/${v.slug}`}
+          desc={v.desc}
+        >
+          <div className="bg-black overflow-hidden" style={{ width: 750, height: 250 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/banner/${v.slug}`}
+              alt={v.label}
+              width={750}
+              height={250}
+              style={{ display: 'block' }}
+            />
+          </div>
+        </AssetCard>
+      ))}
+
+      <div className="text-center pt-6 pb-12 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+        // END
       </div>
     </div>
   );

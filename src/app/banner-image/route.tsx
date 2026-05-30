@@ -1,15 +1,21 @@
 import { ImageResponse } from 'next/og';
 
+// X banner as a downloadable 1500×500 PNG. Matches the live /banner page
+// render exactly — but as a real image file so creators can right-click →
+// "Save image as" to upload to X. The previous version still rendered the
+// boxed P/L mark; this one drops the box (the profile pic carries the mark)
+// and uses the centered left-aligned wordmark layout.
+
 export const runtime = 'edge';
 
 const AMBER = '#ff9d00';
-const BG = '#0a0a0a';
+const BG    = '#0a0a0a';
 const MUTED = '#5a5a52';
-const FG = '#e8e6df';
+const FG    = '#e8e6df';
 
 export async function GET() {
   const fontData = await fetch(
-    new URL('../IBMPlexMono-SemiBold.woff', import.meta.url)
+    new URL('../IBMPlexMono-SemiBold.woff', import.meta.url),
   ).then((r) => r.arrayBuffer());
 
   return new ImageResponse(
@@ -47,7 +53,7 @@ export async function GET() {
           <span style={{ color: AMBER }}>// PROOF_LAUNCH.SYS</span>
         </div>
 
-        {/* Center body */}
+        {/* Center body — wordmark column, left-aligned, centered as a unit */}
         <div
           style={{
             flex: 1,
@@ -55,36 +61,9 @@ export async function GET() {
             alignItems: 'center',
             justifyContent: 'center',
             padding: '0 80px',
-            gap: 56,
           }}
         >
-          {/* P/L mark */}
-          <div
-            style={{
-              width: 200,
-              height: 200,
-              border: `7px solid ${AMBER}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 108,
-                color: AMBER,
-                letterSpacing: '-0.04em',
-                lineHeight: 1,
-                display: 'flex',
-              }}
-            >
-              P<span style={{ opacity: 0.55, margin: '0 4px' }}>/</span>L
-            </div>
-          </div>
-
-          {/* Wordmark + tagline */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
             <div
               style={{
                 fontSize: 18,
@@ -116,7 +95,7 @@ export async function GET() {
                 display: 'flex',
               }}
             >
-              The proving grounds for tokens
+              Shared Pump.fun Launches. Equal entry.
             </div>
           </div>
         </div>
@@ -138,12 +117,18 @@ export async function GET() {
           <span>SLOTS · BACKERS · LAUNCH</span>
           <span style={{ color: AMBER }}>prooflaunch.fun</span>
         </div>
+
+        {/* Corner brackets — all four corners for symmetry */}
+        <div style={{ position: 'absolute', top: 60,    left: 32,  width: 16, height: 16, borderTop:    `2px solid ${AMBER}`, borderLeft:  `2px solid ${AMBER}`, display: 'flex' }} />
+        <div style={{ position: 'absolute', top: 60,    right: 32, width: 16, height: 16, borderTop:    `2px solid ${AMBER}`, borderRight: `2px solid ${AMBER}`, display: 'flex' }} />
+        <div style={{ position: 'absolute', bottom: 60, left: 32,  width: 16, height: 16, borderBottom: `2px solid ${AMBER}`, borderLeft:  `2px solid ${AMBER}`, display: 'flex' }} />
+        <div style={{ position: 'absolute', bottom: 60, right: 32, width: 16, height: 16, borderBottom: `2px solid ${AMBER}`, borderRight: `2px solid ${AMBER}`, display: 'flex' }} />
       </div>
     ),
     {
       width: 1500,
       height: 500,
       fonts: [{ name: 'Plex', data: fontData, weight: 600, style: 'normal' }],
-    }
+    },
   );
 }
