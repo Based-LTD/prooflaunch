@@ -45,14 +45,17 @@ const JUP_SWAP_URL = 'https://lite-api.jup.ag/swap/v1/swap';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 // Skip thresholds. Below these we just leave SOL parked.
-const MIN_SWAP_LAMPORTS = 10_000_000;          // 0.01 SOL min to bother swapping/distributing
+// All three are env-tunable so we can lower during live tests without a
+// code change (set tiny values, fire the cron once, restore). Defaults
+// are the prod-safe values: 0.01 SOL min swap + 0.01/0.02 SOL gas reserve.
+const MIN_SWAP_LAMPORTS = Number(process.env.BOT_MIN_SWAP_LAMPORTS || 10_000_000);
 // Reserved in bot wallet for tx fees + pump.fun BC overhead. Bumped from
 // 0.005 → 0.01 after the V2TEST swap failed when BC needed unwrapped
 // SOL beyond what we'd left after wrapping. For distribute-to-many
 // actions we leave a bit MORE so per-recipient transfer rent + gas
 // don't bottom out the wallet.
-const GAS_RESERVE_LAMPORTS = 10_000_000;
-const DIST_GAS_RESERVE_LAMPORTS = 20_000_000;  // 0.02 SOL when distributing
+const GAS_RESERVE_LAMPORTS = Number(process.env.BOT_GAS_RESERVE_LAMPORTS || 10_000_000);
+const DIST_GAS_RESERVE_LAMPORTS = Number(process.env.BOT_DIST_GAS_RESERVE_LAMPORTS || 20_000_000);
 const SLIPPAGE_BPS = 2000;                     // 20% — meme tokens are thin
 
 // Hard caps to prevent a runaway distribute action from consuming all
