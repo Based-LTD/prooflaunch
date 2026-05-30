@@ -215,32 +215,24 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
         )}
       </div>
 
-      {/* Visibility selector */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        {(['open', 'spectator', 'stealth'] as Visibility[]).map((v) => {
-          const meta = VISIBILITY_LABELS[v];
-          const selected = visibility === v;
+      {/* Visibility readout — stealth + spectator are no longer selectable
+          (off-brand for the "open by default, publicly auditable" pitch).
+          The API still accepts them so any legacy launches in those modes
+          keep working; we just no longer let the creator toggle them. */}
+      <div className="grid grid-cols-1 gap-2">
+        {(() => {
+          const meta = VISIBILITY_LABELS[visibility] ?? VISIBILITY_LABELS.open;
           return (
-            <button
-              key={v}
-              type="button"
-              disabled={!canEdit || loading || selected}
-              onClick={() => changeVisibility(v)}
-              className={`border p-3 text-left transition-colors ${
-                selected
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/10'
-                  : 'border-[var(--border)] hover:border-[var(--muted)]'
-              } ${(!canEdit || loading) && !selected ? 'opacity-40 cursor-not-allowed' : ''}`}
-            >
-              <div className="text-xs font-mono font-semibold" style={{ color: selected ? meta.color : 'var(--foreground)' }}>
-                {meta.name} {selected && '· active'}
+            <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-3">
+              <div className="text-xs font-mono font-semibold" style={{ color: meta.color }}>
+                {meta.name} · active
               </div>
               <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
                 {meta.desc}
               </div>
-            </button>
+            </div>
           );
-        })}
+        })()}
       </div>
 
       {!canEdit && (

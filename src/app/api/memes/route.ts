@@ -108,6 +108,27 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Augment each meme with its bot count for card-level rendering. One
+    // batched query → group by meme_id → attach as `bot_count`. Cheap
+    // even at thousands of memes (single round trip). Legacy single-bot
+    // memes are also surfaced via their buyback_bot_enabled column so the
+    // card can show "1 BOT" for pre-Phase-B launches too.
+    if (filteredData && filteredData.length > 0) {
+      const memeIds = filteredData.map((m) => m.id);
+      const { data: botRows } = await supabase
+        .from('meme_bots')
+        .select('meme_id')
+        .in('meme_id', memeIds);
+      const botCountByMeme = new Map<string, number>();
+      for (const row of botRows ?? []) {
+        botCountByMeme.set(row.meme_id, (botCountByMeme.get(row.meme_id) ?? 0) + 1);
+      }
+      filteredData = filteredData.map((m) => ({
+        ...m,
+        bot_count: botCountByMeme.get(m.id) ?? (m.buyback_bot_enabled ? 1 : 0),
+      }));
+    }
+
     return NextResponse.json({ memes: filteredData });
   } catch (error) {
     return NextResponse.json(

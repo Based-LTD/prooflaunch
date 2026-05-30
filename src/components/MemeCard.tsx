@@ -9,6 +9,9 @@ interface MemeCardProps {
   meme: Meme & {
     backer_count?: number;
     progress_percent?: number;
+    // Populated by /api/memes (list); counts both Phase B meme_bots rows
+    // and legacy single-bot memes (buyback_bot_enabled = 1).
+    bot_count?: number;
   };
 }
 
@@ -59,6 +62,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
     pump_fun_url,
     mint_address,
     backer_count = 0,
+    bot_count = 0,
   } = meme;
 
   const handleCopyCA = (e: React.MouseEvent) => {
@@ -108,10 +112,18 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
             )}
             {hasReservedSlots && !isTeamRound && (
               <span
-                className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent)]/60 text-[var(--accent)]"
-                title={`${reservedSlots} of ${totalSlots} slots reserved for declared wallets · ${totalSlots - reservedSlots} open to public`}
+                className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent-gold)]/60 text-[var(--accent-gold)] bg-[var(--accent-gold)]/5"
+                title={`Team launch — ${reservedSlots} of ${totalSlots} slots reserved for declared wallets · ${totalSlots - reservedSlots} open to public`}
               >
-                {totalSlots - reservedSlots}/{totalSlots} OPEN
+                TEAM · {reservedSlots}/{totalSlots}
+              </span>
+            )}
+            {bot_count > 0 && (
+              <span
+                className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent)]/60 text-[var(--accent)] bg-[var(--accent)]/5"
+                title={`Programmable tokenomics — ${bot_count} active bot${bot_count === 1 ? '' : 's'} (burn / vaults / airdrops)`}
+              >
+                {bot_count} BOT{bot_count === 1 ? '' : 'S'}
               </span>
             )}
             <span className={statusClass}>{statusLabel}</span>
