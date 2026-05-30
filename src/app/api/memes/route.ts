@@ -325,12 +325,20 @@ export async function POST(request: NextRequest) {
       );
     }
     if (reservedSlotsNum > 0) {
-      const allowlistCount = Array.isArray(initial_allowlist)
-        ? initial_allowlist.filter((w: unknown) => typeof w === 'string' && w.trim().length >= 32).length
-        : 0;
-      if (allowlistCount < reservedSlotsNum) {
+      // Creator wallet is auto-seeded into the allowlist below, so it
+      // counts toward filling reserved slots. Dedup via Set in case the
+      // user also pasted their own wallet into the textarea.
+      const userWallets = Array.isArray(initial_allowlist)
+        ? initial_allowlist.filter((w: unknown) => typeof w === 'string' && w.trim().length >= 32)
+        : [];
+      const distinct = new Set<string>((userWallets as string[]).map((w) => w.trim()));
+      distinct.add(creator_wallet);
+      if (distinct.size < reservedSlotsNum) {
+        const needed = Math.max(0, reservedSlotsNum - 1 - (userWallets.length));
         return NextResponse.json(
-          { error: `reserved_slots=${reservedSlotsNum} but only ${allowlistCount} wallets in allowlist. Provide at least ${reservedSlotsNum} wallets.` },
+          {
+            error: `reserved_slots=${reservedSlotsNum} but only ${distinct.size} unique allowlist wallets (incl. creator). Add ${needed} more wallet${needed === 1 ? '' : 's'} to the allowlist.`,
+          },
           { status: 400 },
         );
       }

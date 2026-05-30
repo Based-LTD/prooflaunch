@@ -999,7 +999,7 @@ function SubmitPageInner() {
                 {formData.reservedSlots > 0 && (
                   <div className="space-y-2">
                     <label className={labelClass}>
-                      Allowlist wallets (one per line, need at least {formData.reservedSlots})
+                      Allowlist wallets (one per line · creator covers 1 reserved slot, so you need {Math.max(0, formData.reservedSlots - 1)} more)
                     </label>
                     <textarea
                       name="allowlistText"
