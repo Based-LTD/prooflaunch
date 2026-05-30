@@ -13,12 +13,11 @@ import { MemeActionPanel } from '@/components/meme/MemeActionPanel';
 import { MemeTabs } from '@/components/meme/MemeTabs';
 import { MobileStickyCTA } from '@/components/meme/MobileStickyCTA';
 import { CreatorPastLaunches } from '@/components/CreatorPastLaunches';
-import { ClaimRewards } from '@/components/ClaimRewards';
-import { LaunchVisibilityPanel } from '@/components/meme/LaunchVisibilityPanel';
 import { FeeDistributionBadge } from '@/components/meme/FeeDistributionBadge';
-import { BuybackBotPanel } from '@/components/meme/BuybackBotPanel';
 import { BackerLoungePanel } from '@/components/meme/BackerLoungePanel';
-import { BackerVaultManager } from '@/components/meme/BackerVaultManager';
+// NOTE: BuybackBotPanel / LaunchVisibilityPanel / BackerVaultManager /
+// ClaimRewards are now rendered inside MemeTabs (control-center pattern).
+// Don't import them here.
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
 
@@ -601,72 +600,13 @@ export default function MemeDetailPage() {
           )}
         </div>
 
-        {/* Fee distribution split — visible to everyone viewing the
-            token. Renders only when meme.fee_preset is set (Phase 2+
-            memes). Legacy memes with NULL config render nothing here. */}
+        {/* Inline informational chips — small, always-visible context.
+            FeeDistributionBadge auto-hides for legacy memes; BackerLoungePanel
+            auto-hides until a keycard drop exists. */}
         <FeeDistributionBadge meme={meme} />
-
-        {/* Buyback bot status — visible to everyone for transparency.
-            Renders only when meme.buyback_bot_enabled. Shows action,
-            bot wallet, totals, recent runs (all on-chain auditable). */}
-        <BuybackBotPanel meme={meme} />
-
-        {/* Phase 4 — Keycard "Holder Drop" public unlock card.
-            Returns null for the creator (they see the manager below). */}
         <BackerLoungePanel meme={meme} isCreator={isCreator} />
 
-        {/* Phase 4 — Creator manager for the drop content. Hidden for
-            non-creators; hidden until the gate exists. */}
-        <BackerVaultManager meme={meme} isCreator={isCreator} />
-
-        {/* Creator-only: launch visibility + allowlist controls.
-            Shows during the backing phase (when visibility is mutable);
-            disabled UI when meme is past backing. Hidden entirely for
-            non-creators — they don't see this panel at all. */}
-        {isCreator && (
-          <LaunchVisibilityPanel
-            memeId={meme.id}
-            currentVisibility={(meme.visibility ?? 'open') as 'open' | 'stealth' | 'spectator'}
-            creatorWallet={meme.creator_wallet}
-            canEdit={meme.status === 'backing'}
-            maxBackingSol={meme.max_backing_sol ?? null}
-          />
-        )}
-
-        {/* Rewards (post-launch, only if user is creator or distributed-backer) */}
-        {isLaunched && (isCreator || isBacker) && (
-          <ClaimRewards memeId={meme.id} isCreator={isCreator} isBacker={isBacker} />
-        )}
-
-        {/* Manual distribution retry — only surfaces if cron stragglers exist
-            AND the user is the creator. Auto-distribution is the default;
-            this is a rare fallback path. */}
-        {isLaunched && isCreator && !launching && !distributing && backings.some((b) => b.status === 'confirmed') && (
-          <div className="border border-[var(--warning)] bg-[var(--card)] p-4 space-y-2">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
-              {'// DISTRIBUTION_PENDING'}
-            </div>
-            <p className="text-[11px] font-mono text-[var(--muted)]">
-              Some backers are still pending. Auto-distribution will retry; you can also nudge it manually.
-            </p>
-            <button onClick={handleDistribute} disabled={distributing} className="btn-primary w-full">
-              {distributing ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Distributing…
-                </span>
-              ) : (
-                '[▶] Retry Pending Distribution'
-              )}
-            </button>
-            {distributeStatus && (
-              <div className="p-2.5 text-[11px] font-mono text-center uppercase tracking-widest border border-[var(--accent)] text-[var(--accent)]">
-                &gt; {distributeStatus}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Creator track record — inline collapsible, the trust signal */}
+        {/* Creator track record — collapsible trust signal */}
         {meme.creator_wallet && (
           <CreatorPastLaunches
             wallet={meme.creator_wallet}
@@ -675,18 +615,27 @@ export default function MemeDetailPage() {
           />
         )}
 
-        {/* Tabs: everything else collapses into focused panels */}
+        {/* Dashboard / control-center tabs. Absorbs the previous stack
+            of standalone panels (Bots, Visibility, Vault manager, Rewards,
+            distribute retry) into one tabbed container. Tabs are
+            conditionally surfaced based on meme + viewer. */}
         <MemeTabs
           meme={meme}
           backings={backings}
           backerCount={backerCount}
           isLaunched={isLaunched}
           isProving={isProving}
+          isCreator={isCreator}
+          isBacker={isBacker}
           publicKeyB58={publicKey?.toBase58()}
           canWithdraw={isProving}
           onWithdraw={requestWithdraw}
           withdrawing={withdrawing}
           withdrawStatus={withdrawStatus}
+          distributing={distributing}
+          distributeStatus={distributeStatus}
+          onDistribute={handleDistribute}
+          hasPendingBackings={isLaunched && backings.some((b) => b.status === 'confirmed')}
         />
       </div>
 
