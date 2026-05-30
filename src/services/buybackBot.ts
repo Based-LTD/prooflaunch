@@ -77,30 +77,11 @@ const HOLDER_EXCLUSIONS = new Set<string>([
 ]);
 const PUMP_BC = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
 
-// Program IDs whose accounts are AMM pools / bonding curves — never
-// real community holders. Filter applied to the on-chain holders
-// snapshot in buildRecipientList so distributions don't route to
-// liquidity pool wallets.
-//
-// SCOPE — verified correct for 100% of Proof Launch's user base
-// (every launch goes through Pump.fun BC and graduates to PumpSwap):
-//
-//   6EF8rrecthR5...  Pump.fun bonding curve — verified against V2TEST
-//                     BC vault owner (2ng4quRfkz...)
-//   pAMMBay6oce...   PumpSwap AMM — verified against the known PROOF
-//                     pool wallet (8xLcPgxcMtY...) owner
-//
-// NOTE: deliberately NOT adding Raydium / Orca / Meteora / Streamflow
-// / Squads / Token-Program IDs until each is verified against a real
-// on-chain account. Over-eager additions either get the ID wrong (no
-// effect — fine, just suboptimal) or worse, exclude legit users
-// (Squads multisig holders would lose their distributions). Add new
-// entries here as we encounter creators using other AMMs and can
-// verify the exact program ID.
-const NON_HOLDER_PROGRAMS = new Set<string>([
-  '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P', // Pump.fun bonding curve
-  'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA', // PumpSwap AMM
-]);
+// Previous denylist (Pump BC + PumpSwap AMM only) replaced 2026-05-30
+// with a System-Program allowlist inside buildRecipientList: every
+// non-EOA holder (every PDA owned by any program) is filtered out, not
+// just the two known AMMs. Stops SOL/tokens from being stranded in
+// Jupiter perps, Axiom, Kamino, Drift, CEX hot wallets, etc.
 
 function decryptKeypair(enc: string): Keypair {
   return Keypair.fromSecretKey(bs58.decode(decryptPrivateKey(enc)));
@@ -582,13 +563,23 @@ async function buildRecipientList(
       } catch { /* skip unparseable */ }
     }
 
-    // Filter program-owned accounts (AMM pools, vesting escrows,
-    // bonding curves) by checking each candidate's account owner on
-    // chain. Permanent signal — doesn't drift as the token's
-    // distribution changes over time (which a "exclude top X%"
-    // heuristic would, since a real whale could eventually hold more
-    // than the AMM pool). Batched via getMultipleAccountsInfo to
-    // keep the RPC cost cheap (1-2 calls for up to 100 holders).
+    // Filter PDAs / program-owned accounts. Inverted from a denylist
+    // (which only caught Pump BC + PumpSwap) to an allowlist on System
+    // Program: every EOA wallet (Phantom / Backpack / Solflare / Ledger /
+    // any self-custody) is owned by the System Program. Anything else
+    // means the holder is a PDA — Jupiter perps, Jupiter limit orders,
+    // Axiom custodial accounts, Raydium / Orca / Meteora LP pools,
+    // Kamino / Drift collateral, CEX deposit hot wallets, etc. Sending
+    // SOL or tokens to those PDAs strands them — no human can claim.
+    //
+    // Same policy + same filter as /api/airdrop/daily. Keep them in sync.
+    //
+    // Edge case: brand-new wallets that received tokens but never
+    // received SOL have NO on-chain SOL account yet (info === null).
+    // These are valid EOAs — Phantom/Backpack create the SOL account on
+    // first receive — so we keep them; the airdrop transfer itself
+    // creates the account.
+    const SYSTEM_PROGRAM = '11111111111111111111111111111111';
     const candidateWallets = [...byOwner.keys()];
     if (candidateWallets.length > 0) {
       const BATCH = 100;
@@ -600,9 +591,8 @@ async function buildRecipientList(
       }
       for (let i = 0; i < candidateWallets.length; i++) {
         const info = allInfos[i];
-        if (!info) continue; // null = token-holder whose SOL account doesn't exist yet (first-time recipient); keep
-        const owner = info.owner.toBase58();
-        if (NON_HOLDER_PROGRAMS.has(owner)) {
+        if (!info) continue; // null = new wallet, no SOL acct yet; keep
+        if (info.owner.toBase58() !== SYSTEM_PROGRAM) {
           byOwner.delete(candidateWallets[i]);
         }
       }

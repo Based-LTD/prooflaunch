@@ -134,6 +134,43 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
   // Filter exclusions
   for (const ex of EXCLUDED_WALLETS) holders.delete(ex);
 
+  // Filter PDAs / program-owned accounts. EOA wallets (Phantom, Backpack,
+  // Solflare, Ledger, every regular self-custody wallet) are owned by the
+  // System Program. Any other owner means the holder is a PDA — a DeFi
+  // program (Jupiter perps, Jupiter limit orders, Raydium, Kamino, Drift,
+  // etc.) holding tokens on a user's behalf. Sending SOL to those PDAs
+  // strands it forever because no human can claim it; the policy is
+  // already "hold in your own wallet to qualify" so this just stops the
+  // leak. Their share gets redistributed to actual holders.
+  //
+  // Edge case: brand-new wallets that received PROOF but never received
+  // SOL have NO on-chain SOL account yet (info === null). These are valid
+  // EOAs — Phantom/Backpack create the SOL account on first receive — so
+  // we keep them (the airdrop transfer itself creates the account).
+  const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+  const candidateWallets = [...holders.keys()];
+  if (candidateWallets.length > 0) {
+    const BATCH = 100;
+    const allInfos: (Awaited<ReturnType<typeof conn.getAccountInfo>>)[] = [];
+    for (let i = 0; i < candidateWallets.length; i += BATCH) {
+      const batch = candidateWallets.slice(i, i + BATCH).map((w) => new PublicKey(w));
+      const infos = await conn.getMultipleAccountsInfo(batch, 'confirmed');
+      allInfos.push(...infos);
+    }
+    let droppedPdas = 0;
+    for (let i = 0; i < candidateWallets.length; i++) {
+      const info = allInfos[i];
+      if (!info) continue; // null = new wallet, no SOL acct yet; keep
+      if (info.owner.toBase58() !== SYSTEM_PROGRAM) {
+        holders.delete(candidateWallets[i]);
+        droppedPdas++;
+      }
+    }
+    if (droppedPdas > 0) {
+      console.log(`[airdrop] filtered ${droppedPdas} program-owned PDA holder(s) — share redistributed to EOAs`);
+    }
+  }
+
   // Layer Streamflow-locked balances (search by sender — same pattern as Roster)
   const streamClient = new SolanaStreamClient(rpcUrl, ICluster.Mainnet, 'confirmed');
   const walletList = [...holders.keys()];
