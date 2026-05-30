@@ -18,9 +18,11 @@ import {
   Key,
   Wallet,
   HelpCircle,
+  Bot,
+  ExternalLink,
 } from 'lucide-react';
 
-type TabId = 'overview' | 'backers' | 'creators' | 'fees' | 'security' | 'faq';
+type TabId = 'overview' | 'backers' | 'creators' | 'bots' | 'fees' | 'security' | 'faq';
 
 interface Tab {
   id: TabId;
@@ -32,6 +34,7 @@ const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: Rocket },
   { id: 'backers', label: 'For Backers', icon: Users },
   { id: 'creators', label: 'For Creators', icon: Zap },
+  { id: 'bots', label: 'Bots', icon: Bot },
   { id: 'fees', label: 'Fees', icon: Receipt },
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'faq', label: 'FAQ', icon: HelpCircle },
@@ -302,7 +305,158 @@ export default function DocsPage() {
                 This ensures creators have skin in the game alongside backers.
               </p>
             </div>
+
+            {/* Bot-stack callout — links to the bots tab for the deep dive */}
+            <div className="bg-[var(--accent)]/10 border-2 border-[var(--accent)]/30 p-4 mt-4 space-y-2">
+              <h3 className="font-bold text-[var(--accent)] uppercase tracking-wide flex items-center gap-2 text-sm">
+                <Bot className="w-4 h-4" />
+                Programmable Tokenomics
+              </h3>
+              <p className="text-sm text-[var(--muted)] leading-relaxed">
+                When submitting, you can stack up to 90% of trading fees across multiple bots —
+                burn, labeled treasury vaults you control, holder/backer airdrops. Every bot is
+                its own on-chain wallet, auditable forever. See the{' '}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bots')}
+                  className="text-[var(--accent)] underline hover:text-[var(--foreground)]"
+                >
+                  Bots tab
+                </button>{' '}
+                for the full breakdown.
+              </p>
+            </div>
           </section>
+        )}
+
+        {/* BOTS TAB — Phase B programmable tokenomics */}
+        {activeTab === 'bots' && (
+          <>
+            <section className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
+              <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
+                // PROGRAMMABLE_TOKENOMICS
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <Bot className="w-6 h-6 text-[var(--accent)]" />
+                <h2 className="text-2xl font-black uppercase tracking-tight">Bots — Tokenomics is Lego</h2>
+              </div>
+              <p className="text-[var(--foreground)]/80 leading-relaxed">
+                Every Proof Launch token can stack a programmable engine that runs on every
+                trade. Each bot gets its own dedicated Solscan wallet, receives a slice of
+                the trading-fee stream, and performs one action every cycle — burn supply,
+                hold tokens in a labeled treasury, or airdrop tokens / SOL to holders or
+                backers. Stack any combination you want, up to a 90% fee-budget cap.
+              </p>
+              <div className="bg-[var(--background)] border border-[var(--accent)]/40 p-4 text-sm leading-relaxed text-[var(--muted)]">
+                <strong className="text-[var(--accent)]">No other pump.fun launcher does this.</strong>{' '}
+                Every Pump trade has always been &quot;buy the curve and hope.&quot; Proof gives
+                creators a real programmable layer — burn, treasury, holder yield, backer
+                rewards — automated, every block, every trade, auditable forever.
+              </div>
+            </section>
+
+            {/* The 6 actions */}
+            <section className="border-2 border-[var(--border)] bg-[var(--card)] p-6 space-y-4">
+              <h3 className="font-black uppercase tracking-tight text-lg flex items-center gap-2">
+                <Zap className="w-5 h-5 text-[var(--accent-gold)]" /> The 6 actions
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                {[
+                  { emoji: '🔥', name: 'BURN', tag: 'Deflationary', desc: 'Buy tokens with delegated SOL, then burn them. Permanent, on-chain supply reduction every cycle.' },
+                  { emoji: '🏦', name: 'VAULT', tag: 'Treasury', desc: 'Buy + park in a labeled wallet you control (Marketing, DAO, Liquidity, Charity). Unlimited vaults per token. Creator-withdrawable via signed message — operational bots are sealed.' },
+                  { emoji: '🪙', name: 'TOKENS → HOLDERS', tag: 'Loyalty', desc: 'Buy tokens, then airdrop them pro-rata to every wallet currently holding the mint. Rewards holding, drives volume.' },
+                  { emoji: '🎯', name: 'TOKENS → BACKERS', tag: 'OG reward', desc: 'Buy tokens, then airdrop pro-rata to the genesis backers who funded the launch.' },
+                  { emoji: '💸', name: 'SOL → HOLDERS', tag: 'Yield', desc: 'Skip the swap entirely. Send delegated SOL pro-rata to every current holder — pure cash flow.' },
+                  { emoji: '💰', name: 'SOL → BACKERS', tag: 'OG yield', desc: 'Skip the swap. Send delegated SOL pro-rata to genesis backers.' },
+                ].map((a) => (
+                  <div key={a.name} className="border border-[var(--border)] bg-[var(--background)] p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base" aria-hidden>{a.emoji}</span>
+                        <span className="font-mono text-xs font-bold tracking-wide">{a.name}</span>
+                      </div>
+                      <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--accent)] border border-[var(--accent)]/40 px-1.5 py-0.5">
+                        {a.tag}
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-mono text-[var(--muted)] leading-snug">{a.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Vaults & withdrawals */}
+            <section className="border-2 border-[var(--accent-gold)] bg-[var(--card)] p-6 space-y-3">
+              <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent-gold)] text-black text-xs font-bold uppercase tracking-wider relative -mt-3 inline-block">
+                // VAULTS
+              </div>
+              <h3 className="font-black uppercase tracking-tight text-lg flex items-center gap-2">
+                <Key className="w-5 h-5 text-[var(--accent-gold)]" /> Labeled vaults you control
+              </h3>
+              <p className="text-sm text-[var(--muted)] leading-relaxed">
+                Vault bots are the breakthrough. Each one is a separate labeled wallet —
+                <strong className="text-[var(--foreground)]"> &ldquo;Marketing&rdquo;</strong>,
+                <strong className="text-[var(--foreground)]"> &ldquo;DAO Treasury&rdquo;</strong>,
+                <strong className="text-[var(--foreground)]"> &ldquo;Liquidity Reserve&rdquo;</strong>,
+                whatever you want. The fees flow in automatically. You can withdraw whenever
+                you want via a signed message from your creator wallet.
+              </p>
+              <ul className="text-sm text-[var(--muted)] space-y-1.5 pl-4">
+                <li>· Withdrawals require an Ed25519 signature from the meme&apos;s creator wallet. No platform admin can drain your vault.</li>
+                <li>· Every withdrawal is recorded in <code className="text-[var(--accent)]">meme_bot_withdrawals</code> — public-read, immutable audit trail.</li>
+                <li>· Single-use nonces + ±5min replay window prevent any replayed withdrawal request.</li>
+                <li>· Operational bots (BURN, distribute_*) are sealed — only VAULT bots can be withdrawn from. This prevents racing the bot mid-cycle.</li>
+              </ul>
+            </section>
+
+            {/* Stacking + budget */}
+            <section className="border-2 border-[var(--border)] bg-[var(--card)] p-6 space-y-3">
+              <h3 className="font-black uppercase tracking-tight text-lg flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-[var(--accent)]" /> Stacking + budget
+              </h3>
+              <p className="text-sm text-[var(--muted)] leading-relaxed">
+                Every token has a 90% fee budget to delegate. The remaining 10% always
+                goes to the platform. You design the split:
+              </p>
+              <div className="bg-[var(--background)] border border-[var(--border)] p-4 font-mono text-xs space-y-1">
+                <div>BURN ............ 30%</div>
+                <div>VAULT (Marketing) 15%</div>
+                <div>SOL → HOLDERS ... 20%</div>
+                <div className="border-t border-[var(--border)] pt-1 mt-1">
+                  Total bots ...... 65%
+                </div>
+                <div className="text-[var(--accent)]">Backers ......... 25%</div>
+                <div className="text-[var(--muted)]">Platform ........ 10%</div>
+              </div>
+              <ul className="text-sm text-[var(--muted)] space-y-1 pl-4 pt-2">
+                <li>· Minimum 5% per bot · maximum 90% combined.</li>
+                <li>· One of each non-vault action per stack (no point in two BURN bots — they collapse).</li>
+                <li>· Unlimited labeled VAULTs (each is a distinct public commitment).</li>
+                <li>· Stack edited later from the creator dashboard. Add or remove bots anytime.</li>
+              </ul>
+            </section>
+
+            {/* Receipts */}
+            <section className="border-2 border-[var(--success)] bg-[var(--card)] p-6 space-y-3">
+              <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--success)] text-white text-xs font-bold uppercase tracking-wider relative -mt-3 inline-block">
+                // RECEIPTS
+              </div>
+              <h3 className="font-black uppercase tracking-tight text-lg flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-[var(--success)]" /> Live-fire test
+              </h3>
+              <p className="text-sm text-[var(--muted)] leading-relaxed">
+                Closed-loop validation on a test token (BOTTEST). All 5 action types fired
+                on-chain — receipts:
+              </p>
+              <div className="grid grid-cols-1 gap-2 pt-2 text-xs font-mono">
+                <ReceiptLink emoji="🔥" name="BURN — 219K tokens burned" href="https://solscan.io/tx/3vKYJ5XgCzgtC7FZb1Yq5tA7WxNb7y7VorMoNMihUiWpxxL9WWEPsWZoK53c2YJjtsHQVREKWFPAU8q7oRRa6rZK" />
+                <ReceiptLink emoji="🏦" name="Marketing vault filled" href="https://solscan.io/tx/k2K1x7ywHdZ94bS2EmAWrPvrGfn3YvDuizZQJkzj4xJwKTBBq54hSNvCB7rpriXneEDsLPDfvxcP4WBGnnzxeDF" />
+                <ReceiptLink emoji="🏦" name="DAO Treasury vault filled" href="https://solscan.io/tx/34N8L7caHTPKLiJwwBm3mTPJE4mSrrvNd42wGRCQnkq3iDwEWmmYxBiH6ER6YGdqPrXU9i8YjpqaFStzwsvpEyj7" />
+                <ReceiptLink emoji="💸" name="SOL → HOLDERS — 0.021 SOL airdropped" href="https://solscan.io/tx/21kFuB84uHrWd7hboWW94aUVsVRpYEJvDKwf2qWzbooHX8NwW7jmxEhRo5KikZ1HRtXznW5cQ9Ea6iAQGh7ppnd6" />
+                <ReceiptLink emoji="🎯" name="TOKENS → BACKERS — 504K tokens" href="https://solscan.io/tx/2tzmytM7zpYHJNzMBZMrBrjXJ3SiFEftPJbguJg4WWEbVdpNUpUHyPPgGyNx857MC4g2HQSwM5pSZmVVunumtoqr" />
+              </div>
+            </section>
+          </>
         )}
 
         {/* FEES TAB */}
@@ -524,5 +678,25 @@ export default function DocsPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+// Compact one-line link row for the Bots tab receipts. Avoids polluting
+// the full URL into the visible label so the row stays scannable.
+function ReceiptLink({ emoji, name, href }: { emoji: string; name: string; href: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center justify-between gap-2 px-3 py-2 border border-[var(--border)] hover:border-[var(--accent)] bg-[var(--background)] transition-colors group"
+    >
+      <span className="flex items-center gap-2 text-[var(--foreground)] truncate">
+        <span aria-hidden>{emoji}</span> {name}
+      </span>
+      <span className="flex items-center gap-1 text-[var(--accent)] text-[10px] uppercase tracking-widest shrink-0">
+        Solscan <ExternalLink className="w-3 h-3" />
+      </span>
+    </a>
   );
 }
