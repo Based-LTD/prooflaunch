@@ -136,6 +136,23 @@ export async function GET(request: NextRequest) {
       }));
     }
 
+    // Hot fix for landing-page payload bloat. Historically some submits
+    // stored the uploaded image as a base64 data URL directly in
+    // `image_url` (up to 3 MB per meme), so a list of 8 memes shipped
+    // ~10 MB of inline image data on every page load. Until the
+    // Storage-upload migration backfills these to real CDN URLs, strip
+    // any `data:` URL from the list response and let MemeCard fall
+    // back to its symbol-initial avatar. Detail page (/api/memes/[id])
+    // still returns the full url so it can render the original image.
+    if (filteredData) {
+      filteredData = filteredData.map((m) => {
+        if (typeof m.image_url === 'string' && m.image_url.startsWith('data:')) {
+          return { ...m, image_url: null };
+        }
+        return m;
+      });
+    }
+
     return NextResponse.json({ memes: filteredData });
   } catch (error) {
     return NextResponse.json(
