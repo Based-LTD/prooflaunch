@@ -214,6 +214,7 @@ export async function executeBuybackBot(
     (action === 'burn' ||
      action === 'distribute_tokens_holders' ||
      action === 'distribute_tokens_backers' ||
+     action === 'donate_tokens' ||
      action === 'distribute_holders' ||
      action === 'distribute_backers')
   ) {
@@ -845,6 +846,42 @@ async function tryRecoverStrandedTokens(
     await supabase.from('meme_buybacks').insert({
       meme_id: m.id, bot_id: b.id, action,
       sol_spent_lamports: '0',                       // no new SOL spent
+      tokens_bought_raw:  '0',
+      tokens_acted_raw:   strandedRaw.toString(),
+      swap_tx: null, action_tx: sig,
+      status: 'completed',
+      notes: 'recovery: prior partial',
+    });
+    return;
+  }
+
+  // DONATE_TOKENS recovery — finish the transfer to the locked
+  // destination using the existing stranded balance, no re-swap.
+  if (action === 'donate_tokens') {
+    if (!b.destination_wallet) return; // shouldn't happen (DB CHECK)
+    let destPk: PublicKey;
+    try { destPk = new PublicKey(b.destination_wallet); } catch { return; }
+    const fromAta = ata;
+    const toAta = getAssociatedTokenAddressSync(mintPub, destPk, true, tokenProgramId);
+    const tx = new Transaction().add(
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      createAssociatedTokenAccountIdempotentInstruction(
+        botKp.publicKey, toAta, destPk, mintPub, tokenProgramId,
+      ),
+      createTransferCheckedInstruction(
+        fromAta, mintPub, toAta, botKp.publicKey,
+        strandedRaw, tokenDecimals, [], tokenProgramId,
+      ),
+    );
+    tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
+    tx.feePayer = botKp.publicKey;
+    const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+    const conf = await conn.confirmTransaction(sig, 'confirmed');
+    if (conf.value.err) throw new Error(`recovery donate_tokens failed: ${JSON.stringify(conf.value.err)}`);
+
+    await supabase.from('meme_buybacks').insert({
+      meme_id: m.id, bot_id: b.id, action,
+      sol_spent_lamports: '0',
       tokens_bought_raw:  '0',
       tokens_acted_raw:   strandedRaw.toString(),
       swap_tx: null, action_tx: sig,
