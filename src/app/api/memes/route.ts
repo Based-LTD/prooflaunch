@@ -437,6 +437,11 @@ export async function POST(request: NextRequest) {
       'distribute_tokens_backers',
       'distribute_sol_holders',
       'distribute_sol_backers',
+      // DONATE — fire-and-forget to a fixed destination wallet
+      // (committed at submit, immutable). Multiple allowed per meme
+      // when destinations differ.
+      'donate_sol',
+      'donate_tokens',
       // Legacy synonyms accepted for backwards compat.
       'distribute_holders',
       'distribute_backers',
@@ -461,23 +466,34 @@ export async function POST(request: NextRequest) {
 
     // Phase B — Bot stack validation. When `bots` array is supplied
     // (and non-empty), it supersedes the single-bot field above.
-    // Constraints (must match what the UI enforces + migration 042):
+    // Constraints (must match what the UI enforces + migrations 042 / 043):
     //   - max 12 bots total (soft UI cap; real cap is the 90% budget)
-    //   - non-hold actions distinct (partial UNIQUE in DB enforces)
+    //   - single-instance actions (burn / distribute_*) at most once
     //   - HOLD (vault) can repeat — each requires a 1-24 char label
-    //     matching ^[A-Za-z0-9 _\-]+$ (CHECK constraint in DB)
+    //   - DONATE_* can repeat — each requires a destination_wallet
+    //     (Solana pubkey 32-44 base58 chars), distinct per (action, dest)
     //   - each fee_pct in [5, 90]
     //   - total fee_pct across the stack ≤ 90
-    interface BotInput { action: string; fee_pct: number; label?: string | null }
+    interface BotInput {
+      action: string;
+      fee_pct: number;
+      label?: string | null;
+      destination_wallet?: string | null;
+    }
     const VAULT_LABEL_RE = /^[A-Za-z0-9 _\-]+$/;
+    // Solana base58 pubkey — 32-44 chars, alphabet excludes 0/I/O/l.
+    const BASE58_PUBKEY_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
     const HARD_CAP = 12;
+    const REPEATABLE_ACTIONS = new Set(['hold', 'donate_sol', 'donate_tokens']);
+    const DONATE_ACTIONS = new Set(['donate_sol', 'donate_tokens']);
     const botStack: BotInput[] = [];
     if (Array.isArray(bots) && bots.length > 0) {
       if (bots.length > HARD_CAP) {
         return NextResponse.json({ error: `Bot stack capped at ${HARD_CAP}` }, { status: 400 });
       }
       let stackSum = 0;
-      const seenNonHold = new Set<string>();
+      const seenSingleAction = new Set<string>();
+      const seenDonate = new Set<string>(); // `${action}::${destination}`
       for (const raw of bots) {
         if (!raw || typeof raw !== 'object') {
           return NextResponse.json({ error: 'each bot must be {action, fee_pct}' }, { status: 400 });
@@ -485,27 +501,24 @@ export async function POST(request: NextRequest) {
         const action = (raw as { action?: unknown }).action;
         const feePct = (raw as { fee_pct?: unknown }).fee_pct;
         const labelRaw = (raw as { label?: unknown }).label;
+        const destRaw  = (raw as { destination_wallet?: unknown }).destination_wallet;
         if (typeof action !== 'string' || !VALID_BOT_ACTIONS.has(action)) {
           return NextResponse.json({ error: `invalid bot action: ${String(action)}` }, { status: 400 });
         }
-        if (action !== 'hold') {
-          if (seenNonHold.has(action)) {
+        if (!REPEATABLE_ACTIONS.has(action)) {
+          if (seenSingleAction.has(action)) {
             return NextResponse.json(
-              { error: `duplicate non-vault action: ${action} (each non-vault action appears at most once)` },
+              { error: `duplicate single-instance action: ${action} (only HOLD vaults + DONATE bots may repeat)` },
               { status: 400 },
             );
           }
-          if (labelRaw !== undefined && labelRaw !== null && labelRaw !== '') {
-            return NextResponse.json(
-              { error: `bot ${action}: only vault (hold) bots can have a label` },
-              { status: 400 },
-            );
-          }
-          seenNonHold.add(action);
+          seenSingleAction.add(action);
         }
         if (typeof feePct !== 'number' || !Number.isFinite(feePct) || feePct < 5 || feePct > 90) {
           return NextResponse.json({ error: `bot ${action}: fee_pct must be a number 5-90` }, { status: 400 });
         }
+
+        // Label rules (HOLD requires, DONATE optional, others forbid).
         let label: string | null = null;
         if (action === 'hold') {
           if (typeof labelRaw !== 'string') {
@@ -519,8 +532,65 @@ export async function POST(request: NextRequest) {
             );
           }
           label = trimmed;
+        } else if (DONATE_ACTIONS.has(action)) {
+          if (labelRaw != null && labelRaw !== '') {
+            if (typeof labelRaw !== 'string') {
+              return NextResponse.json({ error: 'donate bot label must be a string' }, { status: 400 });
+            }
+            const trimmed = labelRaw.trim();
+            if (trimmed.length > 0) {
+              if (trimmed.length > 24 || !VAULT_LABEL_RE.test(trimmed)) {
+                return NextResponse.json(
+                  { error: `donate label "${trimmed}" must be ≤24 chars of letters / numbers / spaces / _ / -` },
+                  { status: 400 },
+                );
+              }
+              label = trimmed;
+            }
+          }
+        } else {
+          if (labelRaw !== undefined && labelRaw !== null && labelRaw !== '') {
+            return NextResponse.json(
+              { error: `bot ${action}: only VAULT / DONATE bots can have a label` },
+              { status: 400 },
+            );
+          }
         }
-        botStack.push({ action, fee_pct: feePct, label });
+
+        // Destination wallet (DONATE only — required + valid pubkey).
+        let destination_wallet: string | null = null;
+        if (DONATE_ACTIONS.has(action)) {
+          if (typeof destRaw !== 'string') {
+            return NextResponse.json({ error: `bot ${action}: destination_wallet required` }, { status: 400 });
+          }
+          const trimmed = destRaw.trim();
+          if (!BASE58_PUBKEY_RE.test(trimmed)) {
+            return NextResponse.json({ error: `bot ${action}: destination_wallet must be a valid Solana base58 pubkey` }, { status: 400 });
+          }
+          // Final sanity — PublicKey constructor catches anything the
+          // regex lets through (curve / length quirks).
+          try { new (await import('@solana/web3.js')).PublicKey(trimmed); }
+          catch { return NextResponse.json({ error: `bot ${action}: destination_wallet not a valid pubkey` }, { status: 400 }); }
+          destination_wallet = trimmed;
+
+          // No-dup on (action, destination) at API layer — DB partial
+          // unique index also enforces this, but earlier feedback is nicer.
+          const key = `${action}::${destination_wallet}`;
+          if (seenDonate.has(key)) {
+            return NextResponse.json(
+              { error: `duplicate ${action} bot with same destination — combine into one with the summed fee_pct` },
+              { status: 400 },
+            );
+          }
+          seenDonate.add(key);
+        } else if (destRaw != null && destRaw !== '') {
+          return NextResponse.json(
+            { error: `bot ${action}: destination_wallet is only valid for DONATE bots` },
+            { status: 400 },
+          );
+        }
+
+        botStack.push({ action, fee_pct: feePct, label, destination_wallet });
         stackSum += feePct;
       }
       if (stackSum > 90) {
@@ -572,21 +642,23 @@ export async function POST(request: NextRequest) {
     // Phase B — If the caller supplied a bots[] stack, that's the source
     // of truth and we generate one keypair per bot. Otherwise, fall back
     // to the legacy single-bot shape and synthesize a 1-item stack.
-    const effectiveStack: { action: string; fee_pct: number; label?: string | null }[] = botStack.length > 0
+    const effectiveStack: { action: string; fee_pct: number; label?: string | null; destination_wallet?: string | null }[] = botStack.length > 0
       ? botStack
       : (buyback_bot_enabled
           ? [{ action: buyback_bot_action as string, fee_pct: Number(buyback_bot_fee_pct) }]
           : []);
 
-    const generatedBots: { action: string; fee_pct: number; label: string | null; wallet: string; encryptedKey: string }[] =
+    const generatedBots: { action: string; fee_pct: number; label: string | null; destination_wallet: string | null; wallet: string; encryptedKey: string }[] =
       effectiveStack.map((bot) => {
         const kp = Keypair.generate();
         return {
           action: bot.action,
           fee_pct: bot.fee_pct,
-          // Legacy single-bot HOLD: default label so 042's CHECK accepts it.
-          // New stack with `label` field: preserved as-is.
-          label: bot.action === 'hold' ? (bot.label || 'Vault') : null,
+          // HOLD: label defaults to 'Vault' (legacy single-bot path); else
+          // preserved as-is. DONATE: label optional.
+          label: bot.action === 'hold' ? (bot.label || 'Vault') : (bot.label ?? null),
+          // DONATE: destination set at validation time above; immutable.
+          destination_wallet: bot.destination_wallet ?? null,
           wallet: kp.publicKey.toBase58(),
           encryptedKey: encryptPrivateKey(bs58.encode(kp.secretKey)),
         };
@@ -681,9 +753,11 @@ export async function POST(request: NextRequest) {
         fee_pct: bot.fee_pct,
         bot_wallet: bot.wallet,
         encrypted_bot_key: bot.encryptedKey,
-        // Label is required by the DB CHECK when action='hold', NULL
-        // otherwise. generatedBots already enforces this shape.
+        // Label: required for HOLD, optional for DONATE, NULL for others.
+        // Destination wallet: required for DONATE_*, NULL otherwise.
+        // generatedBots already enforces this shape; DB CHECKs reject anything off.
         label: bot.label,
+        destination_wallet: bot.destination_wallet,
       }));
       const { error: botInsertErr } = await supabase
         .from('meme_bots')

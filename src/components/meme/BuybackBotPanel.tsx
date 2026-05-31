@@ -22,10 +22,14 @@ const ACTION_LABELS: Record<string, { label: string; tag: string; tone: string; 
   distribute_tokens_backers:   { label: 'TOKENS → BACKERS',  tag: 'OG reward',    tone: 'var(--accent)',      emoji: '🎯' },
   distribute_sol_holders:      { label: 'SOL → HOLDERS',     tag: 'Yield',        tone: 'var(--success)',     emoji: '💸' },
   distribute_sol_backers:      { label: 'SOL → BACKERS',     tag: 'OG yield',     tone: 'var(--success)',     emoji: '💰' },
+  donate_sol:                  { label: 'DONATE SOL',        tag: 'Commitment',   tone: 'var(--accent-gold)', emoji: '🎁' },
+  donate_tokens:               { label: 'DONATE TOKENS',     tag: 'Commitment',   tone: 'var(--accent-gold)', emoji: '🎀' },
   // Legacy enum values — surface the same way but tagged as such.
   distribute_holders:          { label: 'TOKENS → HOLDERS',  tag: 'Legacy',       tone: 'var(--accent)',      emoji: '🪙' },
   distribute_backers:          { label: 'TOKENS → BACKERS',  tag: 'Legacy',       tone: 'var(--accent)',      emoji: '🎯' },
 };
+
+const DONATE_ACTIONS = new Set(['donate_sol', 'donate_tokens']);
 
 interface BuybackRow {
   executed_at: string;
@@ -204,6 +208,27 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
             {activeBot.bot_wallet}
           </a>
         </div>
+
+        {/* DONATE bots: surface the committed destination wallet.
+            Address is immutable — burning that visibility into the UI
+            is the whole point of the commitment. */}
+        {DONATE_ACTIONS.has(activeBot.action) && activeBot.destination_wallet && (
+          <div className="text-[10px] font-mono text-[var(--muted)] border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 p-2 break-all space-y-0.5">
+            <div className="text-[var(--accent-gold)] uppercase tracking-widest font-semibold">
+              ★ Destination · LOCKED
+            </div>
+            <a
+              href={`https://solscan.io/account/${activeBot.destination_wallet}`}
+              target="_blank" rel="noreferrer"
+              className="text-[var(--accent-gold)] hover:underline"
+            >
+              {activeBot.destination_wallet}
+            </a>
+            <div className="text-[var(--muted)] italic">
+              Every {activeBot.action === 'donate_sol' ? 'SOL' : 'token'} payout from this bot flows to this address. Immutable.
+            </div>
+          </div>
+        )}
 
         {!loading && botRuns.length > 0 && (
           <div className="border-t border-[var(--border)] pt-2 space-y-1">

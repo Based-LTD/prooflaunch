@@ -9,9 +9,15 @@
 type BotActionT =
   | 'burn' | 'hold'
   | 'distribute_tokens_holders' | 'distribute_tokens_backers'
-  | 'distribute_sol_holders'    | 'distribute_sol_backers';
+  | 'distribute_sol_holders'    | 'distribute_sol_backers'
+  | 'donate_sol'                | 'donate_tokens';
 
-interface BotStackItem { action: BotActionT; fee_pct: number; label?: string }
+interface BotStackItem {
+  action: BotActionT;
+  fee_pct: number;
+  label?: string;
+  destination_wallet?: string;
+}
 
 interface FormData {
   name: string;
@@ -46,6 +52,8 @@ const BOT_ICON: Record<string, string> = {
   distribute_tokens_backers: '🎯',
   distribute_sol_holders: '💸',
   distribute_sol_backers: '💰',
+  donate_sol: '🎁',
+  donate_tokens: '🎀',
 };
 const BOT_SHORT: Record<string, string> = {
   burn: 'BURN',
@@ -54,7 +62,10 @@ const BOT_SHORT: Record<string, string> = {
   distribute_tokens_backers: 'TOK→B',
   distribute_sol_holders: 'SOL→H',
   distribute_sol_backers: 'SOL→B',
+  donate_sol: 'DONATE SOL',
+  donate_tokens: 'DONATE TOK',
 };
+const DONATE_ACTIONS = new Set(['donate_sol', 'donate_tokens']);
 
 export function TokenPreviewPanel({ formData, imagePreview, creatorWallet }: Props) {
   const {
@@ -209,25 +220,38 @@ export function TokenPreviewPanel({ formData, imagePreview, creatorWallet }: Pro
           </div>
         </div>
 
-        {/* Bot stack preview chips */}
+        {/* Bot stack preview chips. Donate chips also show a short
+            destination address so the creator sees what they typed. */}
         {botStackEnabled && botStack.length > 0 && (
           <div className="space-y-1.5 border-t border-[var(--border)] pt-3">
             <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
               Bot stack · {botStack.length}
             </div>
             <div className="flex flex-wrap gap-1">
-              {botStack.map((b, i) => (
-                <span
-                  key={i}
-                  className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--border)] text-[var(--foreground)] flex items-center gap-1"
-                >
-                  <span aria-hidden>{BOT_ICON[b.action]}</span>
-                  <span>
-                    {b.action === 'hold' && b.label ? b.label : BOT_SHORT[b.action]}
+              {botStack.map((b, i) => {
+                const isDonate = DONATE_ACTIONS.has(b.action);
+                const isVault = b.action === 'hold';
+                const dest = b.destination_wallet?.trim();
+                const shortDest = dest && dest.length >= 12 ? `${dest.slice(0, 4)}…${dest.slice(-4)}` : null;
+                const displayLabel = isVault && b.label
+                  ? b.label
+                  : isDonate && b.label
+                    ? b.label
+                    : BOT_SHORT[b.action];
+                return (
+                  <span
+                    key={i}
+                    className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--border)] text-[var(--foreground)] flex items-center gap-1"
+                  >
+                    <span aria-hidden>{BOT_ICON[b.action]}</span>
+                    <span>{displayLabel}</span>
+                    {isDonate && shortDest && (
+                      <span className="text-[var(--muted)] normal-case tracking-normal">→ {shortDest}</span>
+                    )}
+                    <span className="text-[var(--accent)]">{b.fee_pct}%</span>
                   </span>
-                  <span className="text-[var(--accent)]">{b.fee_pct}%</span>
-                </span>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

@@ -85,7 +85,7 @@ export async function GET(
     // remain populated for backward compat with single-bot stacks.
     const { data: botsRows } = await supabase
       .from('meme_bots')
-      .select('id, slot_order, action, fee_pct, bot_wallet, label, last_run_at, total_sol_spent, total_tokens_acted, created_at')
+      .select('id, slot_order, action, fee_pct, bot_wallet, label, destination_wallet, last_run_at, total_sol_spent, total_tokens_acted, created_at')
       .eq('meme_id', id)
       .order('slot_order', { ascending: true });
 

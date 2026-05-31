@@ -10,7 +10,9 @@ type BotActionT =
   | 'distribute_tokens_holders'
   | 'distribute_tokens_backers'
   | 'distribute_sol_holders'
-  | 'distribute_sol_backers';
+  | 'distribute_sol_backers'
+  | 'donate_sol'
+  | 'donate_tokens';
 
 interface BotActionMeta {
   value: BotActionT;
@@ -30,6 +32,11 @@ const BOT_ACTIONS: BotActionMeta[] = [
   { value: 'distribute_tokens_backers',  label: 'TOKENS → BACKERS',    short: 'Tokens→Backers',      tag: 'OG reward',    emoji: '🎯', desc: 'Buy tokens, airdrop pro-rata to the genesis backers who launched this token.' },
   { value: 'distribute_sol_holders',     label: 'SOL → HOLDERS',       short: 'SOL→Holders',         tag: 'Yield',        emoji: '💸', desc: 'Skip the swap. Send delegated SOL pro-rata to every current holder. Pure cash flow.' },
   { value: 'distribute_sol_backers',     label: 'SOL → BACKERS',       short: 'SOL→Backers',         tag: 'OG yield',     emoji: '💰', desc: 'Skip the swap. Send delegated SOL pro-rata to the genesis backers.' },
+  // DONATE — fire-and-forget to a fixed wallet (charity, DAO, partner).
+  // Destination is set at submit and immutable: the entire commitment
+  // value comes from publicly burning the optionality to redirect.
+  { value: 'donate_sol',                 label: 'DONATE SOL',          short: 'Donate SOL',          tag: 'Commitment',   emoji: '🎁', desc: 'Send SOL straight to a fixed destination wallet you name (charity, DAO, partner). Address is locked in at submit — can never be changed.' },
+  { value: 'donate_tokens',              label: 'DONATE TOKENS',       short: 'Donate Tokens',       tag: 'Commitment',   emoji: '🎀', desc: 'Buy tokens, send them to a fixed destination wallet. Same immutable-address commitment as DONATE SOL.' },
 ];
 const BOT_ACTION_BY_VALUE = Object.fromEntries(BOT_ACTIONS.map((a) => [a.value, a]));
 
@@ -40,9 +47,24 @@ function isValidVaultLabel(s: string): boolean {
   return s.length >= 1 && s.length <= 24 && VAULT_LABEL_PATTERN.test(s);
 }
 
-// Bot stack item — `label` is required + non-empty for action='hold',
-// undefined for all other actions (DB CHECK enforces this).
-type BotStackItem = { action: BotActionT; fee_pct: number; label?: string };
+// Solana base58 pubkey: 32-44 chars, alphabet excludes 0/I/O/l.
+const SOL_PUBKEY_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+function isValidSolPubkey(s: string): boolean {
+  return SOL_PUBKEY_PATTERN.test(s);
+}
+
+const REPEATABLE_ACTIONS: ReadonlySet<BotActionT> = new Set(['hold', 'donate_sol', 'donate_tokens']);
+const DONATE_ACTIONS: ReadonlySet<BotActionT> = new Set(['donate_sol', 'donate_tokens']);
+
+// Bot stack item — `label` required for hold, optional for donate, absent
+// for others. `destination_wallet` required for donate, absent otherwise.
+// Mirrors what /api/memes accepts + the DB CHECK in migration 043.
+type BotStackItem = {
+  action: BotActionT;
+  fee_pct: number;
+  label?: string;
+  destination_wallet?: string;
+};
 
 // Single source of truth for bot-stack validation. Used both inside the
 // stack-builder UI and to gate the submit button at the form level.
@@ -51,20 +73,21 @@ function validateBotStack(stack: BotStackItem[]): { ok: boolean; reason?: string
   if (total > 90) return { ok: false, reason: 'total delegation > 90%' };
   if (stack.some((b) => b.fee_pct < 5 || b.fee_pct > 90))
     return { ok: false, reason: 'bot fee out of 5-90% range' };
-  // Non-hold actions must be unique (DB enforces). Vaults can repeat.
-  const seenNonHold = new Set<string>();
+
+  // Single-instance actions (burn, distribute_*) can't repeat. Hold +
+  // donate variants are allowed to repeat (different label / destination).
+  const seenSingleAction = new Set<string>();
   for (const b of stack) {
-    if (b.action === 'hold') continue;
-    if (seenNonHold.has(b.action)) return { ok: false, reason: 'duplicate non-vault action' };
-    seenNonHold.add(b.action);
+    if (REPEATABLE_ACTIONS.has(b.action)) continue;
+    if (seenSingleAction.has(b.action)) return { ok: false, reason: 'duplicate single-instance action' };
+    seenSingleAction.add(b.action);
   }
-  // Every vault must have a valid label.
+
+  // VAULT label rules.
   for (const b of stack) {
     if (b.action === 'hold') {
       if (!b.label || !isValidVaultLabel(b.label))
         return { ok: false, reason: 'invalid vault label' };
-    } else if (b.label !== undefined) {
-      return { ok: false, reason: 'non-vault bot must not have a label' };
     }
   }
   // Duplicate vault labels (UX, not DB).
@@ -77,6 +100,23 @@ function validateBotStack(stack: BotStackItem[]): { ok: boolean; reason?: string
   }
   if ([...labelKeys.values()].some((n) => n > 1))
     return { ok: false, reason: 'duplicate vault labels' };
+
+  // DONATE rules: destination_wallet required + valid pubkey; optional
+  // label must pass the same alphabet rule as vault labels; no two
+  // donate bots of same action+destination.
+  const seenDonate = new Set<string>();
+  for (const b of stack) {
+    if (!DONATE_ACTIONS.has(b.action)) continue;
+    if (!b.destination_wallet || !isValidSolPubkey(b.destination_wallet.trim()))
+      return { ok: false, reason: 'invalid donate destination wallet' };
+    if (b.label && !isValidVaultLabel(b.label))
+      return { ok: false, reason: 'invalid donate label' };
+    const key = `${b.action}::${b.destination_wallet.trim()}`;
+    if (seenDonate.has(key))
+      return { ok: false, reason: 'duplicate donate destination' };
+    seenDonate.add(key);
+  }
+
   return { ok: true };
 }
 
@@ -450,11 +490,20 @@ function SubmitPageInner() {
           // bots[] when the stack is enabled; backend handles legacy
           // backfill for single-bot stacks automatically.
           bots: formData.botStackEnabled
-            ? formData.botStack.map((b) =>
-                b.action === 'hold'
-                  ? { action: b.action, fee_pct: b.fee_pct, label: (b.label ?? '').trim() }
-                  : { action: b.action, fee_pct: b.fee_pct },
-              )
+            ? formData.botStack.map((b) => {
+                if (b.action === 'hold') {
+                  return { action: b.action, fee_pct: b.fee_pct, label: (b.label ?? '').trim() };
+                }
+                if (DONATE_ACTIONS.has(b.action)) {
+                  return {
+                    action: b.action,
+                    fee_pct: b.fee_pct,
+                    destination_wallet: (b.destination_wallet ?? '').trim(),
+                    label: b.label?.trim() || undefined,
+                  };
+                }
+                return { action: b.action, fee_pct: b.fee_pct };
+              })
             : [],
         }),
       });
@@ -1121,17 +1170,18 @@ function SubmitPageInner() {
           {(() => {
             const totalBotPct = formData.botStack.reduce((sum, b) => sum + b.fee_pct, 0);
             const backerPct = Math.max(0, 90 - totalBotPct);
-            // For UNIQUE-per-action: count only non-hold actions, since
-            // VAULTs (hold) can repeat unlimited times.
-            const usedNonHoldActions = new Set(
-              formData.botStack.filter((b) => b.action !== 'hold').map((b) => b.action),
+            // UNIQUE-per-action only applies to single-instance actions.
+            // VAULTs (hold) and DONATE bots can repeat (each adds a new
+            // labeled vault / new destination).
+            const usedSingleActions = new Set(
+              formData.botStack.filter((b) => !REPEATABLE_ACTIONS.has(b.action)).map((b) => b.action),
             );
             const availableActions = BOT_ACTIONS.filter(
-              (a) => a.value === 'hold' || !usedNonHoldActions.has(a.value),
+              (a) => REPEATABLE_ACTIONS.has(a.value) || !usedSingleActions.has(a.value),
             );
             // Soft cap to prevent UI runaway; the real limit is the
             // 90% budget. 12 = practical max under 90% / 5% min per bot,
-            // plus headroom for vault label experimentation.
+            // plus headroom for vault / donate experimentation.
             const HARD_CAP = 12;
             const canAddMore =
               formData.botStack.length < HARD_CAP &&
@@ -1139,16 +1189,11 @@ function SubmitPageInner() {
               totalBotPct < 90;
             const overBudget = totalBotPct > 90;
             const anyInvalidPct = formData.botStack.some((b) => b.fee_pct < 5 || b.fee_pct > 90);
-            // Vault label validation — required + format-restricted (1-24
-            // chars, alphanumerics + space/_/-). Matches the DB CHECK in
-            // migration 042. Empty inputs are also collected here so the
-            // submit button stays disabled until every vault has a label.
+            // Vault label validation.
             const invalidVaultLabels = formData.botStack
               .map((b, i) => ({ b, i }))
               .filter(({ b }) => b.action === 'hold' && (!b.label || !isValidVaultLabel(b.label)));
-            // Duplicate vault labels within the same stack — DB allows
-            // duplicates (it doesn't enforce label uniqueness) but the
-            // creator's UX is worse with two "Marketing" vaults.
+            // Duplicate vault labels (UX, not DB).
             const labelCounts = new Map<string, number>();
             for (const b of formData.botStack) {
               if (b.action === 'hold' && b.label) {
@@ -1157,23 +1202,34 @@ function SubmitPageInner() {
               }
             }
             const duplicateVaultLabels = [...labelCounts.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+            // Donate validation — destination required + valid pubkey,
+            // no duplicate (action, destination) combos.
+            const invalidDonateDests = formData.botStack
+              .map((b, i) => ({ b, i }))
+              .filter(({ b }) => DONATE_ACTIONS.has(b.action) && (!b.destination_wallet || !isValidSolPubkey(b.destination_wallet.trim())));
+            const donateKeys = new Map<string, number>();
+            for (const b of formData.botStack) {
+              if (DONATE_ACTIONS.has(b.action) && b.destination_wallet && isValidSolPubkey(b.destination_wallet.trim())) {
+                const k = `${b.action}::${b.destination_wallet.trim()}`;
+                donateKeys.set(k, (donateKeys.get(k) || 0) + 1);
+              }
+            }
+            const duplicateDonateDests = [...donateKeys.entries()].filter(([, n]) => n > 1);
             const botStackInvalid =
-              overBudget || anyInvalidPct || invalidVaultLabels.length > 0 || duplicateVaultLabels.length > 0;
+              overBudget || anyInvalidPct
+              || invalidVaultLabels.length > 0 || duplicateVaultLabels.length > 0
+              || invalidDonateDests.length > 0 || duplicateDonateDests.length > 0;
 
             const addBot = (action?: BotActionT) => {
               if (!canAddMore) return;
               const nextAction = action ?? availableActions[0]?.value;
               if (!nextAction) return;
               const remaining = Math.max(5, Math.min(20, 90 - totalBotPct));
-              setFormData((prev) => ({
-                ...prev,
-                botStack: [
-                  ...prev.botStack,
-                  nextAction === 'hold'
-                    ? { action: nextAction, fee_pct: remaining, label: '' }
-                    : { action: nextAction, fee_pct: remaining },
-                ],
-              }));
+              const newItem: BotStackItem =
+                nextAction === 'hold'              ? { action: nextAction, fee_pct: remaining, label: '' }
+              : DONATE_ACTIONS.has(nextAction)     ? { action: nextAction, fee_pct: remaining, destination_wallet: '' }
+              :                                      { action: nextAction, fee_pct: remaining };
+              setFormData((prev) => ({ ...prev, botStack: [...prev.botStack, newItem] }));
             };
             const removeBot = (idx: number) => {
               setFormData((prev) => ({
@@ -1186,10 +1242,12 @@ function SubmitPageInner() {
                 ...prev,
                 botStack: prev.botStack.map((b, i) => {
                   if (i !== idx) return b;
-                  // When switching action to/from 'hold', sync the label field.
+                  // Sync label + destination_wallet fields when action changes.
                   const next: BotStackItem = { ...b, ...patch };
                   if (next.action === 'hold' && next.label === undefined) next.label = '';
-                  if (next.action !== 'hold') delete next.label;
+                  if (next.action !== 'hold' && !DONATE_ACTIONS.has(next.action)) delete next.label;
+                  if (DONATE_ACTIONS.has(next.action) && next.destination_wallet === undefined) next.destination_wallet = '';
+                  if (!DONATE_ACTIONS.has(next.action)) delete next.destination_wallet;
                   return next;
                 }),
               }));
@@ -1265,17 +1323,18 @@ function SubmitPageInner() {
                     </div>
 
                     {/* Action picker — always-visible tiles. Tap to add.
-                        Non-vault tiles disable once their action is in
-                        the stack (DB uniqueness on non-hold actions).
-                        VAULT tile always enabled (unlimited vaults). */}
+                        Single-instance tiles (burn, distribute_*) disable
+                        once their action is in the stack. Repeatable
+                        tiles (VAULT, DONATE_*) stay enabled — each new
+                        tap adds another labeled vault / dedicated dest. */}
                     <div className="space-y-2">
                       <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                         ADD A BOT
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {BOT_ACTIONS.map((opt) => {
-                          const isVaultTile = opt.value === 'hold';
-                          const alreadyUsed = !isVaultTile && usedNonHoldActions.has(opt.value);
+                          const isRepeatable = REPEATABLE_ACTIONS.has(opt.value);
+                          const alreadyUsed = !isRepeatable && usedSingleActions.has(opt.value);
                           const disabled = alreadyUsed || totalBotPct >= 90 || formData.botStack.length >= HARD_CAP;
                           return (
                             <button
@@ -1318,8 +1377,13 @@ function SubmitPageInner() {
                         formData.botStack.map((bot, idx) => {
                           const meta = BOT_ACTION_BY_VALUE[bot.action];
                           const isVault = bot.action === 'hold';
+                          const isDonate = DONATE_ACTIONS.has(bot.action);
                           const labelInvalid =
                             isVault && (!bot.label || !isValidVaultLabel(bot.label));
+                          const destInvalid =
+                            isDonate && (!bot.destination_wallet || !isValidSolPubkey(bot.destination_wallet.trim()));
+                          const donateLabelInvalid =
+                            isDonate && !!bot.label && !isValidVaultLabel(bot.label);
                           // Stepper bounds — min 5 (DB CHECK), max = this
                           // bot's current + whatever's left of the 90%
                           // budget. Stops at the edge; never overshoots.
@@ -1409,6 +1473,54 @@ function SubmitPageInner() {
                                 </div>
                               )}
 
+                              {/* Donate destination — fixed payout address.
+                                  IMMUTABLE after submit. Big visible warning
+                                  so the creator doesn't accidentally lock
+                                  themselves to a typo. */}
+                              {isDonate && (
+                                <div className="space-y-1.5 border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 p-2.5">
+                                  <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] flex items-center gap-1.5">
+                                    ★ Destination wallet · LOCKED at submit
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={bot.destination_wallet ?? ''}
+                                    onChange={(e) => updateBot(idx, { destination_wallet: e.target.value })}
+                                    placeholder="Solana wallet address (charity, DAO, partner)"
+                                    spellCheck={false}
+                                    className={`w-full bg-[var(--card)] border px-2 py-2 text-[11px] font-mono text-[var(--foreground)] outline-none focus:border-[var(--accent)] ${
+                                      destInvalid ? 'border-red-400/60' : 'border-[var(--border)]'
+                                    }`}
+                                  />
+                                  {destInvalid ? (
+                                    <div className="text-[10px] font-mono text-red-400">
+                                      Must be a valid Solana base58 address (32-44 chars)
+                                    </div>
+                                  ) : (
+                                    <div className="text-[10px] font-mono text-[var(--muted)] italic">
+                                      Every {bot.action === 'donate_sol' ? 'SOL' : 'token'} payout flows here forever. You cannot change this after submit — the address is locked on-chain.
+                                    </div>
+                                  )}
+
+                                  {/* Optional display label for this donate bot. */}
+                                  <input
+                                    type="text"
+                                    value={bot.label ?? ''}
+                                    onChange={(e) => updateBot(idx, { label: e.target.value })}
+                                    maxLength={24}
+                                    placeholder="(optional) Label — e.g. Charity, DAO Treasury"
+                                    className={`w-full bg-[var(--card)] border px-2 py-2 text-xs font-mono text-[var(--foreground)] outline-none focus:border-[var(--accent)] mt-1 ${
+                                      donateLabelInvalid ? 'border-red-400/60' : 'border-[var(--border)]'
+                                    }`}
+                                  />
+                                  {donateLabelInvalid && (
+                                    <div className="text-[10px] font-mono text-red-400">
+                                      Label: 1-24 chars, letters / numbers / spaces / _ / - only
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
                               <div className="text-[10px] font-mono text-[var(--muted)] leading-snug border-t border-[var(--border)] pt-2">
                                 {meta?.desc}
                               </div>
@@ -1479,6 +1591,12 @@ function SubmitPageInner() {
                         )}
                         {duplicateVaultLabels.length > 0 && (
                           <div>★ Duplicate vault labels: {duplicateVaultLabels.join(', ')}. Use unique names.</div>
+                        )}
+                        {invalidDonateDests.length > 0 && (
+                          <div>★ Every DONATE bot needs a valid Solana destination wallet (32-44 char base58 address).</div>
+                        )}
+                        {duplicateDonateDests.length > 0 && (
+                          <div>★ Two DONATE bots can't share the same action + destination. Combine their fee % into one.</div>
                         )}
                       </div>
                     )}

@@ -101,6 +101,10 @@ export type BotAction =
   | 'distribute_tokens_backers'
   | 'distribute_sol_holders'
   | 'distribute_sol_backers'
+  // DONATE bots — fire-and-forget transfers to a creator-committed
+  // destination_wallet. Immutable destination set at submit.
+  | 'donate_sol'
+  | 'donate_tokens'
   // Deprecated synonyms kept so old rows still execute sensibly.
   | 'distribute_holders'
   | 'distribute_backers';
@@ -112,6 +116,7 @@ function needsSwap(action: BotAction): boolean {
     || action === 'hold'
     || action === 'distribute_tokens_holders'
     || action === 'distribute_tokens_backers'
+    || action === 'donate_tokens'
     || action === 'distribute_holders'   // legacy → treat as tokens
     || action === 'distribute_backers'   // legacy → treat as tokens
   );
@@ -150,6 +155,8 @@ interface BotRow {
   fee_pct: number;
   bot_wallet: string;
   encrypted_bot_key: string;
+  // Required for donate_*, NULL for everything else (DB CHECK enforces).
+  destination_wallet: string | null;
   total_sol_spent: number | null;
   total_tokens_acted: number | null;
 }
@@ -163,7 +170,7 @@ export async function executeBuybackBot(
 ): Promise<BuybackResult> {
   const { data: bot, error: botErr } = await supabase
     .from('meme_bots')
-    .select('id, meme_id, action, fee_pct, bot_wallet, encrypted_bot_key, total_sol_spent, total_tokens_acted')
+    .select('id, meme_id, action, fee_pct, bot_wallet, encrypted_bot_key, destination_wallet, total_sol_spent, total_tokens_acted')
     .eq('id', botId)
     .single();
   if (botErr || !bot) return { ok: false, memeId: '', error: 'bot not found' };
@@ -235,6 +242,11 @@ export async function executeBuybackBot(
     return executeSolDistribute(supabase, m, b, botKp, conn, action, usableLamports);
   }
 
+  // ── DONATE_SOL: skip swap, send SOL straight to destination ───────
+  if (action === 'donate_sol') {
+    return executeDonateSol(supabase, m, b, botKp, conn, usableLamports);
+  }
+
   // ── Swap branch (burn / hold / token-distribute) ──────────────────
   let actualTokensRaw: bigint;
   let tokenProgramId: PublicKey;
@@ -294,6 +306,9 @@ export async function executeBuybackBot(
   if (action === 'hold') {
     return executeHold(supabase, m, b, actualTokensRaw, action, usableLamports, swapTx);
   }
+  if (action === 'donate_tokens') {
+    return executeDonateTokens(supabase, m, b, botKp, conn, actualTokensRaw, tokenProgramId, tokenDecimals, usableLamports, swapTx);
+  }
   // distribute_tokens_* (current + legacy synonyms)
   return executeTokenDistribute(
     supabase, m, b, botKp, conn, action, actualTokensRaw, tokenProgramId, tokenDecimals, usableLamports, swapTx,
@@ -341,6 +356,53 @@ async function executeHold(
 ): Promise<BuybackResult> {
   // No-op — tokens stay in bot wallet.
   return finalize(supabase, m, b, action, usableLamports, actualTokensRaw, actualTokensRaw, swapTx, undefined);
+}
+
+// ── DONATE_SOL ─────────────────────────────────────────────────────
+// Skip swap. Send the bot's usable SOL straight to the committed
+// destination wallet (set at submit, immutable). One tx, one recipient,
+// no batching — much simpler than DISTRIBUTE_SOL_*.
+async function executeDonateSol(
+  supabase: SupabaseClient, m: MemeRow, b: BotRow,
+  botKp: Keypair, conn: Connection,
+  usableLamports: number,
+): Promise<BuybackResult> {
+  const action: BotAction = 'donate_sol';
+  if (!b.destination_wallet) {
+    return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'donate_sol: destination_wallet missing');
+  }
+  let destPk: PublicKey;
+  try { destPk = new PublicKey(b.destination_wallet); }
+  catch { return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, `donate_sol: invalid destination ${b.destination_wallet}`); }
+
+  try {
+    const tx = new Transaction().add(
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      SystemProgram.transfer({
+        fromPubkey: botKp.publicKey,
+        toPubkey: destPk,
+        lamports: usableLamports,
+      }),
+    );
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = botKp.publicKey;
+    const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+    const conf = await conn.confirmTransaction(sig, 'confirmed');
+    if (conf.value.err) throw new Error(`donate_sol tx failed: ${JSON.stringify(conf.value.err)}`);
+    return finalize(
+      supabase, m, b, action,
+      usableLamports,     // sol spent
+      BigInt(0),          // tokens bought (none)
+      BigInt(0),          // tokens acted (none)
+      undefined,          // swap tx (none)
+      sig,                // action tx = the transfer
+      undefined, 1,       // 1 recipient (the destination)
+      undefined,
+    );
+  } catch (e) {
+    return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, `donate_sol: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 // ── DISTRIBUTE SOL (no swap) ───────────────────────────────────────
@@ -493,6 +555,56 @@ async function executeTokenDistribute(
     credited,
     errors.length > 0 ? `partial: ${errors.length} batch failures (${errors[0]})` : undefined,
   );
+}
+
+// ── DONATE_TOKENS ──────────────────────────────────────────────────
+// After the SOL→token swap (already done in the main flow), transfer
+// the entire bought-token balance straight to the committed destination.
+// Idempotent ATA creation on destination — bot pays the ~0.002 SOL rent
+// if the destination doesn't already have an ATA for this mint.
+async function executeDonateTokens(
+  supabase: SupabaseClient, m: MemeRow, b: BotRow,
+  botKp: Keypair, conn: Connection,
+  actualTokensRaw: bigint,
+  tokenProgramId: PublicKey, tokenDecimals: number,
+  usableLamports: number, swapTx: string,
+): Promise<BuybackResult> {
+  const action: BotAction = 'donate_tokens';
+  if (!b.destination_wallet) {
+    return finalizePartial(supabase, m, b, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, 'donate_tokens: destination_wallet missing');
+  }
+  let destPk: PublicKey;
+  try { destPk = new PublicKey(b.destination_wallet); }
+  catch { return finalizePartial(supabase, m, b, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, `donate_tokens: invalid destination ${b.destination_wallet}`); }
+
+  try {
+    const mintPub = new PublicKey(m.mint_address!);
+    const fromAta = getAssociatedTokenAddressSync(mintPub, botKp.publicKey, false, tokenProgramId);
+    const toAta   = getAssociatedTokenAddressSync(mintPub, destPk,           true,  tokenProgramId);
+    const tx = new Transaction().add(
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      createAssociatedTokenAccountIdempotentInstruction(
+        botKp.publicKey, toAta, destPk, mintPub, tokenProgramId,
+      ),
+      createTransferCheckedInstruction(
+        fromAta, mintPub, toAta, botKp.publicKey,
+        actualTokensRaw, tokenDecimals, [], tokenProgramId,
+      ),
+    );
+    tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
+    tx.feePayer = botKp.publicKey;
+    const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+    const conf = await conn.confirmTransaction(sig, 'confirmed');
+    if (conf.value.err) throw new Error(`donate_tokens tx failed: ${JSON.stringify(conf.value.err)}`);
+    return finalize(
+      supabase, m, b, action,
+      usableLamports, actualTokensRaw, actualTokensRaw,
+      swapTx, sig, undefined, 1,
+      undefined,
+    );
+  } catch (e) {
+    return finalizePartial(supabase, m, b, action, usableLamports, actualTokensRaw, swapTx, undefined, undefined, undefined, `donate_tokens: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 // ── Recipient list builder ─────────────────────────────────────────

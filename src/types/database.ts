@@ -127,12 +127,18 @@ export interface MemeBot {
     | 'distribute_tokens_holders'
     | 'distribute_tokens_backers'
     | 'distribute_sol_holders'
-    | 'distribute_sol_backers';
+    | 'distribute_sol_backers'
+    | 'donate_sol'
+    | 'donate_tokens';
   fee_pct: number;
   bot_wallet: string;
-  // Required when action='hold' (vault label like "Marketing"); NULL
-  // for all other actions. Enforced by migration 042's CHECK constraint.
+  // Required when action='hold' (vault label like "Marketing"). Optional
+  // for action='donate_*' (display name like "Charity"). NULL for all
+  // other actions. Enforced by migration 042 / 043 CHECK constraints.
   label: string | null;
+  // Required when action='donate_*' — immutable destination pubkey set
+  // at submit and never updated. NULL for all other actions.
+  destination_wallet?: string | null;
   last_run_at?: string | null;
   total_sol_spent: number;
   total_tokens_acted: number;
