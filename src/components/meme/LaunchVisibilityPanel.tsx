@@ -5,23 +5,18 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import bs58 from 'bs58';
 
 /**
- * Creator-only panel: manage launch visibility + backing allowlist.
+ * Creator-only panel: team-fairness cap readout + backing allowlist for
+ * reserved-slot launches.
  *
- * Shown only on a meme detail page when the connected wallet matches
- * the meme's creator AND the meme is still in the `backing` phase
- * (visibility is locked once the token is funded/launched).
+ * Visibility (stealth/spectator) was removed from the UI 2026-05-30 —
+ * every new launch is OPEN. This panel used to handle visibility too;
+ * now it carries just:
+ *   1. Team-fairness cap readout (when meme.max_backing_sol is set)
+ *   2. Allowlist viewer + add/remove (when meme.reserved_slots > 0)
  *
- * Renders three sections:
- *   1. Current visibility + buttons to switch modes
- *   2. Allowlist viewer + add/remove (hidden when visibility = open)
- *   3. Audit trail link (just a brief note — full history on token page)
- *
- * Auth: all mutations sign a timestamped message
- *   "visibility-set:{meme_id}:{wallet}:{ts}"
- *   "allowlist-modify:{meme_id}:{wallet}:{ts}"
+ * The file name stays as-is so we don't break imports; the component
+ * does the right thing regardless.
  */
-
-type Visibility = 'open' | 'stealth' | 'spectator';
 
 interface AllowlistEntry {
   wallet: string;
@@ -31,52 +26,38 @@ interface AllowlistEntry {
 
 interface Props {
   memeId: string;
-  currentVisibility: Visibility;
   creatorWallet: string;
-  /** Whether the meme is still in backing phase — visibility is locked otherwise */
+  /** Backing phase = mutable; past that = read-only. */
   canEdit: boolean;
   /** Optional per-backer cap set at submission. NULL = uncapped. */
   maxBackingSol?: number | null;
+  /** Reserved-slot count — when > 0, the allowlist gates the reserved positions. */
+  reservedSlots?: number;
 }
 
-const VISIBILITY_LABELS: Record<Visibility, { name: string; desc: string; color: string }> = {
-  open: {
-    name: 'OPEN',
-    desc: 'Public listing, anyone can back. Standard launch.',
-    color: 'var(--success)',
-  },
-  spectator: {
-    name: 'SPECTATOR',
-    desc: 'Public listing, allowlist-only backing.',
-    color: 'var(--accent)',
-  },
-  stealth: {
-    name: 'INTERNAL',
-    desc: 'Hidden from public board, allowlist-only.',
-    color: 'var(--accent-gold)',
-  },
-};
-
-export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet, canEdit, maxBackingSol }: Props) {
+export function LaunchVisibilityPanel({ memeId, creatorWallet, canEdit, maxBackingSol, reservedSlots = 0 }: Props) {
   const { publicKey, signMessage } = useWallet();
-  const [visibility, setVisibility] = useState<Visibility>(currentVisibility);
   const [allowlist, setAllowlist] = useState<AllowlistEntry[]>([]);
   const [allowlistInput, setAllowlistInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [statusKind, setStatusKind] = useState<'ok' | 'err' | null>(null);
 
-  // Load current allowlist
+  const hasReservedSlots = reservedSlots > 0;
+  const hasCap = maxBackingSol != null;
+
+  // Load current allowlist (only when reserved slots make it relevant).
   useEffect(() => {
+    if (!hasReservedSlots) return;
     let cancelled = false;
     fetch(`/api/memes/${memeId}/allowlist`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!cancelled && d?.allowlist) setAllowlist(d.allowlist);
       })
-      .catch(() => {/* silent */});
+      .catch(() => { /* silent */ });
     return () => { cancelled = true; };
-  }, [memeId, visibility]); // re-fetch after visibility change in case we just added/removed
+  }, [memeId, hasReservedSlots]);
 
   function flashStatus(msg: string, kind: 'ok' | 'err') {
     setStatus(msg);
@@ -84,13 +65,13 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
     setTimeout(() => { setStatus(null); setStatusKind(null); }, 4000);
   }
 
-  async function signActionMessage(action: 'visibility-set' | 'allowlist-modify'): Promise<{ message: string; signature: string } | null> {
+  async function signActionMessage(): Promise<{ message: string; signature: string } | null> {
     if (!publicKey || !signMessage) {
       flashStatus('Connect wallet first', 'err');
       return null;
     }
     const ts = Date.now();
-    const message = `${action}:${memeId}:${publicKey.toBase58()}:${ts}`;
+    const message = `allowlist-modify:${memeId}:${publicKey.toBase58()}:${ts}`;
     try {
       const sigBytes = await signMessage(new TextEncoder().encode(message));
       return { message, signature: bs58.encode(sigBytes) };
@@ -100,43 +81,13 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
     }
   }
 
-  async function changeVisibility(next: Visibility) {
-    if (next === visibility) return;
-    if (!publicKey) return;
-    setLoading(true);
-    const auth = await signActionMessage('visibility-set');
-    if (!auth) { setLoading(false); return; }
-
-    try {
-      const res = await fetch(`/api/memes/${memeId}/visibility`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          caller_wallet: publicKey.toBase58(),
-          message: auth.message,
-          signature: auth.signature,
-          visibility: next,
-        }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || 'Failed');
-      setVisibility(next);
-      flashStatus(`Visibility → ${next}`, 'ok');
-    } catch (e) {
-      flashStatus(e instanceof Error ? e.message : 'Failed', 'err');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function addWallets() {
     if (!publicKey) return;
     const wallets = allowlistInput.split(/[\s,]+/).map((w) => w.trim()).filter(Boolean);
     if (wallets.length === 0) return;
     setLoading(true);
-    const auth = await signActionMessage('allowlist-modify');
+    const auth = await signActionMessage();
     if (!auth) { setLoading(false); return; }
-
     try {
       const res = await fetch(`/api/memes/${memeId}/allowlist`, {
         method: 'POST',
@@ -151,7 +102,6 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || 'Failed');
       setAllowlistInput('');
-      // Refetch to show updated list
       const refetch = await fetch(`/api/memes/${memeId}/allowlist`);
       if (refetch.ok) setAllowlist((await refetch.json()).allowlist || []);
       flashStatus(`Added ${j.added} wallet(s)`, 'ok');
@@ -169,9 +119,8 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
       return;
     }
     setLoading(true);
-    const auth = await signActionMessage('allowlist-modify');
+    const auth = await signActionMessage();
     if (!auth) { setLoading(false); return; }
-
     try {
       const res = await fetch(`/api/memes/${memeId}/allowlist`, {
         method: 'DELETE',
@@ -194,77 +143,39 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
     }
   }
 
+  // Nothing meaningful to show? Render null so the parent's CREATOR
+  // CONTROLS card doesn't carry empty space.
+  if (!hasCap && !hasReservedSlots) return null;
+
   return (
-    <div className="border border-[var(--border)] bg-[var(--card)] p-4 space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            CREATOR CONTROLS · LAUNCH VISIBILITY
-          </div>
-          <div className="text-sm text-[var(--muted)] mt-0.5">
-            Auto-flips to OPEN at launch — that&apos;s the PROOF guarantee.
-          </div>
-        </div>
-        {status && (
-          <span
-            className="text-xs font-mono"
-            style={{ color: statusKind === 'ok' ? 'var(--success)' : 'var(--error)' }}
-          >
-            {status}
-          </span>
-        )}
-      </div>
-
-      {/* Visibility readout — stealth + spectator are no longer selectable
-          (off-brand for the "open by default, publicly auditable" pitch).
-          The API still accepts them so any legacy launches in those modes
-          keep working; we just no longer let the creator toggle them. */}
-      <div className="grid grid-cols-1 gap-2">
-        {(() => {
-          const meta = VISIBILITY_LABELS[visibility] ?? VISIBILITY_LABELS.open;
-          return (
-            <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-3">
-              <div className="text-xs font-mono font-semibold" style={{ color: meta.color }}>
-                {meta.name} · active
-              </div>
-              <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
-                {meta.desc}
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {!canEdit && (
-        <div className="text-xs text-[var(--muted)] italic">
-          Visibility is locked — this launch is past the backing phase.
+    <div className="border border-[var(--border)] bg-[var(--background)] p-3 space-y-3">
+      {status && (
+        <div
+          className="text-[10px] font-mono uppercase tracking-widest"
+          style={{ color: statusKind === 'ok' ? 'var(--success)' : 'var(--error)' }}
+        >
+          {status}
         </div>
       )}
 
-      {/* Team-fairness cap notice — visible when the creator set a
-          per-backer ceiling at submission. Public backers can only match
-          it, never exceed (allowlisted private backers are also bounded
-          equally, so the team can't pre-anchor with an outsized slot). */}
-      {maxBackingSol != null && (
-        <div className="border-t border-[var(--border)] pt-3">
+      {hasCap && (
+        <div>
           <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
             TEAM-FAIRNESS CAP
           </div>
           <div className="text-xs font-mono text-[var(--foreground)] mt-1">
-            Every backing is capped at {Number(maxBackingSol)} SOL. Team and
-            public are bounded equally — no whale can out-back your team.
+            Every backing capped at {Number(maxBackingSol)} SOL. Team and public
+            are bounded equally — no whale can out-back the team.
           </div>
         </div>
       )}
 
-      {/* Allowlist editor — hidden in OPEN mode */}
-      {visibility !== 'open' && (
-        <div className="border-t border-[var(--border)] pt-4 space-y-3">
+      {hasReservedSlots && (
+        <div className={hasCap ? 'border-t border-[var(--border)] pt-3 space-y-2' : 'space-y-2'}>
           <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            BACKING ALLOWLIST · {allowlist.length} wallet{allowlist.length === 1 ? '' : 's'}
+            BACKING ALLOWLIST · {allowlist.length} wallet{allowlist.length === 1 ? '' : 's'} · {reservedSlots} reserved slot{reservedSlots === 1 ? '' : 's'}
           </div>
 
-          {/* Add input */}
           <div className="space-y-2">
             <textarea
               value={allowlistInput}
@@ -284,7 +195,6 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
             </button>
           </div>
 
-          {/* Current list */}
           {allowlist.length > 0 ? (
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {allowlist.map((e) => (
@@ -306,7 +216,7 @@ export function LaunchVisibilityPanel({ memeId, currentVisibility, creatorWallet
             </div>
           ) : (
             <div className="text-xs text-[var(--muted)] italic">
-              No wallets yet — add some so backing can begin.
+              No wallets yet — add the team so they can claim reserved slots.
             </div>
           )}
         </div>

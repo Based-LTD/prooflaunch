@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import type { Meme, MemeBot } from '@/types/database';
 import { VaultWithdrawModal } from './VaultWithdrawModal';
 
-// Public-facing badge for memes that enabled the per-meme buyback bot
-// stack. Phase B: renders ALL bots in the meme's stack, each with its
-// own action / wallet / totals / last run. Returns null when the meme
-// has no bots — never adds noise to non-bot tokens.
+// Dashboard-density buyback bot panel. One container, one tab per
+// active bot, only the selected bot's body rendered below. Keeps the
+// dashboard card height constant regardless of whether the meme has
+// 1 or 6 bots.
 //
 // Each bot wallet is system-controlled but transparent: the address is
 // public, every swap + action tx is on-chain, and meme_buybacks is
@@ -71,11 +71,21 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
 
   // Prefer the stack from meme.bots (Phase B). Fall back to a synthesized
   // legacy bot built from the deprecated buyback_bot_* columns.
-  const bots: MemeBot[] = (() => {
+  const bots: MemeBot[] = useMemo(() => {
     if (meme.bots && meme.bots.length > 0) return meme.bots;
     const legacy = legacyBotFromMeme(meme);
     return legacy ? [legacy] : [];
-  })();
+  }, [meme]);
+
+  const [activeBotId, setActiveBotId] = useState<string | null>(null);
+  // Default to first bot once the list resolves; reset if the active bot
+  // disappears (e.g. creator removed it from their stack).
+  useEffect(() => {
+    if (bots.length === 0) { setActiveBotId(null); return; }
+    if (!activeBotId || !bots.find((b) => b.id === activeBotId)) {
+      setActiveBotId(bots[0].id);
+    }
+  }, [bots, activeBotId]);
 
   useEffect(() => {
     if (bots.length === 0) {
@@ -102,116 +112,135 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
 
   if (bots.length === 0) return null;
 
+  const activeBot = bots.find((b) => b.id === activeBotId) ?? bots[0];
+  const a = ACTION_LABELS[activeBot.action] ?? {
+    label: activeBot.action.toUpperCase(),
+    tag: '',
+    tone: 'var(--muted)',
+    emoji: '⚙',
+  };
+  const totalSol = Number(activeBot.total_sol_spent || 0);
+  const botRuns = recent.filter((r) =>
+    activeBot.id === 'legacy' ? r.bot_id === null : r.bot_id === activeBot.id,
+  );
+  const isVault = activeBot.action === 'hold';
+
   return (
-    <div className="space-y-3">
-      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-        BUYBACK BOTS · {bots.length} ACTIVE
+    <div>
+      {/* Tab row — one per applied bot */}
+      <div className="flex flex-wrap gap-1 mb-3">
+        {bots.map((bot) => {
+          const meta = ACTION_LABELS[bot.action];
+          const active = bot.id === activeBot.id;
+          const tabLabel = bot.action === 'hold' && bot.label ? bot.label : meta?.label.split(' ')[0];
+          return (
+            <button
+              key={bot.id}
+              type="button"
+              onClick={() => setActiveBotId(bot.id)}
+              className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border transition-colors flex items-center gap-1 ${
+                active
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                  : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/60'
+              }`}
+              title={meta?.label}
+            >
+              <span aria-hidden>{meta?.emoji}</span>
+              <span>{tabLabel}</span>
+              <span className="text-[var(--muted)]">{bot.fee_pct}%</span>
+            </button>
+          );
+        })}
       </div>
-      {bots.map((bot) => {
-        const a = ACTION_LABELS[bot.action] ?? {
-          label: bot.action.toUpperCase(),
-          tag: '',
-          tone: 'var(--muted)',
-          emoji: '⚙',
-        };
-        const totalSol = Number(bot.total_sol_spent || 0);
-        // For legacy bots (bot.id === 'legacy'), include all NULL bot_id
-        // rows in addition to anything tagged with the synthetic id.
-        const botRuns = recent.filter((r) =>
-          bot.id === 'legacy' ? r.bot_id === null : r.bot_id === bot.id,
-        );
 
-        const isVault = bot.action === 'hold';
-        return (
-          <div key={bot.id} className="border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-lg" aria-hidden>{a.emoji}</span>
-                <div>
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                    {bot.fee_pct}% OF TRADING FEES
-                  </div>
-                  <div className="text-sm font-mono font-semibold mt-0.5" style={{ color: a.tone }}>
-                    {isVault && bot.label ? `${a.label} · ${bot.label}` : a.label}
-                  </div>
-                </div>
+      {/* Selected bot's body */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-base" aria-hidden>{a.emoji}</span>
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                {activeBot.fee_pct}% OF TRADING FEES
               </div>
-              <div className="flex items-center gap-2">
-                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  {a.tag}
-                </div>
-                {isVault && isCreator && bot.id !== 'legacy' && (
-                  <button
-                    type="button"
-                    onClick={() => setWithdrawBot(bot)}
-                    className="text-[10px] font-mono uppercase tracking-wider px-2 py-1 border border-[var(--accent)]/40 text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
-                  >
-                    Withdraw
-                  </button>
-                )}
+              <div className="text-sm font-mono font-semibold mt-0.5" style={{ color: a.tone }}>
+                {isVault && activeBot.label ? `${a.label} · ${activeBot.label}` : a.label}
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono border-t border-[var(--border)] pt-2">
-              <div className="text-[var(--muted)]">Total SOL spent</div>
-              <div className="text-[var(--foreground)] text-right">{totalSol.toFixed(4)} SOL</div>
-              <div className="text-[var(--muted)]">Last run</div>
-              <div className="text-[var(--foreground)] text-right">
-                {bot.last_run_at
-                  ? new Date(bot.last_run_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
-                  : 'pending first run'}
-              </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+              {a.tag}
             </div>
-
-            <div className="text-[10px] font-mono text-[var(--muted)] border-t border-[var(--border)] pt-2 break-all">
-              Bot wallet:{' '}
-              <a
-                href={`https://solscan.io/account/${bot.bot_wallet}`}
-                target="_blank" rel="noreferrer"
-                className="text-[var(--accent)] hover:underline"
+            {isVault && isCreator && activeBot.id !== 'legacy' && (
+              <button
+                type="button"
+                onClick={() => setWithdrawBot(activeBot)}
+                className="text-[10px] font-mono uppercase tracking-wider px-2 py-1 border border-[var(--accent)]/40 text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors"
               >
-                {bot.bot_wallet}
-              </a>
-            </div>
-
-            {!loading && botRuns.length > 0 && (
-              <div className="border-t border-[var(--border)] pt-2 space-y-1">
-                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  Recent runs
-                </div>
-                {botRuns.slice(0, 5).map((r, i) => {
-                  const sol = Number(r.sol_spent_lamports) / 1e9;
-                  const tx = r.action_tx || r.swap_tx;
-                  return (
-                    <div key={i} className="text-[11px] font-mono flex items-center justify-between gap-2">
-                      <span className="text-[var(--muted)]">
-                        {new Date(r.executed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                      </span>
-                      <span className="text-[var(--foreground)]">{sol.toFixed(4)} SOL</span>
-                      <span className={
-                        r.status === 'completed' ? 'text-[var(--success)]'
-                        : r.status === 'partial' ? 'text-[var(--accent-gold)]'
-                        : 'text-[var(--error)]'
-                      }>
-                        {r.status}
-                      </span>
-                      {tx && (
-                        <a
-                          href={`https://solscan.io/tx/${tx}`}
-                          target="_blank" rel="noreferrer"
-                          className="text-[var(--accent)] hover:underline"
-                        >
-                          tx
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                Withdraw
+              </button>
             )}
           </div>
-        );
-      })}
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono border-t border-[var(--border)] pt-2">
+          <div className="text-[var(--muted)]">Total SOL spent</div>
+          <div className="text-[var(--foreground)] text-right">{totalSol.toFixed(4)} SOL</div>
+          <div className="text-[var(--muted)]">Last run</div>
+          <div className="text-[var(--foreground)] text-right">
+            {activeBot.last_run_at
+              ? new Date(activeBot.last_run_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+              : 'pending first run'}
+          </div>
+        </div>
+
+        <div className="text-[10px] font-mono text-[var(--muted)] border-t border-[var(--border)] pt-2 break-all">
+          Bot wallet:{' '}
+          <a
+            href={`https://solscan.io/account/${activeBot.bot_wallet}`}
+            target="_blank" rel="noreferrer"
+            className="text-[var(--accent)] hover:underline"
+          >
+            {activeBot.bot_wallet}
+          </a>
+        </div>
+
+        {!loading && botRuns.length > 0 && (
+          <div className="border-t border-[var(--border)] pt-2 space-y-1">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+              Recent runs
+            </div>
+            {botRuns.slice(0, 5).map((r, i) => {
+              const sol = Number(r.sol_spent_lamports) / 1e9;
+              const tx = r.action_tx || r.swap_tx;
+              return (
+                <div key={i} className="text-[11px] font-mono flex items-center justify-between gap-2">
+                  <span className="text-[var(--muted)]">
+                    {new Date(r.executed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                  <span className="text-[var(--foreground)]">{sol.toFixed(4)} SOL</span>
+                  <span className={
+                    r.status === 'completed' ? 'text-[var(--success)]'
+                    : r.status === 'partial' ? 'text-[var(--accent-gold)]'
+                    : 'text-[var(--error)]'
+                  }>
+                    {r.status}
+                  </span>
+                  {tx && (
+                    <a
+                      href={`https://solscan.io/tx/${tx}`}
+                      target="_blank" rel="noreferrer"
+                      className="text-[var(--accent)] hover:underline"
+                    >
+                      tx
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {withdrawBot && (
         <VaultWithdrawModal
@@ -219,8 +248,6 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
           mintAddress={meme.mint_address ?? null}
           onClose={() => setWithdrawBot(null)}
           onSuccess={() => {
-            // Force the buyback runs list to refetch so any audit-trail
-            // row that lands appears immediately.
             setRefreshTick((n) => n + 1);
           }}
         />

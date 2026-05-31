@@ -65,7 +65,10 @@ export const MemeActionPanel: React.FC<Props> = (props) => {
 };
 
 // ── LIVE ────────────────────────────────────────────────────────────
-const LivePanel: React.FC<LiveProps> = ({ meme, myBacking }) => {
+// Dashboard-density version: one slim row — BUY button + contract chip.
+// External links (dex/solscan/jup) + your allocation moved to their own
+// dashboard grid cards so this stays a ~60px primary CTA ribbon.
+const LivePanel: React.FC<LiveProps> = ({ meme }) => {
   const [copied, setCopied] = useState(false);
   const copy = (t: string) => {
     navigator.clipboard.writeText(t);
@@ -75,87 +78,32 @@ const LivePanel: React.FC<LiveProps> = ({ meme, myBacking }) => {
 
   if (!meme.mint_address) return null;
   const tradeUrl = meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`;
-  const distributed = myBacking?.status === 'distributed' && !!myBacking?.claim_tx;
-
   return (
-    <div className="border border-[var(--success)] bg-[var(--card)]">
-      <div className="border-b border-[var(--success)] px-4 py-2 flex items-center justify-between">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
-          {'// TRADE_LIVE'}
-        </span>
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-          On pump.fun · trade anywhere
-        </span>
-      </div>
-
-      <div className="p-4 sm:p-5 space-y-4">
-        {/* Primary action — loud */}
-        <a
-          href={tradeUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block w-full text-center py-4 sm:py-5 bg-[var(--success)] hover:opacity-90 text-[#0a0a0a] font-mono font-bold uppercase tracking-widest text-sm sm:text-base transition-opacity"
+    <div className="border border-[var(--success)] bg-[var(--card)] flex items-stretch">
+      <a
+        href={tradeUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex-1 text-center py-3 bg-[var(--success)] hover:opacity-90 text-[#0a0a0a] font-mono font-bold uppercase tracking-widest text-xs sm:text-sm transition-opacity flex items-center justify-center"
+      >
+        ▶ BUY ${meme.symbol} ON PUMP.FUN
+      </a>
+      <div className="flex items-center gap-2 px-3 border-l border-[var(--success)] bg-[var(--background)] min-w-0">
+        <code className="text-[10px] sm:text-[11px] font-mono text-[var(--muted)] truncate max-w-[180px] sm:max-w-[260px]">
+          {meme.mint_address.slice(0, 8)}…{meme.mint_address.slice(-6)}
+        </code>
+        <button
+          onClick={() => copy(meme.mint_address!)}
+          className="text-[var(--muted)] hover:text-[var(--accent)] transition-colors shrink-0"
+          aria-label="Copy mint address"
         >
-          ▶ BUY ${meme.symbol} ON PUMP.FUN
-        </a>
-
-        {/* Mint address + links — secondary */}
-        <div className="border border-[var(--border)] bg-[var(--background)] divide-y divide-[var(--border)]">
-          <div className="px-3 py-2.5">
-            <div className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
-              Contract address
-            </div>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-[11px] sm:text-xs font-mono break-all">{meme.mint_address}</code>
-              <button
-                onClick={() => copy(meme.mint_address!)}
-                className="text-[var(--muted)] hover:text-[var(--accent)] transition-colors shrink-0"
-                aria-label="Copy mint address"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-[var(--success)]" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
-          <div className="px-3 py-2 flex flex-wrap gap-2">
-            <ExternalChip href={`https://dexscreener.com/solana/${meme.mint_address}`}>Dexscreener</ExternalChip>
-            <ExternalChip href={`https://solscan.io/account/${meme.mint_address}`}>Solscan</ExternalChip>
-            <ExternalChip href={`https://jup.ag/swap/SOL-${meme.mint_address}`}>Jupiter</ExternalChip>
-          </div>
-        </div>
-
-        {/* Backer allocation — shown only if user backed this meme */}
-        {myBacking && (
-          <div className="border border-[var(--border)] bg-[var(--background)] p-3">
-            <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest mb-1">
-              <span className="text-[var(--accent)]">{'// YOUR_ALLOCATION'}</span>
-              <span className="text-[var(--muted)]">backed {Number(myBacking.amount_sol).toFixed(3)} SOL</span>
-            </div>
-            {distributed ? (
-              <div className="flex items-center justify-between gap-2 mt-2">
-                <div className="flex items-center gap-2 text-[var(--success)] text-xs font-mono">
-                  <Check className="w-3.5 h-3.5" />
-                  Received {formatTokens(myBacking.claim_tokens)} tokens
-                </div>
-                <a
-                  href={`https://solscan.io/tx/${myBacking.claim_tx}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)] underline"
-                >
-                  view tx ↗
-                </a>
-              </div>
-            ) : (
-              <p className="text-[11px] font-mono text-[var(--muted)] mt-1">
-                &gt; Distribution in progress — tokens land in this wallet automatically.
-              </p>
-            )}
-          </div>
-        )}
+          {copied ? <Check className="w-3.5 h-3.5 text-[var(--success)]" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
       </div>
     </div>
   );
 };
+
 
 const ExternalChip: React.FC<{ href: string; children: React.ReactNode }> = ({ href, children }) => (
   <a

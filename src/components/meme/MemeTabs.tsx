@@ -190,13 +190,13 @@ const CreatorTab: React.FC<{
         </div>
       )}
 
-      {/* Visibility + allowlist + team-fairness cap */}
+      {/* Team-fairness cap + reserved-slot allowlist (auto-hides when neither applies). */}
       <LaunchVisibilityPanel
         memeId={meme.id}
-        currentVisibility={(meme.visibility ?? 'open') as 'open' | 'stealth' | 'spectator'}
         creatorWallet={meme.creator_wallet}
         canEdit={meme.status === 'backing'}
         maxBackingSol={meme.max_backing_sol ?? null}
+        reservedSlots={meme.reserved_slots ?? 0}
       />
 
       {/* Backer drop manager — keycard-gated lounge content. Self-hides

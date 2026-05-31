@@ -85,6 +85,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Upload, AlertCircle, X, CheckCircle, ChevronDown, Zap, Loader2 } from 'lucide-react';
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { CreatorPastLaunches } from '@/components/CreatorPastLaunches';
+import { TokenPreviewPanel } from '@/components/submit/TokenPreviewPanel';
 
 // Creation fee in SOL (goes to escrow to cover launch costs like metadata rent)
 const CREATION_FEE_SOL = 0.02;
@@ -219,14 +220,12 @@ function SubmitPageInner() {
     website: '',
     telegram: '',
     discord: '',
-    // Launch Configuration v2 — visibility mode
-    // 'open'      → standard public launch, anyone can back (default)
-    // 'stealth'   → hidden from proving grounds, allowlist-only backing
-    // 'spectator' → public listing, allowlist-only backing
-    visibility: 'open' as 'open' | 'stealth' | 'spectator',
-    // Newline-separated wallet addresses for the initial allowlist.
-    // Creator's own wallet is auto-added by the API so they don't need
-    // to include it here. Ignored when visibility === 'open'.
+    // Visibility removed from the UI 2026-05-30 — all new launches are
+    // OPEN. The API still accepts the field for backward compat with
+    // legacy memes; we just hardcode 'open' on the payload.
+    // Newline-separated wallet addresses for the initial allowlist —
+    // only meaningful when reserved_slots > 0. Creator's own wallet is
+    // auto-added by the API.
     allowlistText: '',
     // Launch Configuration v2 — fee distribution preset + percentages.
     // Default 'standard' = 90 backer / 10 platform (matches what the
@@ -427,18 +426,17 @@ function SubmitPageInner() {
           // attach partner_id/partner_session_id to the meme row, and mark
           // the session submitted (triggering any partner webhook).
           partner_session_id: partnerSession?.session_id,
-          // Launch Config v2 — visibility + initial allowlist.
-          // Allowlist is sent when EITHER visibility is gated OR there
-          // are reserved slots (Phase 7 reuses the allowlist table to
-          // gate the reserved positions within open launches).
-          visibility: formData.visibility,
-          initial_allowlist:
-            formData.visibility === 'open' && formData.reservedSlots === 0
-              ? []
-              : formData.allowlistText
-                  .split(/[\s,]+/)
-                  .map((w) => w.trim())
-                  .filter(Boolean),
+          // All new launches default to OPEN. Visibility selector removed
+          // from the UI 2026-05-30; the API still accepts the field so
+          // legacy memes keep their stealth/spectator state until they
+          // launch. Allowlist is only meaningful for reserved_slots > 0.
+          visibility: 'open',
+          initial_allowlist: formData.reservedSlots === 0
+            ? []
+            : formData.allowlistText
+                .split(/[\s,]+/)
+                .map((w) => w.trim())
+                .filter(Boolean),
           // Launch Config v2 — fee distribution config
           fee_preset: formData.feePreset,
           fee_backer_pct: formData.feeBackerPct,
@@ -559,7 +557,7 @@ function SubmitPageInner() {
   const labelClass = 'block text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5';
 
   return (
-    <div className="max-w-2xl mx-auto pb-8">
+    <div className="max-w-6xl mx-auto pb-8">
       {/* Header — kept compact */}
       <div className="border border-[var(--border)] bg-[var(--card)] mb-5">
         <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
@@ -637,7 +635,26 @@ function SubmitPageInner() {
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
+        // 2-column grid: form on the left (max ~640px so long labels
+        // breathe), live token preview on the right as a sticky glass
+        // rail that scroll-locks to the viewport. On mobile we stack
+        // and put the preview ABOVE the form so the user always sees
+        // it without scrolling.
+        // No `items-start` here — grid cells need to stretch to row height
+        // so the preview wrapper has scroll room for `position: sticky` to
+        // work. The preview's own aside is sticky inside the wrapper.
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 lg:gap-6">
+          {/* Preview rail — order-first on mobile (above the form),
+              right column on desktop. */}
+          <div className="lg:order-2">
+            <TokenPreviewPanel
+              formData={formData}
+              imagePreview={imagePreview}
+              creatorWallet={publicKey?.toBase58()}
+            />
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5 lg:order-1 min-w-0" autoComplete="off">
           {/* Creator's past launches — shows welcome state for new wallets, history for repeat creators */}
           {publicKey && <CreatorPastLaunches wallet={publicKey.toBase58()} />}
 
@@ -1520,7 +1537,8 @@ function SubmitPageInner() {
               </div>
             )}
           </div>
-        </form>
+          </form>
+        </div>
       )}
     </div>
   );

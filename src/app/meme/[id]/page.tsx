@@ -5,19 +5,22 @@ import { useParams } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
-import { MemeHero } from '@/components/meme/MemeHero';
+import { MemeIdentityBar } from '@/components/meme/MemeIdentityBar';
 import { MemeActionPanel } from '@/components/meme/MemeActionPanel';
-import { MemeTabs } from '@/components/meme/MemeTabs';
+import { DashboardCard } from '@/components/meme/DashboardCard';
 import { MobileStickyCTA } from '@/components/meme/MobileStickyCTA';
 import { CreatorPastLaunches } from '@/components/CreatorPastLaunches';
-import { FeeDistributionBadge } from '@/components/meme/FeeDistributionBadge';
 import { BackerLoungePanel } from '@/components/meme/BackerLoungePanel';
-// NOTE: BuybackBotPanel / LaunchVisibilityPanel / BackerVaultManager /
-// ClaimRewards are now rendered inside MemeTabs (control-center pattern).
-// Don't import them here.
+import { BuybackBotPanel } from '@/components/meme/BuybackBotPanel';
+import { LaunchVisibilityPanel } from '@/components/meme/LaunchVisibilityPanel';
+import { BackerVaultManager } from '@/components/meme/BackerVaultManager';
+import { ClaimRewards } from '@/components/ClaimRewards';
+import { BackersList } from '@/components/BackersList';
+import { GenesisBackerRoster } from '@/components/GenesisBackerRoster';
+import { MemeChat } from '@/components/MemeChat';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
 
@@ -543,9 +546,60 @@ export default function MemeDetailPage() {
     return { mode: 'connect' as const, label: 'Loading…' };
   })();
 
+  // Build the action panel once so we mount it in one spot.
+  const actionPanel = (
+    <div id="meme-action-panel">
+      {isLaunched ? (
+        <MemeActionPanel variant="live" meme={meme} myBacking={myBacking} />
+      ) : isFunded || isLaunching ? (
+        <MemeActionPanel
+          variant="funded"
+          meme={meme}
+          totalSlots={totalSlots}
+          totalBackingSol={totalBackingSol}
+          isCreator={isCreator}
+          isLaunching={isLaunching}
+          launching={launching}
+          launchStatus={launchStatus}
+          onLaunch={requestLaunch}
+          onResetWindow={handleResetWindow}
+          resetting={resetting}
+          resetStatus={resetStatus}
+          connected={connected}
+        />
+      ) : (
+        <MemeActionPanel
+          variant="backing"
+          meme={meme}
+          backerCount={backerCount}
+          totalBackingSol={totalBackingSol}
+          slotsRemaining={slotsRemaining}
+          totalSlots={totalSlots}
+          timeRemaining={timeRemaining}
+          minBacking={minBacking}
+          amount={amount}
+          setAmount={setAmount}
+          onPledge={requestBack}
+          backing={backing}
+          backingStatus={backingStatus}
+          backingPaused={false}
+          connected={connected}
+          projectedSharePct={projectedSharePct}
+        />
+      )}
+    </div>
+  );
+
+  // Conditional flags for which dashboard cards to render. Each panel
+  // already self-hides when irrelevant; these are page-level gates so
+  // we don't render an empty DashboardCard chrome around nothing.
+  const hasBots = ((meme.bots?.length ?? 0) > 0) || !!meme.buyback_bot_enabled;
+  const hasPendingBackings = isLaunched && backings.some((b) => b.status === 'confirmed');
+  const showRewards = isLaunched && (isCreator || isBacker);
+
   return (
     <>
-      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-5 pb-24 sm:pb-6">
+      <div className="max-w-6xl mx-auto space-y-3 pb-24 sm:pb-6">
         {/* Back link */}
         <Link
           href="/"
@@ -555,58 +609,18 @@ export default function MemeDetailPage() {
           [&lt;] Back to Proving Grounds
         </Link>
 
-        {/* Hero */}
-        <MemeHero meme={meme} />
+        {/* Slim identity bar — the token headliner. */}
+        <MemeIdentityBar
+          meme={meme}
+          backerCount={backerCount}
+          totalBackingSol={totalBackingSol}
+          totalSlots={totalSlots}
+          timeRemaining={timeRemaining}
+        />
 
-        {/* Primary action — different shape for each status */}
-        <div id="meme-action-panel">
-          {isLaunched ? (
-            <MemeActionPanel variant="live" meme={meme} myBacking={myBacking} />
-          ) : isFunded || isLaunching ? (
-            <MemeActionPanel
-              variant="funded"
-              meme={meme}
-              totalSlots={totalSlots}
-              totalBackingSol={totalBackingSol}
-              isCreator={isCreator}
-              isLaunching={isLaunching}
-              launching={launching}
-              launchStatus={launchStatus}
-              onLaunch={requestLaunch}
-              onResetWindow={handleResetWindow}
-              resetting={resetting}
-              resetStatus={resetStatus}
-              connected={connected}
-            />
-          ) : (
-            <MemeActionPanel
-              variant="backing"
-              meme={meme}
-              backerCount={backerCount}
-              totalBackingSol={totalBackingSol}
-              slotsRemaining={slotsRemaining}
-              totalSlots={totalSlots}
-              timeRemaining={timeRemaining}
-              minBacking={minBacking}
-              amount={amount}
-              setAmount={setAmount}
-              onPledge={requestBack}
-              backing={backing}
-              backingStatus={backingStatus}
-              backingPaused={false}
-              connected={connected}
-              projectedSharePct={projectedSharePct}
-            />
-          )}
-        </div>
-
-        {/* Inline informational chips — small, always-visible context.
-            FeeDistributionBadge auto-hides for legacy memes; BackerLoungePanel
-            auto-hides until a keycard drop exists. */}
-        <FeeDistributionBadge meme={meme} />
-        <BackerLoungePanel meme={meme} isCreator={isCreator} />
-
-        {/* Creator track record — collapsible trust signal */}
+        {/* Creator track record — collapsible, sits right under the
+            identity bar so the creator's wallet history is part of the
+            token's first impression (not buried at the bottom). */}
         {meme.creator_wallet && (
           <CreatorPastLaunches
             wallet={meme.creator_wallet}
@@ -615,28 +629,142 @@ export default function MemeDetailPage() {
           />
         )}
 
-        {/* Dashboard / control-center tabs. Absorbs the previous stack
-            of standalone panels (Bots, Visibility, Vault manager, Rewards,
-            distribute retry) into one tabbed container. Tabs are
-            conditionally surfaced based on meme + viewer. */}
-        <MemeTabs
-          meme={meme}
-          backings={backings}
-          backerCount={backerCount}
-          isLaunched={isLaunched}
-          isProving={isProving}
-          isCreator={isCreator}
-          isBacker={isBacker}
-          publicKeyB58={publicKey?.toBase58()}
-          canWithdraw={isProving}
-          onWithdraw={requestWithdraw}
-          withdrawing={withdrawing}
-          withdrawStatus={withdrawStatus}
-          distributing={distributing}
-          distributeStatus={distributeStatus}
-          onDistribute={handleDistribute}
-          hasPendingBackings={isLaunched && backings.some((b) => b.status === 'confirmed')}
-        />
+        {/* Primary action — full-width ONLY when there's actual work to
+            do (backing form, launch button). For LIVE status the buy
+            action lives inside the grid as a TRADE card instead. */}
+        {!isLaunched && actionPanel}
+
+        {/* DASHBOARD GRID — 3 cols on lg, 1 col on mobile.
+            Left column spans 2 cols and carries the bigger / dynamic
+            panels (bots, backers). Right column is the narrower
+            reference rail (links, fees, trust, creator, rewards, etc.). */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
+          {/* LEFT — wide column. Backers above bots: the holder roster
+              is the more universally interesting/dynamic readout; bots
+              are programmable details that sit below as a secondary
+              expandable panel. */}
+          <div className="lg:col-span-2 space-y-3">
+            <DashboardCard
+              label={isLaunched ? 'GENESIS BACKERS' : 'BACKERS'}
+              meta={`${backerCount}/${totalSlots}`}
+            >
+              {isLaunched ? (
+                <GenesisBackerRoster memeId={meme.id} />
+              ) : (
+                <BackersList
+                  backings={backings}
+                  totalBacking={Number(meme.current_backing_sol)}
+                  currentWallet={publicKey?.toBase58()}
+                  canWithdraw={isProving}
+                  onWithdraw={requestWithdraw}
+                  withdrawing={withdrawing}
+                  withdrawStatus={withdrawStatus}
+                />
+              )}
+            </DashboardCard>
+
+            {hasBots && (
+              <DashboardCard
+                label="BUYBACK BOTS"
+                meta={meme.bots?.length ? `${meme.bots.length} ACTIVE` : '1 ACTIVE'}
+                noBodyPadding
+              >
+                <div className="p-3 sm:p-4">
+                  <BuybackBotPanel meme={meme} />
+                </div>
+              </DashboardCard>
+            )}
+          </div>
+
+          {/* RIGHT — narrow reference rail */}
+          <div className="space-y-3">
+            {/* TRADE card (live-only) — square-ish primary buy CTA + contract
+                + external link chips, all in one panel at the top of the rail. */}
+            {isLaunched && meme.mint_address && (
+              <DashboardCard label="TRADE" meta="LIVE">
+                <div className="space-y-3">
+                  <a
+                    href={meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full text-center py-3 bg-[var(--success)] hover:opacity-90 text-[#0a0a0a] font-mono font-bold uppercase tracking-widest text-xs transition-opacity"
+                  >
+                    ▶ BUY ON PUMP.FUN
+                  </a>
+                  <div>
+                    <div className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+                      Contract
+                    </div>
+                    <div className="text-[10px] font-mono break-all text-[var(--foreground)]">
+                      {meme.mint_address}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1 border-t border-[var(--border)]">
+                    <ExternalChip href={`https://dexscreener.com/solana/${meme.mint_address}`}>Dexscreener</ExternalChip>
+                    <ExternalChip href={`https://solscan.io/account/${meme.mint_address}`}>Solscan</ExternalChip>
+                    <ExternalChip href={`https://jup.ag/swap/SOL-${meme.mint_address}`}>Jupiter</ExternalChip>
+                  </div>
+                </div>
+              </DashboardCard>
+            )}
+
+            {/* Lounge — small card in the grid, not full-width above. Auto-hides until a drop exists. */}
+            <BackerLoungePanel meme={meme} isCreator={isCreator} />
+
+            {showRewards && (
+              <DashboardCard label="YOUR REWARDS">
+                <ClaimRewards memeId={meme.id} isCreator={isCreator} isBacker={isBacker} />
+              </DashboardCard>
+            )}
+
+            {isCreator && (
+              <DashboardCard label="CREATOR CONTROLS">
+                <div className="space-y-3">
+                  {hasPendingBackings && (
+                    <div className="border border-[var(--warning)]/60 bg-[var(--background)] p-3 space-y-2">
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
+                        {'// DISTRIBUTION_PENDING'}
+                      </div>
+                      <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                        Some backers are still pending. Auto-distribution retries every tick — nudge it manually here.
+                      </p>
+                      <button onClick={handleDistribute} disabled={distributing} className="btn-primary w-full text-xs py-2">
+                        {distributing ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Distributing…
+                          </span>
+                        ) : (
+                          '[▶] Retry Pending Distribution'
+                        )}
+                      </button>
+                      {distributeStatus && (
+                        <div className="p-2 text-[10px] font-mono text-center uppercase tracking-widest border border-[var(--accent)] text-[var(--accent)]">
+                          &gt; {distributeStatus}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <LaunchVisibilityPanel
+                    memeId={meme.id}
+                    creatorWallet={meme.creator_wallet}
+                    canEdit={meme.status === 'backing'}
+                    maxBackingSol={meme.max_backing_sol ?? null}
+                    reservedSlots={meme.reserved_slots ?? 0}
+                  />
+                  <BackerVaultManager meme={meme} isCreator={true} />
+                </div>
+              </DashboardCard>
+            )}
+
+            {/* Chat lives in the rail too — replaces the old ABOUT card
+                so the dashboard fits more on screen. Long feeds scroll
+                within the card. */}
+            <DashboardCard label="CHAT">
+              <MemeChat memeId={meme.id} />
+            </DashboardCard>
+          </div>
+        </div>
+
       </div>
 
       {/* Mobile sticky CTA — hides when the inline action panel is on screen */}
@@ -682,3 +810,18 @@ export default function MemeDetailPage() {
     </>
   );
 }
+
+// Tiny external-link pill used in the LINKS dashboard card.
+function ExternalChip({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 px-2 py-1 border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] text-[10px] font-mono uppercase tracking-widest transition-colors"
+    >
+      {children} <ExternalLink className="w-2.5 h-2.5" />
+    </a>
+  );
+}
+
