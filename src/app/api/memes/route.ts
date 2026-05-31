@@ -3,7 +3,7 @@ import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { createServerClient } from '@/lib/supabase';
 import { verifyDeposit } from '@/services/pumpfun';
-import { encryptPrivateKey } from '@/lib/crypto';
+import { encryptPrivateKey, verifySignedAuthMessage } from '@/lib/crypto';
 
 // Free submission perk for PROOF holders.
 // Holding >= this many PROOF (UI amount, 6 decimals) waives the 0.02 SOL
@@ -155,6 +155,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const {
+      // Signed-message auth — proves the caller controls creator_wallet.
+      // Prefix is domain-separated ("create-meme") so a signature for
+      // another action (claim, withdraw, etc.) cannot be replayed here.
+      auth_signature,
+      auth_message,
       creator_wallet,
       name,
       symbol,
@@ -213,6 +218,37 @@ export async function POST(request: NextRequest) {
       bots = [],
     } = body;
 
+    // ── Wallet ownership proof ─────────────────────────────────────
+    // Verify the caller actually controls creator_wallet before doing
+    // ANY work (DB lookups, fee verification, key generation). Without
+    // this, anyone could POST with any wallet string and have a meme
+    // attributed to them — subsequent PATCH routes (visibility, allowlist,
+    // reset-window, launch, withdraw) all gate on creator_wallet equality,
+    // so this is the foundational identity check.
+    if (!creator_wallet || typeof creator_wallet !== 'string') {
+      return NextResponse.json({ error: 'creator_wallet is required' }, { status: 400 });
+    }
+    try {
+      new PublicKey(creator_wallet);
+    } catch {
+      return NextResponse.json({ error: 'Invalid creator_wallet' }, { status: 400 });
+    }
+    if (typeof auth_signature !== 'string' || typeof auth_message !== 'string') {
+      return NextResponse.json(
+        { error: 'Wallet signature required — please reconnect and retry' },
+        { status: 401 },
+      );
+    }
+    const authCheck = verifySignedAuthMessage(
+      `create-meme:${creator_wallet}`,
+      auth_message,
+      auth_signature,
+      creator_wallet,
+    );
+    if (!authCheck.ok) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status });
+    }
+
     // ── Partner session lookup (optional) ──────────────────────────
     // If a partner_session_id was supplied, look it up and validate it
     // BEFORE we charge any fees. Reject early if the session is dead so
@@ -260,7 +296,7 @@ export async function POST(request: NextRequest) {
       if (!symbol) missing.push('symbol');
       if (!description) missing.push('description');
       if (!image_url) missing.push('image_url');
-      console.log('Missing fields:', missing, 'Body:', JSON.stringify(body).slice(0, 500));
+      console.log('Missing fields:', missing);
       return NextResponse.json(
         { error: `Missing required fields: ${missing.join(', ')}` },
         { status: 400 }

@@ -124,6 +124,7 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Upload, AlertCircle, X, CheckCircle, ChevronDown, Zap, Loader2 } from 'lucide-react';
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import bs58 from 'bs58';
 import { CreatorPastLaunches } from '@/components/CreatorPastLaunches';
 import { TokenPreviewPanel } from '@/components/submit/TokenPreviewPanel';
 
@@ -235,7 +236,7 @@ export default function SubmitPage() {
 }
 
 function SubmitPageInner() {
-  const { connected, publicKey, signTransaction } = useWallet();
+  const { connected, publicKey, signTransaction, signMessage } = useWallet();
   const { connection } = useConnection();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -391,7 +392,7 @@ function SubmitPageInner() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!connected || !publicKey) return;
+    if (!connected || !publicKey || !signMessage) return;
     setTouched({
       name: true, symbol: true, description: true, creatorTwitter: true,
       twitter: true, website: true, telegram: true, discord: true,
@@ -440,11 +441,20 @@ function SubmitPageInner() {
         imageUrl = partnerSession.image_url;
       }
 
+      // Sign a wallet-bound auth message so the server can prove this POST
+      // was authorized by the holder of creator_wallet (and not a stranger
+      // impersonating them). 5-min replay window enforced server-side.
+      const authMessage = `create-meme:${publicKey.toBase58()}:${Date.now()}`;
+      const sigBytes = await signMessage(new TextEncoder().encode(authMessage));
+      const sigB58 = bs58.encode(sigBytes);
+
       const response = await fetch('/api/memes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           creator_wallet: publicKey.toBase58(),
+          auth_signature: sigB58,
+          auth_message: authMessage,
           name: formData.name.trim(),
           symbol: formData.symbol.toUpperCase().trim(),
           description: formData.description.trim(),

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { executeBuybackBot } from '@/services/buybackBot';
+import { authorizeCron, requireCronSecret } from '@/lib/cronAuth';
 
 // Vercel cron + manual-trigger endpoint for per-bot buyback execution.
 //
@@ -29,17 +30,6 @@ import { executeBuybackBot } from '@/services/buybackBot';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-function authorize(request: NextRequest): { ok: true } | { ok: false; status: number; error: string } {
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const authHeader = request.headers.get('authorization');
-  // Same fallback default as /api/fees/process + /api/airdrop/daily so
-  // a missing CRON_SECRET env doesn't soft-break manual triggers.
-  const expectedKey = process.env.CRON_SECRET || 'prooflaunch-fees';
-  if (isVercelCron) return { ok: true };
-  if (authHeader === `Bearer ${expectedKey}`) return { ok: true };
-  return { ok: false, status: 401, error: 'Unauthorized' };
-}
-
 // Resolve the deployment's own origin so coordinator → worker self-POSTs
 // reach the same Vercel deployment they came from (preview vs prod).
 // Vercel sets VERCEL_URL automatically (e.g. proof-of-meme.vercel.app);
@@ -52,9 +42,9 @@ function selfOrigin(request: NextRequest): string {
 
 // Dispatch one fire-and-forget worker invocation. Each child gets its
 // own 60s budget. We pass the cron secret as the Bearer token so the
-// child's `authorize()` accepts it.
+// child's `authorizeCron()` accepts it.
 async function dispatchBot(origin: string, botId: string): Promise<{ botId: string; dispatched: boolean; error?: string }> {
-  const secret = process.env.CRON_SECRET || 'prooflaunch-fees';
+  const secret = requireCronSecret();
   try {
     const res = await fetch(`${origin}/api/buyback/process`, {
       method: 'POST',
@@ -71,8 +61,8 @@ async function dispatchBot(origin: string, botId: string): Promise<{ botId: stri
 }
 
 export async function GET(request: NextRequest) {
-  const auth = authorize(request);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const auth = authorizeCron(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const supabase = createServerClient();
@@ -125,8 +115,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = authorize(request);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const auth = authorizeCron(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const body = await request.json().catch(() => ({}));

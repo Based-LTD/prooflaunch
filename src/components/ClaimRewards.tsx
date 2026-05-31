@@ -39,14 +39,6 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
     }
 
     try {
-      // Trigger fee processing in background (fire and forget)
-      fetch('/api/fees/process', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer prooflaunch-fees',
-        },
-      }).catch(() => {}); // Ignore errors
-
       const response = await fetch(`/api/fees/claim?wallet=${publicKey.toBase58()}&meme_id=${memeId}`);
       if (response.ok) {
         const data = await response.json();

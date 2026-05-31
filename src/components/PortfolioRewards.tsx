@@ -93,30 +93,13 @@ export const PortfolioRewards: FC = () => {
     }
   }, [connected, publicKey]);
 
-  // Slow side-channel: trigger the fee-process cron on a separate, slower
-  // cadence (60s) so we don't hammer the money-path endpoint every poll.
-  // The hourly Vercel cron handles routine collection — this is just a
-  // 'user is looking right now, freshen the credits' nudge.
-  const triggerFeeProcess = useCallback(async () => {
-    if (!connected) return;
-    try {
-      await fetch('/api/fees/process', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer prooflaunch-fees' },
-      });
-    } catch {}
-  }, [connected]);
-
   useEffect(() => {
     fetchRewards();
-    triggerFeeProcess();
     const fastPoll = setInterval(fetchRewards, 15000);
-    const slowTrigger = setInterval(triggerFeeProcess, 60000);
     return () => {
       clearInterval(fastPoll);
-      clearInterval(slowTrigger);
     };
-  }, [fetchRewards, triggerFeeProcess]);
+  }, [fetchRewards]);
 
   const handleClaimAll = async () => {
     if (!connected || !publicKey || !signMessage || !rewards?.total_claimable) return;

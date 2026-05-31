@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { refundFromBurnerWallet } from '@/services/pumpfun';
 import { refundMemePool } from '@/services/distribution';
+import { authorizeCron } from '@/lib/cronAuth';
 
 // This endpoint should be called by a cron job or manually to process memes
 // It handles both launching funded memes and refunding failed ones
@@ -215,11 +216,8 @@ async function runProcessor() {
 
 // POST /api/process-memes - Manual trigger with auth
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = authorizeCron(request);
+  if (!auth.ok) return auth.response;
   try {
     const result = await runProcessor();
     return NextResponse.json(result);
@@ -233,17 +231,11 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   // Vercel cron auth: when CRON_SECRET is set as an env var, Vercel
   // sends `Authorization: Bearer <CRON_SECRET>` on cron invocations
-  // (and may or may not also send `x-vercel-cron: 1`). The old gate
-  // only checked the latter, so every cron request silently fell into
-  // the status branch and never ran the refund processor. Accept
-  // either signal. TEMP log captures what Vercel actually sends so we
-  // can verify post-deploy and tighten the gate later if needed.
-  const xCron = request.headers.get('x-vercel-cron');
-  const auth = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  const isCron = xCron === '1' || (!!cronSecret && auth === `Bearer ${cronSecret}`);
-  console.log(`[cron-get process-memes] x-vercel-cron=${xCron} auth=${auth ? 'bearer-present' : '(none)'} -> isCron=${isCron}`);
-  if (isCron) {
+  // (and may or may not also send `x-vercel-cron: 1`). Accept either
+  // signal. If neither matches, fall through to the read-only status
+  // branch below.
+  const auth = authorizeCron(request);
+  if (auth.ok) {
     try {
       const result = await runProcessor();
       return NextResponse.json(result);

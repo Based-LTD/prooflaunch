@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { reconcileAll, reconcileMemeById } from '@/services/reconcile';
+import { authorizeCron } from '@/lib/cronAuth';
 
 // Reconciliation + auto-recovery endpoint.
 //
@@ -11,16 +12,9 @@ import { reconcileAll, reconcileMemeById } from '@/services/reconcile';
 // Auto-actions (idempotent): correct false-negative distributions, and
 // auto-refund any burner whose buy never landed. See services/reconcile.ts.
 
-function authorized(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return true; // no secret configured (local/dev)
-  return request.headers.get('authorization') === `Bearer ${cronSecret}`;
-}
-
 export async function POST(request: NextRequest) {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const auth = authorizeCron(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const supabase = createServerClient();
@@ -53,14 +47,9 @@ export async function GET(request: NextRequest) {
   // Vercel cron auth: accept either `x-vercel-cron: 1` OR
   // `Authorization: Bearer CRON_SECRET` (Vercel uses Authorization
   // when CRON_SECRET is in env — old gate only checked x-vercel-cron
-  // so every cron silently fell into the status branch). TEMP log
-  // captures the actual headers so we can verify post-deploy.
-  const xCron = request.headers.get('x-vercel-cron');
-  const auth = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  const isCron = xCron === '1' || (!!cronSecret && auth === `Bearer ${cronSecret}`);
-  console.log(`[cron-get reconcile] x-vercel-cron=${xCron} auth=${auth ? 'bearer-present' : '(none)'} -> isCron=${isCron}`);
-  if (isCron) {
+  // so every cron silently fell into the status branch).
+  const auth = authorizeCron(request);
+  if (auth.ok) {
     try {
       const supabase = createServerClient();
       const { scanned, results } = await reconcileAll(supabase);

@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { getRecentFeeTransactions, calculateFeeDistribution } from '@/services/feeTracker';
 import { collectAndCreditFees } from '@/services/distribution';
 import { distributeAllLegacyMemes } from '@/services/legacyFeeDistribution';
+import { authorizeCron } from '@/lib/cronAuth';
 
 // Shared fee processing logic
 async function processFees() {
@@ -203,21 +204,16 @@ async function processFees() {
 
 // POST - manual trigger with auth
 export async function POST(request: NextRequest) {
+  const auth = authorizeCron(request);
+  if (!auth.ok) return auth.response;
+
   try {
-    // Check for manual auth
-    const authHeader = request.headers.get('authorization');
-    const expectedKey = process.env.CRON_SECRET || 'prooflaunch-fees';
-
-    if (authHeader !== `Bearer ${expectedKey}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const result = await processFees();
     return NextResponse.json(result);
   } catch (error) {
     console.error('Fee processing error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -236,7 +232,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       console.error('Cron fee processing error:', error);
       return NextResponse.json(
-        { error: error instanceof Error ? error.message : 'Unknown error' },
+        { error: 'Internal server error' },
         { status: 500 }
       );
     }

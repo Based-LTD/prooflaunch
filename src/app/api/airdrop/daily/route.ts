@@ -4,6 +4,7 @@ import {
 } from '@solana/web3.js';
 import { createServerClient } from '@/lib/supabase';
 import { KNOWN_PDA_PROGRAMS } from '@/lib/holderFilter';
+import { authorizeCron } from '@/lib/cronAuth';
 import { getAssociatedTokenAddressSync, NATIVE_MINT, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 import bs58 from 'bs58';
@@ -375,14 +376,10 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
 // Vercel cron fires GET hourly; check x-vercel-cron header OR allow manual
 // trigger via Bearer auth (same pattern as /api/fees/process).
 export async function GET(request: NextRequest) {
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const authHeader = request.headers.get('authorization');
-  const expectedKey = process.env.CRON_SECRET || 'prooflaunch-fees';
-  const force = new URL(request.url).searchParams.get('force') === '1';
+  const auth = authorizeCron(request);
+  if (!auth.ok) return auth.response;
 
-  if (!isVercelCron && authHeader !== `Bearer ${expectedKey}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const force = new URL(request.url).searchParams.get('force') === '1';
 
   try {
     const result = await runAirdrop(force);
@@ -390,7 +387,7 @@ export async function GET(request: NextRequest) {
   } catch (e) {
     console.error('Airdrop cron error:', e);
     return NextResponse.json(
-      { status: 'error', message: e instanceof Error ? e.message : String(e) },
+      { status: 'error', message: 'Internal server error' },
       { status: 500 },
     );
   }

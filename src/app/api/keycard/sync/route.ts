@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { createGate } from '@/services/keycard';
+import { authorizeCron } from '@/lib/cronAuth';
 
 // Phase 4 — Keycard backer-lounge sync.
 //
@@ -20,15 +21,6 @@ export const maxDuration = 60;
 // decimals tokens we'll need to fetch via getMint() — for now this is
 // always correct and saves an RPC call per sync.
 const PUMP_DECIMALS = 6;
-
-function authorize(request: NextRequest): { ok: true } | { ok: false; status: number; error: string } {
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const authHeader = request.headers.get('authorization');
-  const expectedKey = process.env.CRON_SECRET || 'prooflaunch-fees';
-  if (isVercelCron) return { ok: true };
-  if (authHeader === `Bearer ${expectedKey}`) return { ok: true };
-  return { ok: false, status: 401, error: 'Unauthorized' };
-}
 
 function welcomeContent(meme: { name: string; symbol: string; twitter?: string | null; website?: string | null; id: string }): string {
   const lines = [
@@ -54,8 +46,8 @@ function welcomeContent(meme: { name: string; symbol: string; twitter?: string |
 }
 
 export async function GET(request: NextRequest) {
-  const auth = authorize(request);
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const auth = authorizeCron(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const supabase = createServerClient();

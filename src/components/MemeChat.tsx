@@ -3,6 +3,7 @@
 import { FC, useState, useEffect, useRef, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Send, MessageCircle, Loader2 } from 'lucide-react';
+import bs58 from 'bs58';
 
 interface ChatMessage {
   id: string;
@@ -17,12 +18,17 @@ interface MemeChatProps {
 }
 
 export const MemeChat: FC<MemeChatProps> = ({ memeId }) => {
-  const { connected, publicKey } = useWallet();
+  const { connected, publicKey, signMessage } = useWallet();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Cached chat auth signature (re-used within the server's 5-min replay
+  // window so the user isn't Phantom-prompted on every message). The
+  // signature binds wallet + timestamp; server verifies on every POST.
+  const authCacheRef = useRef<{ wallet: string; message: string; signature: string; ts: number } | null>(null);
+  const AUTH_TTL_MS = 4 * 60 * 1000; // refresh ~1min before server's 5min window expires
 
   // Fetch messages
   const fetchMessages = useCallback(async () => {
@@ -61,19 +67,47 @@ export const MemeChat: FC<MemeChatProps> = ({ memeId }) => {
 
   // Send message
   const handleSend = async () => {
-    if (!connected || !publicKey || !newMessage.trim()) return;
+    if (!connected || !publicKey || !signMessage || !newMessage.trim()) return;
 
     setSending(true);
     try {
+      const wallet = publicKey.toBase58();
+      // Reuse a cached signature if it's fresh AND for this same wallet.
+      // Otherwise prompt the wallet to sign a new auth message.
+      const cached = authCacheRef.current;
+      const cacheValid =
+        cached &&
+        cached.wallet === wallet &&
+        Date.now() - cached.ts < AUTH_TTL_MS;
+      let authMessage: string;
+      let authSignature: string;
+      if (cacheValid) {
+        authMessage = cached.message;
+        authSignature = cached.signature;
+      } else {
+        authMessage = `chat:${memeId}:${wallet}:${Date.now()}`;
+        const sigBytes = await signMessage(new TextEncoder().encode(authMessage));
+        authSignature = bs58.encode(sigBytes);
+        authCacheRef.current = { wallet, message: authMessage, signature: authSignature, ts: Date.now() };
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meme_id: memeId,
-          wallet_address: publicKey.toBase58(),
+          wallet_address: wallet,
           message: newMessage.trim(),
+          auth_message: authMessage,
+          auth_signature: authSignature,
         }),
       });
+
+      // If the server rejected our cached signature (likely expired),
+      // drop the cache so the next attempt re-prompts the wallet.
+      if (response.status === 401) {
+        authCacheRef.current = null;
+      }
 
       if (response.ok) {
         setNewMessage('');
