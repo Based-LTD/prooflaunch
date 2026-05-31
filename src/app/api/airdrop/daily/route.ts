@@ -3,6 +3,7 @@ import {
   Connection, PublicKey, Keypair, Transaction, SystemProgram, ComputeBudgetProgram,
 } from '@solana/web3.js';
 import { createServerClient } from '@/lib/supabase';
+import { KNOWN_PDA_PROGRAMS } from '@/lib/holderFilter';
 import { getAssociatedTokenAddressSync, NATIVE_MINT, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 import bs58 from 'bs58';
@@ -134,20 +135,20 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
   // Filter exclusions
   for (const ex of EXCLUDED_WALLETS) holders.delete(ex);
 
-  // Filter PDAs / program-owned accounts. EOA wallets (Phantom, Backpack,
-  // Solflare, Ledger, every regular self-custody wallet) are owned by the
-  // System Program. Any other owner means the holder is a PDA — a DeFi
-  // program (Jupiter perps, Jupiter limit orders, Raydium, Kamino, Drift,
-  // etc.) holding tokens on a user's behalf. Sending SOL to those PDAs
-  // strands it forever because no human can claim it; the policy is
-  // already "hold in your own wallet to qualify" so this just stops the
-  // leak. Their share gets redistributed to actual holders.
+  // Filter known DeFi PDAs. Curated denylist of program IDs whose PDAs
+  // hold tokens on behalf of users but can't be airdropped to (no human
+  // claim path). Same approach Jito / MNDE / BONK distributions use —
+  // err on the side of including legit holders (multisigs like Squads,
+  // governance treasuries like Realms, any wallet whose owner isn't on
+  // the list) and only exclude confirmed DeFi venues. Refresh quarterly.
+  //
+  // IMPORTANT: Jupiter Wallet (jup.ag's mobile/extension wallet) is a
+  // self-custody EOA — its addresses are System-Program owned, same as
+  // Phantom/Backpack/Solflare/Ledger. NOT filtered.
   //
   // Edge case: brand-new wallets that received PROOF but never received
-  // SOL have NO on-chain SOL account yet (info === null). These are valid
-  // EOAs — Phantom/Backpack create the SOL account on first receive — so
-  // we keep them (the airdrop transfer itself creates the account).
-  const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+  // SOL have NO on-chain SOL account yet (info === null). These are
+  // valid — keep them; the airdrop transfer itself creates the account.
   const candidateWallets = [...holders.keys()];
   if (candidateWallets.length > 0) {
     const BATCH = 100;
@@ -160,14 +161,14 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
     let droppedPdas = 0;
     for (let i = 0; i < candidateWallets.length; i++) {
       const info = allInfos[i];
-      if (!info) continue; // null = new wallet, no SOL acct yet; keep
-      if (info.owner.toBase58() !== SYSTEM_PROGRAM) {
+      if (!info) continue;
+      if (KNOWN_PDA_PROGRAMS.has(info.owner.toBase58())) {
         holders.delete(candidateWallets[i]);
         droppedPdas++;
       }
     }
     if (droppedPdas > 0) {
-      console.log(`[airdrop] filtered ${droppedPdas} program-owned PDA holder(s) — share redistributed to EOAs`);
+      console.log(`[airdrop] filtered ${droppedPdas} PDA holder(s) on known DeFi programs`);
     }
   }
 

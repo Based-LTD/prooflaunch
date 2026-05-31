@@ -14,6 +14,7 @@ import {
 } from '@solana/spl-token';
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
+import { KNOWN_PDA_PROGRAMS } from '@/lib/holderFilter';
 
 // Per-meme buyback bot — Phase A: programmable tokenomics primitives.
 //
@@ -563,23 +564,19 @@ async function buildRecipientList(
       } catch { /* skip unparseable */ }
     }
 
-    // Filter PDAs / program-owned accounts. Inverted from a denylist
-    // (which only caught Pump BC + PumpSwap) to an allowlist on System
-    // Program: every EOA wallet (Phantom / Backpack / Solflare / Ledger /
-    // any self-custody) is owned by the System Program. Anything else
-    // means the holder is a PDA — Jupiter perps, Jupiter limit orders,
-    // Axiom custodial accounts, Raydium / Orca / Meteora LP pools,
-    // Kamino / Drift collateral, CEX deposit hot wallets, etc. Sending
-    // SOL or tokens to those PDAs strands them — no human can claim.
+    // Filter known DeFi PDAs only. Curated denylist (KNOWN_PDA_PROGRAMS)
+    // covers confirmed DeFi venues — DEX pools, perps, lending — where
+    // tokens can land but no human can claim. Everything else is kept,
+    // including:
+    //   - EOA wallets (Phantom / Backpack / Solflare / Ledger / Jupiter
+    //     Wallet — every self-custody wallet)
+    //   - Multisigs (Squads team treasuries)
+    //   - Governance treasuries (Realms)
+    //   - Brand-new wallets with no SOL account (info === null) — the
+    //     transfer itself creates the SOL account
     //
-    // Same policy + same filter as /api/airdrop/daily. Keep them in sync.
-    //
-    // Edge case: brand-new wallets that received tokens but never
-    // received SOL have NO on-chain SOL account yet (info === null).
-    // These are valid EOAs — Phantom/Backpack create the SOL account on
-    // first receive — so we keep them; the airdrop transfer itself
-    // creates the account.
-    const SYSTEM_PROGRAM = '11111111111111111111111111111111';
+    // Same denylist + same logic as /api/airdrop/daily. Keep them in sync
+    // via the shared KNOWN_PDA_PROGRAMS in src/lib/holderFilter.ts.
     const candidateWallets = [...byOwner.keys()];
     if (candidateWallets.length > 0) {
       const BATCH = 100;
@@ -591,8 +588,8 @@ async function buildRecipientList(
       }
       for (let i = 0; i < candidateWallets.length; i++) {
         const info = allInfos[i];
-        if (!info) continue; // null = new wallet, no SOL acct yet; keep
-        if (info.owner.toBase58() !== SYSTEM_PROGRAM) {
+        if (!info) continue;
+        if (KNOWN_PDA_PROGRAMS.has(info.owner.toBase58())) {
           byOwner.delete(candidateWallets[i]);
         }
       }
