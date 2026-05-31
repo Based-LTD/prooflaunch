@@ -434,10 +434,22 @@ function SubmitPageInner() {
       }
 
       let imageUrl = 'https://placehold.co/400x400/1a1a2e/ffffff?text=' + formData.symbol;
-      if (imageFile) imageUrl = imagePreview || imageUrl;
-      // If the partner supplied an image URL via the session and the user
-      // didn't override with their own upload, use the partner's URL.
-      if (!imageFile && imagePreview && partnerSession?.image_url) {
+      // Upload the user's file to Supabase Storage and use the resulting
+      // CDN URL. Historically we shipped the FileReader base64 data URL
+      // straight into the DB, which bloated the landing payload to ~10 MB
+      // for 8 tokens. /api/upload/image returns a public token-assets URL.
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append('file', imageFile);
+        const upRes = await fetch('/api/upload/image', { method: 'POST', body: fd });
+        if (!upRes.ok) {
+          const j = await upRes.json().catch(() => ({}));
+          throw new Error(j.error || 'Image upload failed');
+        }
+        const upJson = await upRes.json();
+        imageUrl = upJson.url;
+      } else if (imagePreview && partnerSession?.image_url) {
+        // Partner-supplied URL — already a real URL, no upload needed.
         imageUrl = partnerSession.image_url;
       }
 
