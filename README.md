@@ -2,7 +2,7 @@
 
 # Proof Launch
 
-**The proving grounds for meme coins on Solana.** A pre-launch commitment layer on top of [Pump.fun](https://pump.fun) — communities form *before* a token exists. A meme can only launch once all its backer slots are claimed, and when they fill, the meme's shared pool wallet executes ONE atomic `createV2 + buy` on Pump.fun. Every backer enters at the identical price. Dev holds zero.
+**Shared Pump.fun launches. Equal entry. Shared trading fees.** A pre-launch commitment layer on top of [Pump.fun](https://pump.fun) — communities form *before* a token exists. A meme can only launch once all its backer slots are claimed, and when they fill, the meme's shared pool wallet executes ONE atomic `createV2 + buy` on Pump.fun. Every backer enters at the identical price. Dev holds zero. Trading fees flow back to backers proportional to slot share.
 
 🌐 [prooflaunch.fun](https://prooflaunch.fun) · 𝕏 [@ProofLaunch](https://x.com/ProofLaunch)
 

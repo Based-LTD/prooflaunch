@@ -95,7 +95,7 @@ export async function GET() {
                 display: 'flex',
               }}
             >
-              Shared Pump.fun Launches. Equal entry.
+              Shared Pump.fun Launches. Equal entry. Shared trading fees.
             </div>
           </div>
         </div>
