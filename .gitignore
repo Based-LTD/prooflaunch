@@ -50,3 +50,7 @@ vanity-pool/
 # Local-only admin ops tool (drains burners) — never commit
 tools/recover-meme.mjs
 tools/migrate-proof-to-pool.mjs
+
+# Meteora DBC config keypair stashes — contain private keys; never commit.
+# Created by tools/meteora-create-config.mjs after a successful config init.
+meteora-dbc-config.*.json
