@@ -166,17 +166,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Live. Record the pool's token balance — backers' proportional
-    // shares are computed from this.
-    await supabase
-      .from('memes')
-      .update({
-        status: 'live',
-        mint_address: result.mintAddress,
-        pump_fun_url: result.pumpFunUrl,
-        launched_at: new Date().toISOString(),
-        pool_token_balance: result.tokensReceived,
-      })
-      .eq('id', meme_id);
+    // shares are computed from this. For Meteora launches, also
+    // persist the DBC pool address so the hourly fee cron can locate
+    // the pool to claim from. Pump.fun launches leave dbc_pool_address
+    // NULL (it's irrelevant for them).
+    const liveUpdate: Record<string, unknown> = {
+      status: 'live',
+      mint_address: result.mintAddress,
+      pump_fun_url: result.pumpFunUrl,
+      launched_at: new Date().toISOString(),
+      pool_token_balance: result.tokensReceived,
+    };
+    if (platform === 'meteora' && result.dbcPoolAddress) {
+      liveUpdate.dbc_pool_address = result.dbcPoolAddress;
+    }
+    await supabase.from('memes').update(liveUpdate).eq('id', meme_id);
 
     await supabase.rpc('increment_successful_launches', { wallet: meme.creator_wallet });
 

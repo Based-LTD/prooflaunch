@@ -7,17 +7,22 @@
 // fees can be claimed by the pool's `creator` (= our per-meme
 // sub-escrow keypair) via client.creator.claimCreatorTradingFee.
 //
-// This module only handles the CLAIM (on-chain SDK call). The downstream
-// 90/10 split into backers + platform reuses the existing
-// distribution.ts pipeline: claim drains creator-fees to sub-escrow as
-// SOL → distribution.ts already knows how to split a sub-escrow's SOL.
-//
 // Phase 1: pre-graduation only. Post-graduation (DAMM v2 locked
 // position) claims live in a sibling module added in Phase 2.
+//
+// The Phase 1 cron path (collectMeteoraFeesForCron, below) only runs
+// the on-chain CLAIM. Once SOL lands in the sub-escrow, the existing
+// pump.fun-derived drain+credit pipeline in distribution.ts can be
+// reused — but wiring full credit-to-backers requires real trading
+// fees to validate against, which we won't see until mainnet launches
+// happen. For now the cron logs the claim result; the full
+// credit-to-backers wiring is the next deliverable after real fees
+// start flowing.
 
 import { Connection, Keypair, PublicKey, sendAndConfirmTransaction } from '@solana/web3.js';
 import { BN } from 'bn.js';
 import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
 
@@ -87,4 +92,50 @@ export async function claimCreatorFees(opts: {
     const msg = e instanceof Error ? e.message : String(e);
     return { success: false, error: msg };
   }
+}
+
+// Cron entry point — called per-Meteora-meme by /api/fees/process.
+// Currently only runs the on-chain claim (drains DBC creator-fees into
+// the sub-escrow as SOL). The downstream drain+split+credit to backers
+// reuses the pump.fun pipeline once we have real fee-flow data to
+// validate against; until then this function logs the claim outcome.
+//
+// Idempotent: if no fees have accrued, the claim tx either reverts or
+// confirms with zero net SOL movement — the SDK / on-chain program
+// handles this. Either way the cron's next tick re-attempts.
+//
+// Safe-by-default: skips memes missing dbc_pool_address (legacy/pre-
+// adapter rows), missing sub-escrow keys (legacy pre-P2 memes), or
+// not in 'live' status.
+export interface MeteoraCollectResult {
+  ok: boolean;
+  skipped?: string;
+  claimSig?: string;
+  error?: string;
+}
+
+export async function collectMeteoraFeesForCron(
+  supabase: SupabaseClient,
+  memeId: string,
+): Promise<MeteoraCollectResult> {
+  const { data: meme, error } = await supabase
+    .from('memes')
+    .select('id, status, dbc_pool_address, creator_subescrow_pubkey, encrypted_creator_subescrow_key')
+    .eq('id', memeId)
+    .single();
+  if (error || !meme) return { ok: false, error: 'meme not found' };
+  if (meme.status !== 'live') return { ok: true, skipped: `not live (status=${meme.status})` };
+  if (!meme.dbc_pool_address) return { ok: true, skipped: 'no dbc_pool_address (not a meteora launch or pre-adapter row)' };
+  if (!meme.creator_subescrow_pubkey || !meme.encrypted_creator_subescrow_key) {
+    return { ok: true, skipped: 'no sub-escrow (legacy pre-P2 meme)' };
+  }
+
+  const result = await claimCreatorFees({
+    poolAddress: meme.dbc_pool_address,
+    subEscrowEncryptedKey: meme.encrypted_creator_subescrow_key,
+    subEscrowPubkey: meme.creator_subescrow_pubkey,
+  });
+
+  if (!result.success) return { ok: false, error: result.error };
+  return { ok: true, claimSig: result.signature };
 }

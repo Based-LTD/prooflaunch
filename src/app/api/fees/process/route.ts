@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase';
 import { getRecentFeeTransactions, calculateFeeDistribution } from '@/services/feeTracker';
 import { collectAndCreditFees } from '@/services/distribution';
 import { distributeAllLegacyMemes } from '@/services/legacyFeeDistribution';
+import { collectMeteoraFeesForCron } from '@/services/fees/meteora-dbc';
 import { authorizeCron } from '@/lib/cronAuth';
 
 // Shared fee processing logic
@@ -145,26 +146,53 @@ async function processFees() {
   // credit backers' claimable_fees_sol per-coin. Legacy memes (no
   // sub-escrow, like PROOF) are skipped — their fees route to shared
   // escrow as platform revenue via the older path above, unchanged.
+  //
+  // Dispatched by launch_platform: pump.fun memes use the existing
+  // collectAndCreditFees (collect_creator_fee → drain + split).
+  // Meteora memes use collectMeteoraFeesForCron (claimCreatorTradingFee).
+  // The platform-agnostic drain-and-credit-backers half is reused once
+  // we have real Meteora fee flow to validate against.
   const subescrowResults: Array<{ memeId: string; result: Awaited<ReturnType<typeof collectAndCreditFees>> }> = [];
+  const meteoraResults: Array<{ memeId: string; result: Awaited<ReturnType<typeof collectMeteoraFeesForCron>> }> = [];
   const { data: subEscrowMemes } = await supabase
     .from('memes')
-    .select('id, symbol')
+    .select('id, symbol, launch_platform')
     .eq('status', 'live')
     .not('creator_subescrow_pubkey', 'is', null);
   for (const m of subEscrowMemes || []) {
+    // Default to 'pumpfun' for any row where launch_platform is NULL
+    // (defense in depth — DB default already enforces this, but we
+    // never want a bad column value to bypass platform routing).
+    const platform = m.launch_platform === 'meteora' ? 'meteora' : 'pumpfun';
     try {
-      const r = await collectAndCreditFees(supabase, m.id);
-      subescrowResults.push({ memeId: m.id, result: r });
-      if (r.ok && !r.skipped) {
-        console.log(`[fee-collect] ${m.symbol} (${m.id}): collected ${r.collectedLamports} lamports, credited ${r.backerCount} backers, platform ${r.platformLamports}`);
-      } else if (r.skipped) {
-        console.log(`[fee-collect] ${m.symbol} (${m.id}) skipped: ${r.skipped}`);
+      if (platform === 'meteora') {
+        const r = await collectMeteoraFeesForCron(supabase, m.id);
+        meteoraResults.push({ memeId: m.id, result: r });
+        if (r.ok && !r.skipped && r.claimSig) {
+          console.log(`[fee-collect/meteora] ${m.symbol} (${m.id}): claim ${r.claimSig}`);
+        } else if (r.skipped) {
+          console.log(`[fee-collect/meteora] ${m.symbol} (${m.id}) skipped: ${r.skipped}`);
+        } else if (!r.ok) {
+          console.log(`[fee-collect/meteora] ${m.symbol} (${m.id}) ERROR: ${r.error}`);
+        }
       } else {
-        console.log(`[fee-collect] ${m.symbol} (${m.id}) ERROR: ${r.error}`);
+        const r = await collectAndCreditFees(supabase, m.id);
+        subescrowResults.push({ memeId: m.id, result: r });
+        if (r.ok && !r.skipped) {
+          console.log(`[fee-collect] ${m.symbol} (${m.id}): collected ${r.collectedLamports} lamports, credited ${r.backerCount} backers, platform ${r.platformLamports}`);
+        } else if (r.skipped) {
+          console.log(`[fee-collect] ${m.symbol} (${m.id}) skipped: ${r.skipped}`);
+        } else {
+          console.log(`[fee-collect] ${m.symbol} (${m.id}) ERROR: ${r.error}`);
+        }
       }
     } catch (e) {
       console.error(`[fee-collect] ${m.id} exception:`, e);
-      subescrowResults.push({ memeId: m.id, result: { ok: false, error: e instanceof Error ? e.message : String(e) } });
+      if (platform === 'meteora') {
+        meteoraResults.push({ memeId: m.id, result: { ok: false, error: e instanceof Error ? e.message : String(e) } });
+      } else {
+        subescrowResults.push({ memeId: m.id, result: { ok: false, error: e instanceof Error ? e.message : String(e) } });
+      }
     }
   }
 
@@ -198,6 +226,7 @@ async function processFees() {
     totalFeesProcessed,
     subescrowMemesScanned: subEscrowMemes?.length || 0,
     subescrowResults,
+    meteoraResults,
     legacyResults,
   };
 }

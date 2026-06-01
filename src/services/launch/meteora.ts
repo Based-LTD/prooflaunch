@@ -31,7 +31,11 @@ import {
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import { BN } from 'bn.js';
-import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk';
+import { DynamicBondingCurveClient, deriveDbcPoolAddress } from '@meteora-ag/dynamic-bonding-curve-sdk';
+
+// Quote mint = native SOL (wrapped). Same constant we used in the
+// config template. Required to derive the DBC pool address.
+const QUOTE_MINT_SOL = new PublicKey('So11111111111111111111111111111111111111112');
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
 import type { LaunchOutcome, LaunchParams } from './types';
@@ -190,9 +194,16 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     );
 
     log('buy_confirmed', { signature: sig, ok: true });
+
+    // Derive the DBC pool address from (quoteMint, baseMint, config).
+    // Deterministic — same triple always yields the same pool address.
+    // The launch route persists this to memes.dbc_pool_address so the
+    // hourly fee cron can locate the pool to claim from.
+    const dbcPoolAddress = deriveDbcPoolAddress(QUOTE_MINT_SOL, mint, dbcConfig).toBase58();
+
     log('launch_complete', {
       signature: sig,
-      detail: { platform: 'meteora', mint: mint.toBase58() },
+      detail: { platform: 'meteora', mint: mint.toBase58(), dbcPool: dbcPoolAddress },
     });
 
     // Meteora's pool URL — Edge.gg / Dexscreener style. Final URL shape
@@ -213,6 +224,7 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
       // pool state. Settlement to backers still works because backer
       // tokens are computed from pool_token_balance after launch.
       tokensReceived: undefined,
+      dbcPoolAddress,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
