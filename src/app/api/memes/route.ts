@@ -207,6 +207,11 @@ export async function POST(request: NextRequest) {
       // hosted-checkout URL (?session=pls_xxx). The session row carries
       // the partner_id and validation context.
       partner_session_id,
+      // Multi-launchpad dispatch key (migration 046). The /api/launch
+      // route reads this column to route through src/services/launch/
+      // dispatcher. Default 'pumpfun' preserves legacy behavior for
+      // any submit path that doesn't supply it.
+      launch_platform = 'pumpfun',
       // Launch Configuration v2 — visibility mode + initial allowlist.
       // visibility defaults to 'open' (legacy behavior). Stealth and
       // spectator require an allowlist; the creator's own wallet is
@@ -764,6 +769,13 @@ export async function POST(request: NextRequest) {
         partner_session_id: partnerSessionRow?.id ?? null,
         // Launch Configuration v2 — visibility mode
         visibility,
+        // Multi-launchpad dispatch (migration 046). Validated below
+        // against the same allowlist /services/launch/index.ts knows
+        // about — anything outside the set falls back to 'pumpfun'.
+        launch_platform:
+          ['pumpfun', 'meteora', 'bags', 'bonk'].includes(launch_platform)
+            ? launch_platform
+            : 'pumpfun',
         // Launch Configuration v2 — fee distribution config.
         // When fee_preset is undefined we pass NULL across the board,
         // which the distribution code treats as legacy hardcoded behavior.

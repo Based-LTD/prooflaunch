@@ -286,6 +286,11 @@ function SubmitPageInner() {
     // platform). Whatever's left after bots goes to backers.
     botStackEnabled: false,
     botStack: [] as BotStackItem[],
+    // Multi-launchpad selector (migration 046). Pump.fun is the only
+    // platform live today; Meteora / Bags / Bonk shown for transparency
+    // with "Coming soon" gating in the UI. Default preserves legacy
+    // behavior for every existing submission path.
+    launchPlatform: 'pumpfun' as 'pumpfun' | 'meteora' | 'bags' | 'bonk',
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -488,6 +493,11 @@ function SubmitPageInner() {
           // attach partner_id/partner_session_id to the meme row, and mark
           // the session submitted (triggering any partner webhook).
           partner_session_id: partnerSession?.session_id,
+          // Multi-launchpad dispatch key (migration 046). Pump.fun is
+          // the only live platform today; others are gated in the UI
+          // so this should always be 'pumpfun' for now, but we wire
+          // the round-trip end-to-end so flipping the gate is one PR.
+          launch_platform: formData.launchPlatform,
           // All new launches default to OPEN. Visibility selector removed
           // from the UI 2026-05-30; the API still accepts the field so
           // legacy memes keep their stealth/spectator state until they
@@ -736,6 +746,55 @@ function SubmitPageInner() {
               <p className="text-[var(--error)] font-mono text-xs uppercase tracking-widest">{error}</p>
             </div>
           )}
+
+          {/* ── LAUNCH PLATFORM — which launchpad executes the create + first-buy ── */}
+          {/* Only Pump.fun is live today; Meteora / Bags / Bonk are shown
+              for transparency about the roadmap and disabled with "SOON".
+              State lives in formData.launchPlatform; default 'pumpfun'
+              preserves legacy behavior. */}
+          <section className="border border-[var(--border)] bg-[var(--card)]">
+            <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                {'// LAUNCH_PLATFORM'}
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                LIVE · 1 of 4
+              </span>
+            </div>
+            <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+              {([
+                { key: 'pumpfun',  label: 'PUMP.FUN', sub: 'LIVE',          enabled: true  },
+                { key: 'meteora',  label: 'METEORA',  sub: 'SOON · PHASE 1', enabled: false },
+                { key: 'bags',     label: 'BAGS.FM',  sub: 'SOON · PHASE 2', enabled: false },
+                { key: 'bonk',     label: 'BONK',     sub: 'SOON · PHASE 3', enabled: false },
+              ] as const).map((p) => {
+                const active = formData.launchPlatform === p.key;
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    disabled={!p.enabled}
+                    onClick={() => p.enabled && setFormData((d) => ({ ...d, launchPlatform: p.key }))}
+                    aria-pressed={active}
+                    className={`border px-3 py-3 flex flex-col items-start gap-1 transition-colors ${
+                      active
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                        : p.enabled
+                          ? 'border-[var(--border)] hover:border-[var(--accent)]/50'
+                          : 'border-[var(--border)] opacity-40 cursor-not-allowed'
+                    }`}
+                  >
+                    <span className={`text-sm font-mono font-semibold ${active ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
+                      {p.label}
+                    </span>
+                    <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                      {p.sub}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
 
           {/* ── BASICS — image + name + symbol + description ── */}
           <section className="border border-[var(--border)] bg-[var(--card)]">

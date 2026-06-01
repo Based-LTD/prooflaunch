@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { launchPooledAtomic, LaunchConfig } from '@/services/pumpfun';
+import type { LaunchConfig } from '@/services/pumpfun';
+import { launchOnPlatform, type LaunchPlatform } from '@/services/launch';
 import { verifySignedAuthMessage } from '@/lib/crypto';
 import { rateLimiters } from '@/lib/rateLimit';
 import { createLaunchLogger } from '@/lib/launchLog';
 import { settlePoolDistribution } from '@/services/distribution';
+
+const VALID_PLATFORMS: LaunchPlatform[] = ['pumpfun', 'meteora', 'bags', 'bonk'];
 
 // Launch can take ~36s of Jito bundle retries + RPC fallback + buys.
 // Without this the platform default would kill it mid-launch.
@@ -124,14 +127,24 @@ export async function POST(request: NextRequest) {
       creatorPubkey: meme.creator_subescrow_pubkey || undefined,
     };
 
-    console.log(`Launching ${config.name} via pooled-atomic from pool ${meme.pool_wallet}`);
+    // Pick the launch platform. Default to pumpfun for legacy memes that
+    // were submitted before migration 046 added the launch_platform column.
+    const platform: LaunchPlatform = VALID_PLATFORMS.includes(meme.launch_platform as LaunchPlatform)
+      ? (meme.launch_platform as LaunchPlatform)
+      : 'pumpfun';
 
-    // ONE atomic createV2+buy from the pool wallet (zero sniper gap,
+    console.log(`Launching ${config.name} via ${platform} from pool ${meme.pool_wallet}`);
+
+    // ONE atomic create+buy from the pool wallet (zero sniper gap,
     // dev holds 0%). Logger persists every step to launch_events.
+    // Dispatch to the per-platform adapter under src/services/launch/.
     const launchLog = createLaunchLogger(meme_id);
-    const result = await launchPooledAtomic(
-      config, meme.encrypted_pool_key, meme.pool_wallet, launchLog
-    );
+    const result = await launchOnPlatform(platform, {
+      config,
+      poolEncryptedKey: meme.encrypted_pool_key,
+      poolWalletAddress: meme.pool_wallet,
+      log: launchLog,
+    });
 
     if (!result.success || !result.mintAddress || !result.tokensReceived) {
       // Reset funded_at: the 24h launch countdown shouldn't penalize
