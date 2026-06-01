@@ -29,6 +29,12 @@ export interface LaunchParams {
   poolEncryptedKey: string;
   poolWalletAddress: string;
   log: LaunchLogger;
+  // Sub-escrow's encrypted private key. Required by platforms whose
+  // launch program treats the token's "creator" as a transaction
+  // signer (e.g. Meteora DBC's poolCreator). Pump.fun's creator is
+  // just an IDL data arg so this is unused on that path. Optional so
+  // pre-P2 memes (no sub-escrow) keep working.
+  creatorEncryptedKey?: string;
 }
 
 // Superset return shape. pump.fun's launchPooledAtomic already returns

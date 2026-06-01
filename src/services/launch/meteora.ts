@@ -76,7 +76,7 @@ async function uploadMetadata(config: LaunchParams['config']): Promise<{ uri: st
 }
 
 export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
-  const { config, poolEncryptedKey, poolWalletAddress, log } = params;
+  const { config, poolEncryptedKey, poolWalletAddress, log, creatorEncryptedKey } = params;
 
   const dbcConfig = getConfigPubkey();
   if (!dbcConfig) {
@@ -114,9 +114,24 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     // poolCreator → sub-escrow when provided (so DBC creator-fees route
     // to per-meme sub-escrow, matching the pump.fun pattern). Falls back
     // to the pool wallet when no sub-escrow is set (legacy / pre-P2 memes).
-    const poolCreator = config.creatorPubkey
-      ? new PublicKey(config.creatorPubkey)
-      : poolKp.publicKey;
+    //
+    // CRITICAL: Meteora's poolCreator is a TRANSACTION SIGNER (different
+    // from pump.fun's IDL-arg creator). When we route fees to the
+    // sub-escrow, the sub-escrow keypair must also sign the launch tx.
+    // The launch route loads memes.encrypted_creator_subescrow_key and
+    // passes it through as creatorEncryptedKey.
+    const useSubEscrowAsCreator = !!config.creatorPubkey && !!creatorEncryptedKey;
+    let creatorSignerKp: Keypair | null = null;
+    let poolCreator: PublicKey;
+    if (useSubEscrowAsCreator) {
+      creatorSignerKp = decryptKeypair(creatorEncryptedKey!);
+      if (creatorSignerKp.publicKey.toBase58() !== config.creatorPubkey) {
+        return { success: false, error: 'Sub-escrow key/pubkey mismatch' };
+      }
+      poolCreator = creatorSignerKp.publicKey;
+    } else {
+      poolCreator = poolKp.publicKey;
+    }
 
     const client = new DynamicBondingCurveClient(conn, 'confirmed');
 
@@ -161,10 +176,16 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     );
 
     log('buy_sent', { detail: { platform: 'meteora' } });
+    // Signer set: pool wallet (pays + buys), mint keypair (account being
+    // created), and the sub-escrow when it's the poolCreator. The SDK
+    // builds a legacy Transaction so signer order doesn't matter — the
+    // serializer collects required pubkeys from the instructions.
+    const signers: Keypair[] = [poolKp, mintKp];
+    if (creatorSignerKp) signers.push(creatorSignerKp);
     const sig = await sendAndConfirmTransaction(
       conn,
       tx,
-      [poolKp, mintKp],
+      signers,
       { commitment: 'confirmed', skipPreflight: false, maxRetries: 3 },
     );
 

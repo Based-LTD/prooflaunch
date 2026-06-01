@@ -13,6 +13,9 @@ import { launchPooledAtomic } from '@/services/pumpfun';
 import type { LaunchOutcome, LaunchParams } from './types';
 
 export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
+  // pump.fun's `creator` is an IDL data arg, not a tx signer — so we
+  // ignore params.creatorEncryptedKey on this path. Only the meteora
+  // adapter consumes it (Meteora's poolCreator IS a signer).
   const { config, poolEncryptedKey, poolWalletAddress, log } = params;
   return launchPooledAtomic(config, poolEncryptedKey, poolWalletAddress, log);
 }

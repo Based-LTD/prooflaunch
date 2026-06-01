@@ -144,6 +144,10 @@ export async function POST(request: NextRequest) {
       poolEncryptedKey: meme.encrypted_pool_key,
       poolWalletAddress: meme.pool_wallet,
       log: launchLog,
+      // Meteora's poolCreator is a tx signer. When the sub-escrow is
+      // the creator (P2+ memes), the adapter needs the encrypted key
+      // to add as signer. Pump.fun ignores this field.
+      creatorEncryptedKey: meme.encrypted_creator_subescrow_key ?? undefined,
     });
 
     if (!result.success || !result.mintAddress || !result.tokensReceived) {

@@ -90,7 +90,12 @@ const tx = await client.pool.createPoolWithFirstBuy({
     symbol: 'PROOFTEST',
     uri: 'https://prooflaunch.fun/api/token-metadata/PROOFTEST',
     payer: poolKp.publicKey,
-    poolCreator: escrowKp.publicKey, // stand-in for sub-escrow in this smoke test
+    // poolCreator is a SIGNER on the DBC create instruction. For the
+    // smoke test we use the pool wallet itself so we only need [poolKp,
+    // mintKp] as signers. In the production adapter the sub-escrow is
+    // the creator; the adapter loads its encrypted key and adds it as
+    // a signer (see src/services/launch/meteora.ts).
+    poolCreator: poolKp.publicKey,
     config: dbcConfig,
     baseMint: mintKp.publicKey,
   },
