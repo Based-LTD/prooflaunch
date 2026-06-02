@@ -758,13 +758,13 @@ function SubmitPageInner() {
                 {'// LAUNCH_PLATFORM'}
               </span>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                LIVE · 1 of 4
+                LIVE · 2 of 4
               </span>
             </div>
             <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-2">
               {([
                 { key: 'pumpfun',  label: 'PUMP.FUN', sub: 'LIVE',          enabled: true  },
-                { key: 'meteora',  label: 'METEORA',  sub: 'SOON · PHASE 1', enabled: false },
+                { key: 'meteora',  label: 'METEORA',  sub: 'LIVE',           enabled: true  },
                 { key: 'bags',     label: 'BAGS.FM',  sub: 'SOON · PHASE 2', enabled: false },
                 { key: 'bonk',     label: 'BONK',     sub: 'SOON · PHASE 3', enabled: false },
               ] as const).map((p) => {
