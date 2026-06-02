@@ -64,19 +64,15 @@ function getConfigPubkey(): PublicKey | null {
   }
 }
 
-// Token metadata uploader. Reuses the same off-chain JSON shape pump.fun
-// uses so the rest of the UI (preview cards, detail page) doesn't have
-// to branch on platform. Hosted at /api/launch/meteora/metadata so the
-// dev path can verify the URL resolves to valid metadata JSON before
-// the launch tx is sent.
-async function uploadMetadata(config: LaunchParams['config']): Promise<{ uri: string }> {
-  // For Phase 1 we point at the same metadata host pump.fun uses (our
-  // own /api/token-metadata route serves the JSON from the meme row).
-  // Real implementation will be wired alongside the test script — for
-  // now this returns a placeholder so the adapter's signature is final
-  // and downstream code (route, type) compiles.
-  const symbol = encodeURIComponent(config.symbol);
-  return { uri: `${process.env.NEXT_PUBLIC_BASE_URL ?? ''}/api/token-metadata/${symbol}` };
+// Build the metadata URI that gets embedded ON-CHAIN at create time.
+// IMPORTANT: this URL is FIXED at launch — wallets, explorers, and
+// indexers resolve it for the life of the token. It must be unique
+// per token. We use the mint pubkey (unique forever) as the key, not
+// the symbol (collides across memes — e.g. multiple BONKD submissions
+// would overwrite each other's metadata).
+function metadataUriForMint(mint: PublicKey): string {
+  const base = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://prooflaunch.fun';
+  return `${base}/api/token-metadata/${mint.toBase58()}`;
 }
 
 export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
@@ -113,7 +109,7 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     }
 
     log('create_sent', { detail: { platform: 'meteora', symbol: config.symbol } });
-    const { uri } = await uploadMetadata(config);
+    const uri = metadataUriForMint(mint);
 
     // poolCreator → sub-escrow when provided (so DBC creator-fees route
     // to per-meme sub-escrow, matching the pump.fun pattern). Falls back

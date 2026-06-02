@@ -133,6 +133,25 @@ export async function POST(request: NextRequest) {
       ? (meme.launch_platform as LaunchPlatform)
       : 'pumpfun';
 
+    // Pre-flight readiness check — refuse to send any tx if the
+    // platform's required env isn't configured. Catches the failure
+    // BEFORE the meme is moved into 'launching' state via the (now
+    // already-applied) status update above, so we revert it. Without
+    // this, a misconfigured Meteora launch would set status=launching,
+    // the adapter would return error, and the catch block would still
+    // see status=launching after the route returns — confusing the
+    // UI's "ready to deploy" gate.
+    if (platform === 'meteora' && !process.env.METEORA_DBC_CONFIG) {
+      await supabase
+        .from('memes')
+        .update({ status: 'funded', funded_at: new Date().toISOString() })
+        .eq('id', meme_id);
+      return NextResponse.json(
+        { error: 'Meteora launches are not yet configured — try Pump.fun.' },
+        { status: 503 },
+      );
+    }
+
     console.log(`Launching ${config.name} via ${platform} from pool ${meme.pool_wallet}`);
 
     // ONE atomic create+buy from the pool wallet (zero sniper gap,

@@ -58,7 +58,7 @@ const tx = await client.pool.createPoolWithFirstBuy({
   createPoolParam: {
     name: 'PROOF Subesc Test',
     symbol: 'PROOFSUB',
-    uri: 'https://prooflaunch.fun/api/token-metadata/PROOFSUB',
+    uri: `https://prooflaunch.fun/api/token-metadata/${mintKp.publicKey.toBase58()}`,
     payer: poolKp.publicKey,
     poolCreator: subEscrowKp.publicKey, // ← the prod scenario
     config: dbcConfig,
