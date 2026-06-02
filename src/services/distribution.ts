@@ -290,9 +290,6 @@ export async function collectAndCreditFees(
   if (!meme.creator_subescrow_pubkey || !meme.encrypted_creator_subescrow_key) {
     return { ok: true, skipped: 'legacy meme (no sub-escrow; trading fees route to shared escrow as platform revenue)' };
   }
-  // Default to legacy_flat if the column is null (handles pre-migration rows)
-  const feeMode: 'legacy_flat' | 'hold_weighted' =
-    meme.fee_distribution_mode === 'hold_weighted' ? 'hold_weighted' : 'legacy_flat';
 
   // Decrypt sub-escrow keypair + pubkey-match safety gate
   let subKp: Keypair;
@@ -342,6 +339,44 @@ export async function collectAndCreditFees(
   } else {
     log('reconcile_recovered', { detail: { stage: 'recovery_drain', subBalancePre, vaultLamports, note: 'orphaned sub-escrow SOL from prior run, draining without re-collect' } });
   }
+
+  // Steps B + C — drain sub-escrow + credit backers / bots — are entirely
+  // platform-agnostic (sub-escrow holds SOL after EITHER pump.fun's
+  // collect_creator_fee or Meteora's claimCreatorTradingFee). Delegated
+  // to the shared helper so both fee-collection cron paths converge here.
+  return drainAndCreditFromSubEscrow({
+    supabase, meme, subKp, conn, escrow, collectSig, log,
+  });
+}
+
+// Shared post-collect pipeline. Called by both:
+//   - collectAndCreditFees (pump.fun: after collect_creator_fee)
+//   - drainAndCreditAfterPlatformClaim (Meteora: after claimCreatorTradingFee)
+//
+// Assumes SOL has already landed in subKp.publicKey by the time it runs.
+// Idempotent up to balance availability: if sub-escrow is empty (orphaned
+// or already drained), returns ok:false so the caller can decide.
+interface MemeForCredit {
+  id: string;
+  mint_address?: string | null;
+  fee_distribution_mode?: string | null;
+  fee_backer_pct?: number | null;
+}
+
+async function drainAndCreditFromSubEscrow(args: {
+  supabase: SupabaseClient;
+  meme: MemeForCredit;
+  subKp: Keypair;
+  conn: Connection;
+  escrow: Keypair;
+  collectSig?: string | null;
+  log: LaunchLogger;
+}): Promise<CollectAndCreditResult> {
+  const { supabase, meme, subKp, conn, escrow, collectSig, log } = args;
+
+  // Default to legacy_flat if the column is null (handles pre-migration rows)
+  const feeMode: 'legacy_flat' | 'hold_weighted' =
+    meme.fee_distribution_mode === 'hold_weighted' ? 'hold_weighted' : 'legacy_flat';
 
   // Step B: drain sub-escrow → shared escrow, drain-to-zero (sub-escrow
   // ends at exactly 0; same Solana-rent-floor rule that bit refundFromPool).
@@ -638,4 +673,45 @@ export async function collectAndCreditFees(
     collectedLamports, platformLamports, backerLamports: totalEffectiveLam, backerCount: credited,
     collectSig: collectSig ?? undefined, drainSig,
   };
+}
+
+// Public entry point for non-pump.fun cron paths (Meteora, etc.) that
+// have already run their own platform-specific fee claim (Step A) and
+// just need Steps B + C: drain sub-escrow → escrow, route to bots,
+// credit backers' claimable_fees_sol.
+//
+// Idempotent and safe-by-default — returns ok:false (or ok:true skipped)
+// if there's nothing to drain. Caller doesn't need to know the exact
+// state of the sub-escrow; this function handles both fresh-fee and
+// orphaned-SOL-recovery cases the same way as collectAndCreditFees does
+// for pump.fun.
+export async function drainAndCreditAfterPlatformClaim(
+  supabase: SupabaseClient,
+  memeId: string,
+  log: LaunchLogger = createLaunchLogger(memeId),
+): Promise<CollectAndCreditResult> {
+  const { data: meme, error: memeErr } = await supabase
+    .from('memes')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct')
+    .eq('id', memeId)
+    .single();
+  if (memeErr || !meme) return { ok: false, error: 'meme not found' };
+  if (meme.status !== 'live') return { ok: true, skipped: `not live (status=${meme.status})` };
+  if (!meme.creator_subescrow_pubkey || !meme.encrypted_creator_subescrow_key) {
+    return { ok: true, skipped: 'no sub-escrow (legacy pre-P2 meme)' };
+  }
+
+  let subKp: Keypair;
+  try { subKp = decryptKeypair(meme.encrypted_creator_subescrow_key); }
+  catch (e) { return { ok: false, error: `sub-escrow decrypt failed: ${e instanceof Error ? e.message : String(e)}` }; }
+  if (subKp.publicKey.toBase58() !== meme.creator_subescrow_pubkey) {
+    return { ok: false, error: 'sub-escrow key mismatch — refusing to touch' };
+  }
+
+  const conn = new Connection(RPC_URL, 'confirmed');
+  const escrow = loadEscrow();
+
+  return drainAndCreditFromSubEscrow({
+    supabase, meme, subKp, conn, escrow, collectSig: undefined, log,
+  });
 }

@@ -32,6 +32,7 @@ import {
 } from '@solana/web3.js';
 import { BN } from 'bn.js';
 import { DynamicBondingCurveClient, deriveDbcPoolAddress } from '@meteora-ag/dynamic-bonding-curve-sdk';
+import { getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError } from '@solana/spl-token';
 
 // Quote mint = native SOL (wrapped). Same constant we used in the
 // config template. Required to derive the DBC pool address.
@@ -88,10 +89,19 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
 
   const conn = new Connection(RPC_URL, 'confirmed');
 
-  // Mint keypair: in Phase 1 we use a random keypair. The pump.fun path
-  // also tries a pre-ground `...pooL` vanity from the vanity pool; we'll
-  // wire that in once Meteora launches are stable on mainnet.
-  const mintKp = Keypair.generate();
+  // Mint keypair: consume a pre-ground `...pooL` vanity from the
+  // shared pool so Meteora launches carry the same brand-recognizable
+  // contract-address suffix that Pump.fun launches do. Degrades to a
+  // random mint if the pool is empty — never blocks the launch.
+  let mintKp = Keypair.generate();
+  try {
+    const { consumeVanityWallet } = await import('@/lib/vanity');
+    const { decryptPrivateKey: dk } = await import('@/lib/crypto');
+    const v = await consumeVanityWallet('pool', `meteora-mint:${config.symbol}`);
+    if (v) {
+      mintKp = Keypair.fromSecretKey(bs58.decode(dk(v.encryptedPrivateKey)));
+    }
+  } catch { /* vanity unavailable — random mint is fine */ }
   const mint = mintKp.publicKey;
 
   try {
@@ -197,9 +207,46 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     // hourly fee cron can locate the pool to claim from.
     const dbcPoolAddress = deriveDbcPoolAddress(QUOTE_MINT_SOL, mint, dbcConfig).toBase58();
 
+    // Read the pool wallet's token balance so settlePoolDistribution
+    // can compute backer pro-rata shares. Mainnet RPC nodes lag a few
+    // seconds behind 'confirmed' commitment, so poll up to ~15s for
+    // the ATA to appear. The tokens DEFINITELY landed (launch tx
+    // confirmed), so this is a view-lag issue, not a real failure.
+    const poolAta = getAssociatedTokenAddressSync(mint, poolKp.publicKey);
+    let tokensReceived: number | undefined;
+    const POLL_DEADLINE = Date.now() + 15_000;
+    while (Date.now() < POLL_DEADLINE) {
+      try {
+        const acct = await getAccount(conn, poolAta, 'confirmed');
+        if (acct.amount > BigInt(0)) {
+          tokensReceived = Number(acct.amount);
+          break;
+        }
+      } catch (e) {
+        if (!(e instanceof TokenAccountNotFoundError)) throw e;
+        // ATA not visible yet at this RPC node — wait + retry.
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    if (tokensReceived === undefined) {
+      // Launch succeeded on-chain but we couldn't read the balance in time.
+      // The launch route will persist what it has and the reconcile cron
+      // will backfill tokensReceived by reading the pool ATA on its next
+      // tick. Returning success here is safe — the meme is launched.
+      log('reconcile_error', {
+        ok: false,
+        detail: { stage: 'pool_balance_read_timeout', poolAta: poolAta.toBase58() },
+      });
+    }
+
     log('launch_complete', {
       signature: sig,
-      detail: { platform: 'meteora', mint: mint.toBase58(), dbcPool: dbcPoolAddress },
+      detail: {
+        platform: 'meteora',
+        mint: mint.toBase58(),
+        dbcPool: dbcPoolAddress,
+        tokensReceived: tokensReceived ?? null,
+      },
     });
 
     // Meteora's pool URL — Edge.gg / Dexscreener style. Final URL shape
@@ -213,13 +260,7 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
       pumpFunUrl,
       createSignature: sig,
       poolWallet: poolKp.publicKey.toBase58(),
-      // Token amount received by the pool — DBC's first-buy returns
-      // the curve-derived token amount; we'd parse it from the tx logs
-      // (program-emitted "swap" event). For Phase 1 we leave it
-      // undefined; the cron's reconcile path will fill it from on-chain
-      // pool state. Settlement to backers still works because backer
-      // tokens are computed from pool_token_balance after launch.
-      tokensReceived: undefined,
+      tokensReceived,
       dbcPoolAddress,
     };
   } catch (e) {

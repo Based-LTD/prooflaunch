@@ -25,6 +25,8 @@ import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk
 import type { SupabaseClient } from '@supabase/supabase-js';
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
+import { drainAndCreditAfterPlatformClaim } from '@/services/distribution';
+import { createLaunchLogger } from '@/lib/launchLog';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 
@@ -111,6 +113,10 @@ export interface MeteoraCollectResult {
   ok: boolean;
   skipped?: string;
   claimSig?: string;
+  drainSig?: string;
+  collectedLamports?: number;
+  backerLamports?: number;
+  backerCount?: number;
   error?: string;
 }
 
@@ -130,12 +136,37 @@ export async function collectMeteoraFeesForCron(
     return { ok: true, skipped: 'no sub-escrow (legacy pre-P2 meme)' };
   }
 
-  const result = await claimCreatorFees({
+  // Step A — platform-specific: claim DBC creator fees on-chain.
+  // SOL lands in the sub-escrow.
+  const claim = await claimCreatorFees({
     poolAddress: meme.dbc_pool_address,
     subEscrowEncryptedKey: meme.encrypted_creator_subescrow_key,
     subEscrowPubkey: meme.creator_subescrow_pubkey,
   });
+  if (!claim.success) return { ok: false, error: claim.error };
 
-  if (!result.success) return { ok: false, error: result.error };
-  return { ok: true, claimSig: result.signature };
+  // Steps B + C — shared pipeline: drain sub-escrow → escrow, route
+  // to bots, credit backers. Same code path pump.fun uses; the
+  // sub-escrow doesn't care which platform put SOL in it.
+  const log = createLaunchLogger(memeId);
+  const credit = await drainAndCreditAfterPlatformClaim(supabase, memeId, log);
+
+  // The claim succeeded even if drain fails (orphaned SOL in sub-escrow
+  // will be caught + drained by the next cron tick). Surface both signals
+  // so the caller can log the partial-success case appropriately.
+  if (!credit.ok) {
+    return {
+      ok: false,
+      claimSig: claim.signature,
+      error: `claim ok but credit failed: ${credit.error}`,
+    };
+  }
+  return {
+    ok: true,
+    claimSig: claim.signature,
+    drainSig: credit.drainSig,
+    collectedLamports: credit.collectedLamports,
+    backerLamports: credit.backerLamports,
+    backerCount: credit.backerCount,
+  };
 }
