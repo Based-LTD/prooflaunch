@@ -30,6 +30,8 @@ import {
     BaseFeeMode,
     MigrationOption,
     MigrationFeeOption,
+    MigratedCollectFeeMode,
+    DammV2DynamicFeeMode,
 } from '@meteora-ag/dynamic-bonding-curve-sdk';
 
 // ---------------------------------------------------------------------------
@@ -121,12 +123,22 @@ const buildParams: BuildCurveWithMarketCapParams = {
     migration: {
         migrationOption: MigrationOption.MET_DAMM_V2,
         // why: spec requires DAMM v2 (programmable fees + locked LP positions). Enum value = 1.
-        migrationFeeOption: MigrationFeeOption.FixedBps100,
-        // why: post-migration LP fee tier = 1% (matches our curve's 1% fee for a smooth transition).
-        // Enum values: FixedBps25=0, FixedBps30=1, FixedBps100=2, FixedBps200=3, ... (SDK:5578)
-        // VERIFY: Pump uses 0.3% (FixedBps30) on PumpSwap. We chose 1% to keep fee continuity; if you'd
-        // rather match Pump's lower post-grad fee, switch to MigrationFeeOption.FixedBps30.
-        // HIGH RISK FIELD: this is permanent — once a pool migrates, the LP fee tier is fixed forever.
+        migrationFeeOption: MigrationFeeOption.Customizable,
+        // why: 0.5% post-migration LP fee — backer-favoring fair number that sits between Pump.fun's
+        // 0.3% and our 1% curve fee. Not a fixed enum tier; requires Customizable + explicit
+        // migratedPoolFee below. Floor MIN_MIGRATED_POOL_FEE_BPS=10, ceiling MAX_MIGRATED_POOL_FEE_BPS=1000.
+        // HIGH RISK FIELD: permanent for every token launched against this config. Per-pool, per-graduation.
+        // To change later: create a new config + switch METEORA_DBC_CONFIG env (existing tokens stay locked).
+        migratedPoolFee: {
+            collectFeeMode: MigratedCollectFeeMode.QuoteToken,
+            // why: fees accrue in SOL (quote) post-migration, matching our pre-migration CollectFeeMode.QuoteToken.
+            // OutputToken would yield fees in the meme token and break our 90/10 SOL split.
+            dynamicFee: DammV2DynamicFeeMode.Disabled,
+            // why: flat fee schedule post-migration. DammV2DynamicFeeMode.Enabled adds a volatility
+            // surcharge on top of the base fee; disable for predictable economics + simpler cron math.
+            poolFeeBps: 50,
+            // why: 0.5% = 50 bps. Backer-favoring without being so high it discourages swap volume.
+        },
         migrationFee: {
             feePercentage: 0,
             // why: % skim of the quote threshold paid to Meteora protocol + partner at migration time.
@@ -138,9 +150,6 @@ const buildParams: BuildCurveWithMarketCapParams = {
             // why: of the migrationFee.feePercentage above, what % goes to creator vs partner.
             // Since feePercentage=0, this is moot. Range 0–100 (MAX_CREATOR_MIGRATION_FEE_PERCENTAGE=100).
         },
-        // migratedPoolFee: omitted — only needed with migrationFeeOption=Customizable (6) or marketCap fee scheduler.
-        // The SDK fills DEFAULT_MIGRATED_POOL_FEE_PARAMS = { collectFeeMode:0, dynamicFee:0, poolFeeBps:0 }
-        // when omitted (SDK:6702).
     },
 
     liquidityDistribution: {

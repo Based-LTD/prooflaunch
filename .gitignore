@@ -54,3 +54,4 @@ tools/migrate-proof-to-pool.mjs
 # Meteora DBC config keypair stashes — contain private keys; never commit.
 # Created by tools/meteora-create-config.mjs after a successful config init.
 meteora-dbc-config.*.json
+meteora-mainnet-test.*.json
