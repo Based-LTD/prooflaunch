@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 //
-// One-off: sweep all liquid SOL from the BUYBACK wallet (PROOF coin creator
-// on pump.fun, address ELFjjx7A…) over to the HOLDER_REWARDS wallet so the
-// next daily airdrop run can fan it out to PROOF holders pro-rata.
+// One-off: sweep accumulated SOL from the BUYBACK wallet (PROOF coin
+// creator on pump.fun) over to the HOLDER_REWARDS wallet so the next
+// daily airdrop run can fan it out to PROOF holders pro-rata.
 //
-// Context: both wallets' private keys lived in .env.local on a machine that
-// was hit by malware. We've decided to keep the wallets in use (business as
-// usual, monitor + react), but rather than let creator-fee accumulations
-// sit in the BUYBACK wallet exposed, sweep them onward to the airdrop
-// source so they get distributed (and never sit anywhere long).
+// Operationally we don't want creator-fee accumulations to sit idle in
+// the BUYBACK wallet — sweeping onward to the airdrop source means SOL
+// gets distributed quickly and never lingers in any one wallet for long.
 //
 // Leaves a tiny reserve in BUYBACK for future tx fees (next pump.fun fee
 // claim, etc) — don't drain to zero or future operations brick.
