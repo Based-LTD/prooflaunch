@@ -10,7 +10,8 @@ type BotActionT =
   | 'burn' | 'hold'
   | 'distribute_tokens_holders' | 'distribute_tokens_backers'
   | 'distribute_sol_holders'    | 'distribute_sol_backers'
-  | 'donate_sol'                | 'donate_tokens';
+  | 'donate_sol'                | 'donate_tokens'
+  | 'feed_lp';
 
 interface BotStackItem {
   action: BotActionT;
@@ -54,6 +55,7 @@ const BOT_ICON: Record<string, string> = {
   distribute_sol_backers: '💰',
   donate_sol: '🎁',
   donate_tokens: '🎀',
+  feed_lp: '🌊',
 };
 const BOT_SHORT: Record<string, string> = {
   burn: 'BURN',
@@ -64,6 +66,7 @@ const BOT_SHORT: Record<string, string> = {
   distribute_sol_backers: 'SOL→B',
   donate_sol: 'DONATE SOL',
   donate_tokens: 'DONATE TOK',
+  feed_lp: 'POOL FEED',
 };
 const DONATE_ACTIONS = new Set(['donate_sol', 'donate_tokens']);
 

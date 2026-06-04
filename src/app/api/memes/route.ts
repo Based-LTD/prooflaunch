@@ -500,6 +500,9 @@ export async function POST(request: NextRequest) {
       // when destinations differ.
       'donate_sol',
       'donate_tokens',
+      // POOL_FEEDER — auto-LP / protocol-owned liquidity. Single instance
+      // per meme. Accumulates pre-grad, deploys LP post-grad.
+      'feed_lp',
       // Legacy synonyms accepted for backwards compat.
       'distribute_holders',
       'distribute_backers',

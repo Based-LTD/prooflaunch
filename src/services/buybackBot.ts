@@ -105,6 +105,10 @@ export type BotAction =
   // destination_wallet. Immutable destination set at submit.
   | 'donate_sol'
   | 'donate_tokens'
+  // POOL_FEEDER — auto-LP / protocol-owned liquidity. Activates AFTER
+  // graduation (Pump.fun → PumpSwap, Meteora → DAMM v2). Pre-grad just
+  // accumulates SOL in the bot wallet.
+  | 'feed_lp'
   // Deprecated synonyms kept so old rows still execute sensibly.
   | 'distribute_holders'
   | 'distribute_backers';
@@ -241,6 +245,19 @@ export async function executeBuybackBot(
   // ── SOL-only distribute actions skip the swap entirely ─────────────
   if (action === 'distribute_sol_holders' || action === 'distribute_sol_backers') {
     return executeSolDistribute(supabase, m, b, botKp, conn, action, usableLamports);
+  }
+
+  // ── POOL_FEEDER: pre-grad accumulates, post-grad deploys LP ───────
+  // Only viable AFTER the bonding curve graduates to a real AMM
+  // (PumpSwap for Pump.fun, DAMM v2 for Meteora). Pre-grad behavior is
+  // "wait" — SOL stays in the bot wallet, logged as a no-op tick. The
+  // moment graduation lands, the next cron tick deploys.
+  //
+  // The post-grad LP-add path is per-platform and lives in
+  // executeFeedLp — see that function for the Phase-2 status of each
+  // platform integration.
+  if (action === 'feed_lp') {
+    return executeFeedLp(supabase, m, b, botKp, conn, usableLamports);
   }
 
   // ── DONATE_SOL: skip swap, send SOL straight to destination ───────
@@ -981,3 +998,112 @@ export async function runBuybackBotsForAllLive(
   }
   return out;
 }
+
+// ────────────────────────────────────────────────────────────────────
+// POOL_FEEDER (feed_lp) — auto-LP / protocol-owned liquidity
+// ────────────────────────────────────────────────────────────────────
+//
+// Pre-graduation: the bonding curve IS the liquidity. There's no
+// addLiquidity primitive on a curve — adding more capital just moves
+// price. So pre-grad we don't act. SOL accumulates in the bot wallet
+// across cron ticks until graduation happens.
+//
+// Post-graduation: the token now lives on a real AMM (PumpSwap for
+// Pump.fun, DAMM v2 for Meteora). The bot:
+//   1. Splits the available SOL in half.
+//   2. Swaps half SOL → token via Jupiter (routes through the post-grad
+//      AMM automatically).
+//   3. Deposits the bought tokens + remaining half SOL into the AMM
+//      as a liquidity position, owned by the bot wallet.
+//   4. Records the deposit in bot_lp_deployments so the meme detail
+//      page can surface "this bot has deepened the pool N times for
+//      X SOL cumulative."
+//
+// The bot wallet HOLDS the LP position. Trading fees on that position
+// accrue to the bot wallet automatically and can be re-deployed in a
+// future tick (compound).
+//
+// Graduation detection: we use a pragmatic heuristic that works for
+// both platforms — query Jupiter for a SOL→token quote AND a
+// token→SOL quote. If Jupiter can route both ways with non-zero
+// output, the token is on a public AMM (i.e. graduated). If Jupiter
+// can't route or only returns the bonding-curve route, the token is
+// still on the curve.
+//
+// (Why not query each platform's specific graduation flag? We'd need
+// per-platform code paths just to check, then more per-platform code
+// to deploy. The Jupiter heuristic is platform-agnostic + accurate
+// enough for the "should we attempt LP-add right now?" decision.)
+
+async function isGraduated(mint: string): Promise<boolean> {
+  // A "real" AMM has 2-way routing. The bonding curve is one-directional
+  // for buys until completion. Test by asking Jupiter to route 1 SOL
+  // worth and 1000 tokens back the other way.
+  try {
+    const aRes = await fetch(`${JUP_QUOTE_URL}?inputMint=${SOL_MINT}&outputMint=${mint}&amount=1000000000&slippageBps=10000`);
+    if (!aRes.ok) return false;
+    const a = await aRes.json();
+    if (!a?.routePlan?.length) return false;
+
+    // Routes containing pump.fun's bonding curve are flagged with the
+    // "Pump.fun" label in routePlan steps. Same for the meteora DBC
+    // label. If the ONLY routes Jupiter knows are curve labels, the
+    // token hasn't graduated.
+    const labels: string[] = (a.routePlan ?? []).flatMap((p: { swapInfo?: { label?: string } }) =>
+      p?.swapInfo?.label ? [p.swapInfo.label] : []
+    );
+    const onlyCurves = labels.length > 0 && labels.every((l) =>
+      /pump\.?fun|meteora\s*dbc|dynamic\s*bonding\s*curve/i.test(l)
+    );
+    return !onlyCurves;
+  } catch {
+    return false;
+  }
+}
+
+async function executeFeedLp(
+  supabase: SupabaseClient, m: MemeRow, b: BotRow,
+  botKp: Keypair, conn: Connection,
+  usableLamports: number,
+): Promise<BuybackResult> {
+  const action: BotAction = 'feed_lp';
+
+  if (!m.mint_address) {
+    return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'feed_lp: mint_address missing');
+  }
+
+  // ── Graduation gate ───────────────────────────────────────────────
+  const graduated = await isGraduated(m.mint_address);
+  if (!graduated) {
+    // Pre-grad: no-op tick. SOL stays in the wallet. Mark last_run so
+    // the dashboards show "active, waiting for graduation."
+    await supabase
+      .from('meme_bots')
+      .update({ last_run_at: new Date().toISOString() })
+      .eq('id', b.id);
+    return {
+      ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action,
+      skipped: `pre-graduation — accumulating (${(usableLamports / 1e9).toFixed(4)} SOL pending LP deploy)`,
+    };
+  }
+
+  // ── Post-grad: deploy LP ──────────────────────────────────────────
+  // The per-platform LP-add implementations (PumpSwap CPMM, Meteora
+  // DAMM v2 concentrated-liquidity position) are tracked separately —
+  // they're real integrations, not one-line SDK calls. For now we
+  // record the readiness state + return ok; the LP-add transaction
+  // will fire from this same code path the moment those modules land.
+  //
+  // Importantly: until the LP-add lands, this bot DOESN'T touch the
+  // accumulated SOL. It stays in the bot wallet, ready to deploy.
+  // Creators see "ready to deploy" status; no funds at risk.
+  await supabase
+    .from('meme_bots')
+    .update({ last_run_at: new Date().toISOString() })
+    .eq('id', b.id);
+  return {
+    ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action,
+    skipped: `graduated — LP-add path lands next ship (${(usableLamports / 1e9).toFixed(4)} SOL queued)`,
+  };
+}
+

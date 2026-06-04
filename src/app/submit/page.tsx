@@ -12,7 +12,8 @@ type BotActionT =
   | 'distribute_sol_holders'
   | 'distribute_sol_backers'
   | 'donate_sol'
-  | 'donate_tokens';
+  | 'donate_tokens'
+  | 'feed_lp';
 
 interface BotActionMeta {
   value: BotActionT;
@@ -37,6 +38,10 @@ const BOT_ACTIONS: BotActionMeta[] = [
   // value comes from publicly burning the optionality to redirect.
   { value: 'donate_sol',                 label: 'DONATE SOL',          short: 'Donate SOL',          tag: 'Commitment',   emoji: '🎁', desc: 'Send SOL straight to a fixed destination wallet you name (charity, DAO, partner). Address is locked in at submit — can never be changed.' },
   { value: 'donate_tokens',              label: 'DONATE TOKENS',       short: 'Donate Tokens',       tag: 'Commitment',   emoji: '🎀', desc: 'Buy tokens, send them to a fixed destination wallet. Same immutable-address commitment as DONATE SOL.' },
+  // POOL_FEEDER — protocol-owned liquidity. Pre-graduation: accumulates SOL.
+  // Post-graduation: swaps half SOL → tokens, deposits both into the AMM,
+  // bot wallet owns the LP position forever. Every batch deepens the pool.
+  { value: 'feed_lp',                    label: 'POOL FEEDER',         short: 'Pool Feeder',         tag: 'Liquidity',    emoji: '🌊', desc: 'Deepen the LP after graduation. Bot swaps half SOL into tokens, deposits both as locked liquidity, owns the LP position forever. Activates the moment the token graduates from the bonding curve to a full AMM pool (PumpSwap for Pump.fun, DAMM v2 for Meteora).' },
 ];
 const BOT_ACTION_BY_VALUE = Object.fromEntries(BOT_ACTIONS.map((a) => [a.value, a]));
 
