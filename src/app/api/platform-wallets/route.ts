@@ -43,8 +43,8 @@ export async function GET() {
   // derive from private-key envs as fallback. Never returns a key
   // value — derived addresses only.
   const escrowAddr =
-    deriveAddressFromSecret(process.env.ESCROW_WALLET_PRIVATE_KEY)
-    ?? process.env.NEXT_PUBLIC_ESCROW_WALLET
+    process.env.NEXT_PUBLIC_ESCROW_WALLET
+    ?? deriveAddressFromSecret(process.env.ESCROW_WALLET_PRIVATE_KEY)
     ?? null;
   const platformAddr = process.env.PLATFORM_WALLET_ADDRESS ?? null;
   const holderRewardsAddr = process.env.HOLDER_REWARDS_WALLET_ADDRESS ?? null;
