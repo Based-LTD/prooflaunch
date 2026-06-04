@@ -42,13 +42,19 @@ export async function GET() {
   // Pull addresses. Prefer public-address envs where they exist;
   // derive from private-key envs as fallback. Never returns a key
   // value — derived addresses only.
+  // Trim every env-sourced address. Vercel's env editor has a known
+  // habit of preserving trailing newlines from paste, which then
+  // concatenates into the solscan URL and breaks the link. See memory
+  // `vercel-env-newline-gotcha` — same root cause, address surface.
+  const cleanAddr = (s: string | undefined | null): string | null =>
+    s ? s.trim() || null : null;
   const escrowAddr =
-    process.env.NEXT_PUBLIC_ESCROW_WALLET
+    cleanAddr(process.env.NEXT_PUBLIC_ESCROW_WALLET)
     ?? deriveAddressFromSecret(process.env.ESCROW_WALLET_PRIVATE_KEY)
     ?? null;
-  const platformAddr = process.env.PLATFORM_WALLET_ADDRESS ?? null;
-  const holderRewardsAddr = process.env.HOLDER_REWARDS_WALLET_ADDRESS ?? null;
-  const buybackAddr = process.env.NEXT_PUBLIC_PROOF_BUYBACK_WALLET ?? null;
+  const platformAddr = cleanAddr(process.env.PLATFORM_WALLET_ADDRESS);
+  const holderRewardsAddr = cleanAddr(process.env.HOLDER_REWARDS_WALLET_ADDRESS);
+  const buybackAddr = cleanAddr(process.env.NEXT_PUBLIC_PROOF_BUYBACK_WALLET);
 
   const spec: Array<{ key: string; label: string; role: string; address: string | null }> = [
     {
