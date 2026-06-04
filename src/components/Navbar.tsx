@@ -1,9 +1,10 @@
 'use client';
 
-import { FC } from 'react';
+import { FC, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { PlatformWalletsModal } from './PlatformWalletsModal';
 
 // Dynamically import wallet button to avoid SSR hydration mismatch
 const WalletMultiButton = dynamic(
@@ -28,6 +29,7 @@ const navLinks = [
 export const Navbar: FC = () => {
   const pathname = usePathname();
   const isDemo = pathname?.startsWith('/demo');
+  const [walletsOpen, setWalletsOpen] = useState(false);
   // Demo routes still need the translucent + blurred bar since they
   // bring their own backgrounds. All other routes (flat shell now,
   // post-video-removal) get the solid bar.
@@ -66,6 +68,15 @@ export const Navbar: FC = () => {
                 </Link>
               );
             })}
+            {/* Platform Wallets — opens a modal instead of navigating */}
+            <button
+              type="button"
+              onClick={() => setWalletsOpen(true)}
+              aria-haspopup="dialog"
+              className="px-4 py-2 text-xs font-mono uppercase tracking-widest transition-colors border-l border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              Wallets
+            </button>
           </div>
 
           {/* X + Dexscreener + GitHub + Wallet */}
@@ -126,8 +137,18 @@ export const Navbar: FC = () => {
               </Link>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setWalletsOpen(true)}
+            aria-haspopup="dialog"
+            className="flex-1 text-center py-2 text-[10px] font-mono uppercase tracking-widest border-l border-[var(--border)] text-[var(--muted)]"
+          >
+            Wallets
+          </button>
         </div>
       </div>
+
+      <PlatformWalletsModal open={walletsOpen} onClose={() => setWalletsOpen(false)} />
     </nav>
   );
 };
