@@ -36,6 +36,7 @@ interface FormData {
   telegram: string;
   discord: string;
   website: string;
+  github: string;
   botStackEnabled: boolean;
   botStack: BotStackItem[];
 }
@@ -74,7 +75,7 @@ export function TokenPreviewPanel({ formData, imagePreview, creatorWallet }: Pro
   const {
     name, symbol, description, totalSlots, reservedSlots,
     minBackingSol, maxBackingSol,
-    twitter, telegram, discord, website,
+    twitter, telegram, discord, website, github,
     botStackEnabled, botStack,
   } = formData;
 
@@ -83,6 +84,7 @@ export function TokenPreviewPanel({ formData, imagePreview, creatorWallet }: Pro
     { label: 'TG',       href: telegram.trim() },
     { label: 'DC',       href: discord.trim() },
     { label: 'WEB',      href: website.trim() },
+    { label: 'GH',       href: github.trim() },
   ].filter((s) => !!s.href);
 
   const displaySymbol = symbol.trim() ? symbol.trim().toUpperCase() : '???';

@@ -268,6 +268,7 @@ export interface LaunchConfig {
   telegram?: string;
   discord?: string;
   website?: string;
+  github?: string;
   totalBackingSol: number;
   creatorWallet: string;
   // Optional per-coin creator override (the "sub-escrow" pubkey
@@ -332,7 +333,9 @@ async function uploadMetadata(config: LaunchConfig): Promise<{ metadataUri: stri
 
   if (config.twitter) formData.append('twitter', config.twitter);
   if (config.telegram) formData.append('telegram', config.telegram);
+  if (config.discord) formData.append('discord', config.discord);
   if (config.website) formData.append('website', config.website);
+  if (config.github) formData.append('github', config.github);
 
   const response = await fetch('https://pump.fun/api/ipfs', {
     method: 'POST',
@@ -388,6 +391,11 @@ export async function createTokenOnly(config: LaunchConfig): Promise<LaunchResul
         twitter: config.twitter,
         telegram: config.telegram,
         website: config.website,
+        // SDK's CreateTokenMetadata type only accepts twitter/telegram/
+        // website. Discord + github would type-error here. They DO land
+        // in the on-chain metadata via uploadMetadata's FormData path
+        // (used by the pooled-model launches), which is what actually
+        // sets the metadataUri for the launch tx.
       },
       BigInt(0), // ZERO dev buy - bullish signal!
       BigInt(500),

@@ -187,6 +187,7 @@ export async function POST(request: NextRequest) {
       telegram,
       discord,
       website,
+      github,
       // New slot-based backing system
       total_slots,         // 2-24 backer slots
       min_backing_sol,     // Minimum SOL per backer
@@ -749,6 +750,7 @@ export async function POST(request: NextRequest) {
         telegram,
         discord,
         website,
+        github,
         // Slot-based backing system
         total_slots,
         reserved_slots: reservedSlotsNum,

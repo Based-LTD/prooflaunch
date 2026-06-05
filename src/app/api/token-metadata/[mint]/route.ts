@@ -37,7 +37,7 @@ export async function GET(_req: Request, { params }: Params) {
   const supabase = createServerClient();
   const { data: meme, error } = await supabase
     .from('memes')
-    .select('name, symbol, description, image_url, twitter, telegram, discord, website, mint_address')
+    .select('name, symbol, description, image_url, twitter, telegram, discord, website, github, mint_address')
     .eq('mint_address', raw)
     .maybeSingle();
 
@@ -73,6 +73,7 @@ export async function GET(_req: Request, { params }: Params) {
       ...(meme.telegram ? { telegram: meme.telegram } : {}),
       ...(meme.discord ? { discord: meme.discord } : {}),
       ...(meme.website ? { website: meme.website } : {}),
+      ...(meme.github ? { github: meme.github } : {}),
     },
   };
 

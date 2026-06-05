@@ -165,6 +165,7 @@ const URL_PATTERN = /^https?:\/\/[^\s]+$/;
 const TWITTER_PATTERN = /^https?:\/\/(x\.com|twitter\.com)\/[^\s]+$/i;
 const TELEGRAM_PATTERN = /^https?:\/\/t\.me\/[^\s]+$/i;
 const DISCORD_PATTERN = /^https?:\/\/discord\.(gg|com)\/[^\s]+$/i;
+const GITHUB_PATTERN = /^https?:\/\/(www\.)?github\.com\/[^\s]+$/i;
 
 interface ValidationErrors {
   name?: string;
@@ -175,6 +176,7 @@ interface ValidationErrors {
   website?: string;
   telegram?: string;
   discord?: string;
+  github?: string;
 }
 
 function validateName(name: string): string | undefined {
@@ -266,6 +268,7 @@ function SubmitPageInner() {
     website: '',
     telegram: '',
     discord: '',
+    github: '',
     // Visibility removed from the UI 2026-05-30 — all new launches are
     // OPEN. The API still accepts the field for backward compat with
     // legacy memes; we just hardcode 'open' on the payload.
@@ -374,6 +377,7 @@ function SubmitPageInner() {
       website: validateUrl(formData.website),
       telegram: validateUrl(formData.telegram, TELEGRAM_PATTERN, 'Telegram'),
       discord: validateUrl(formData.discord, DISCORD_PATTERN, 'Discord'),
+      github: validateUrl(formData.github, GITHUB_PATTERN, 'GitHub'),
     };
     Object.keys(errors).forEach(key => {
       if (errors[key as keyof ValidationErrors] === undefined) {
@@ -396,6 +400,7 @@ function SubmitPageInner() {
       case 'website': error = validateUrl(formData.website); break;
       case 'telegram': error = validateUrl(formData.telegram, TELEGRAM_PATTERN, 'Telegram'); break;
       case 'discord': error = validateUrl(formData.discord, DISCORD_PATTERN, 'Discord'); break;
+      case 'github': error = validateUrl(formData.github, GITHUB_PATTERN, 'GitHub'); break;
     }
     setFieldErrors(prev => ({ ...prev, [field]: error }));
   };
@@ -486,6 +491,7 @@ function SubmitPageInner() {
           telegram: formData.telegram || undefined,
           discord: formData.discord || undefined,
           website: formData.website || undefined,
+          github: formData.github || undefined,
           total_slots: formData.totalSlots,
           reserved_slots: formData.reservedSlots,
           min_backing_sol: formData.minBackingSol,
@@ -1036,6 +1042,24 @@ function SubmitPageInner() {
                     />
                     {touched.discord && fieldErrors.discord && (
                       <span className="text-[10px] font-mono text-[var(--error)] mt-1 block">{fieldErrors.discord}</span>
+                    )}
+                  </div>
+                  <div>
+                    <label className={labelClass}>GitHub</label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      name="github"
+                      value={formData.github}
+                      onChange={handleChange}
+                      onBlur={() => handleBlur('github')}
+                      placeholder="https://github.com/..."
+                      className={inputClass(touched.github && !!fieldErrors.github)}
+                    />
+                    {touched.github && fieldErrors.github && (
+                      <span className="text-[10px] font-mono text-[var(--error)] mt-1 block">{fieldErrors.github}</span>
                     )}
                   </div>
                 </div>

@@ -119,6 +119,7 @@ export async function POST(request: NextRequest) {
       telegram: meme.telegram,
       discord: meme.discord,
       website: meme.website,
+      github: meme.github,
       totalBackingSol: meme.current_backing_sol,
       creatorWallet: meme.creator_wallet,
       // Per-coin sub-escrow (P2 set this at submission); if null/legacy
