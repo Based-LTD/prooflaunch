@@ -228,7 +228,7 @@ export default function DocsPage() {
                 { icon: Zap, color: 'text-[var(--success)]', title: 'Same Price For Everyone', desc: 'One atomic pool buy at launch — every backer enters at the identical price. No front-running, no favored slot.' },
                 { icon: Wallet, color: 'text-[var(--accent-gold)]', title: 'Tokens Sent To You', desc: 'After launch, your proportional share is distributed straight to your connected wallet. Trade anywhere instantly.' },
                 { icon: Undo2, color: 'text-[var(--error)]', title: 'Withdraw Anytime', desc: 'Changed your mind? Withdraw before launch. Your SOL returns to your wallet (minus 2% fee).' },
-                { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Earn Trading Fees', desc: 'Genesis backers earn 90% of all trading fees, hold-weighted. The remaining 10% splits 5% platform / 5% to the $PROOF holder airdrop pool — half goes back to the community.' },
+                { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Protocol Fee Routing', desc: 'Trading fees from each launched token are routed by the protocol: a portion is rebated pro-rata to genesis backers, a portion funds platform operations, and a portion may be allocated to discretionary $PROOF holder distributions.' },
               ].map((item, i) => {
                 const Icon = item.icon;
                 return (
@@ -350,8 +350,8 @@ export default function DocsPage() {
               <div className="bg-[var(--background)] border border-[var(--accent)]/40 p-4 text-sm leading-relaxed text-[var(--muted)]">
                 <strong className="text-[var(--accent)]">No other pump.fun launcher does this.</strong>{' '}
                 Every Pump trade has always been &quot;buy the curve and hope.&quot; Proof gives
-                creators a real programmable layer — burn, treasury, holder yield, backer
-                rewards — automated, every block, every trade, auditable forever.
+                creators a real programmable layer — burn, treasury, holder distribution,
+                backer rebate — automated, every block, every trade, auditable forever.
               </div>
             </section>
 
@@ -366,8 +366,8 @@ export default function DocsPage() {
                   { emoji: '🏦', name: 'VAULT', tag: 'Treasury', desc: 'Buy + park in a labeled wallet you control (Marketing, DAO, Liquidity, Charity). Unlimited vaults per token. Creator-withdrawable via signed message — operational bots are sealed.' },
                   { emoji: '🪙', name: 'TOKENS → HOLDERS', tag: 'Loyalty', desc: 'Buy tokens, then airdrop them pro-rata to every wallet currently holding the mint. Rewards holding, drives volume.' },
                   { emoji: '🎯', name: 'TOKENS → BACKERS', tag: 'OG reward', desc: 'Buy tokens, then airdrop pro-rata to the genesis backers who funded the launch.' },
-                  { emoji: '💸', name: 'SOL → HOLDERS', tag: 'Yield', desc: 'Skip the swap entirely. Send delegated SOL pro-rata to every current holder — pure cash flow.' },
-                  { emoji: '💰', name: 'SOL → BACKERS', tag: 'OG yield', desc: 'Skip the swap. Send delegated SOL pro-rata to genesis backers.' },
+                  { emoji: '💸', name: 'SOL → HOLDERS', tag: 'Distribution', desc: 'Skip the swap entirely. Route delegated SOL pro-rata to every current holder as a protocol distribution.' },
+                  { emoji: '💰', name: 'SOL → BACKERS', tag: 'Distribution', desc: 'Skip the swap. Route delegated SOL pro-rata to genesis backers as a protocol distribution.' },
                 ].map((a) => (
                   <div key={a.name} className="border border-[var(--border)] bg-[var(--background)] p-3">
                     <div className="flex items-center justify-between mb-1.5">
@@ -476,7 +476,7 @@ export default function DocsPage() {
                   { label: 'Creation Fee', value: '0.02 SOL', color: 'border-[var(--accent)]', desc: 'One-time fee when submitting a token. Covers token creation costs on pump.fun. Waived for $PROOF holders (≥500k).' },
                   { label: 'Backing Fee', value: 'None', color: 'border-[var(--success)]', desc: 'No fee on backing. 100% of your SOL goes to the token\'s pool wallet.' },
                   { label: 'Withdrawal Fee', value: '2%', color: 'border-[var(--warning)]', desc: 'If you withdraw your backing before launch, 2% is deducted to discourage frivolous backing/withdrawing.' },
-                  { label: 'Trading Fees Split', value: '90 / 5 / 5', color: 'border-[var(--accent)]', desc: '90% to genesis backers (hold-weighted), 5% to platform operations, 5% to the $PROOF holder airdrop pool. Half the platform-side take flows back to the community.' },
+                  { label: 'Trading Fees Routing', value: '90 / 5 / 5', color: 'border-[var(--accent)]', desc: 'Protocol routes trading fees: pro-rata rebate to genesis backers (hold-weighted), platform operations allocation, and a discretionary $PROOF distribution pool. Distributions are at protocol discretion.' },
                 ].map((fee, i) => (
                   <div key={i} className={`bg-[var(--background)] p-4 border-l-4 ${fee.color}`}>
                     <div className="flex justify-between items-center mb-2">
@@ -499,9 +499,10 @@ export default function DocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">Trading Fee Distribution</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                Pump.fun sends 0.5% of all trading volume to the token creator wallet (controlled by Proof Launch).
-                Proof Launch splits this three ways: 90% to genesis backers (hold-weighted), 5% to platform
-                operations, 5% to the $PROOF holder airdrop pool. Creators must back their own token to earn fees.
+                Pump.fun routes 0.5% of trading volume to the token's creator vault (administered by Proof Launch).
+                The protocol routes that vault three ways: a pro-rata rebate to genesis backers (hold-weighted),
+                an allocation to platform operations, and an allocation to a discretionary $PROOF distribution
+                pool. Creators are eligible for the backer rebate only by participating as backers themselves.
               </p>
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 mt-4">
                 <h3 className="font-bold mb-3 uppercase tracking-wide">Example: How Fees Flow</h3>
@@ -530,9 +531,9 @@ export default function DocsPage() {
                   </div>
                 </div>
                 <p className="text-xs text-[var(--muted)] mt-3 uppercase tracking-wide leading-relaxed">
-                  Backers split their share proportionally, scaled by current hold %. Dumpers&apos; freed
-                  shares flow 100% into the $PROOF airdrop pool — so half the platform-side take goes
-                  back to the community, and the more conviction the cap table has, the more backers earn.
+                  Backer rebates are calculated pro-rata to current hold percentage. Rebate amounts
+                  attributable to withdrawn positions are redirected to the $PROOF distribution pool,
+                  so conviction in the cap table shifts the protocol's routing accordingly.
                 </p>
               </div>
             </section>

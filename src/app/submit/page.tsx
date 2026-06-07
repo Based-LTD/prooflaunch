@@ -31,8 +31,8 @@ const BOT_ACTIONS: BotActionMeta[] = [
   { value: 'hold',                       label: 'VAULT',               short: 'Vault',               tag: 'Treasury',     emoji: '🏦', desc: 'Buy tokens, park them in a labeled vault wallet you can withdraw from anytime (e.g. Marketing, DAO, Liquidity).' },
   { value: 'distribute_tokens_holders',  label: 'TOKENS → HOLDERS',    short: 'Tokens→Holders',      tag: 'Loyalty',      emoji: '🪙', desc: 'Buy tokens, airdrop pro-rata to every current holder. Drives volume + rewards holding.' },
   { value: 'distribute_tokens_backers',  label: 'TOKENS → BACKERS',    short: 'Tokens→Backers',      tag: 'OG reward',    emoji: '🎯', desc: 'Buy tokens, airdrop pro-rata to the genesis backers who launched this token.' },
-  { value: 'distribute_sol_holders',     label: 'SOL → HOLDERS',       short: 'SOL→Holders',         tag: 'Yield',        emoji: '💸', desc: 'Skip the swap. Send delegated SOL pro-rata to every current holder. Pure cash flow.' },
-  { value: 'distribute_sol_backers',     label: 'SOL → BACKERS',       short: 'SOL→Backers',         tag: 'OG yield',     emoji: '💰', desc: 'Skip the swap. Send delegated SOL pro-rata to the genesis backers.' },
+  { value: 'distribute_sol_holders',     label: 'SOL → HOLDERS',       short: 'SOL→Holders',         tag: 'Distribution', emoji: '💸', desc: 'Skip the swap. Route delegated SOL pro-rata to every current holder as a protocol distribution.' },
+  { value: 'distribute_sol_backers',     label: 'SOL → BACKERS',       short: 'SOL→Backers',         tag: 'Distribution', emoji: '💰', desc: 'Skip the swap. Route delegated SOL pro-rata to the genesis backers as a protocol distribution.' },
   // DONATE — fire-and-forget to a fixed wallet (charity, DAO, partner).
   // Destination is set at submit and immutable: the entire commitment
   // value comes from publicly burning the optionality to redirect.

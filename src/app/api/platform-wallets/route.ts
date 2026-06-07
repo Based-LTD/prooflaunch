@@ -66,13 +66,13 @@ export async function GET() {
     {
       key: 'platform_fee',
       label: 'Platform Fee Wallet',
-      role: 'Receives 5% of trading fees from every launched token, on every trade. Funds platform operations. (The other 5% of the platform cut routes directly to Holder Rewards — see below.)',
+      role: 'Receives the platform allocation of trading-fee revenue from launched tokens. Funds platform operations (infrastructure, RPC, ops). A portion of the platform allocation is routed to the Holder Rewards wallet for the discretionary $PROOF distribution program.',
       address: platformAddr,
     },
     {
       key: 'holder_rewards',
       label: 'Holder Rewards',
-      role: 'Receives 5% of trading fees from every launched token. Pays daily SOL airdrops to $PROOF holders pro-rata (direct + Streamflow-locked balances). PDA-filtered with the same denylist Jito and MNDE use.',
+      role: 'Holds the discretionary $PROOF distribution pool. Periodically distributes SOL to $PROOF holders pro-rata (direct + Streamflow-locked balances). PDA-filtered using the same denylist as Jito and MNDE. Distributions are at protocol discretion and are not guaranteed.',
       address: holderRewardsAddr,
     },
     {

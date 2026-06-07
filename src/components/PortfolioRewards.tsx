@@ -218,12 +218,12 @@ export const PortfolioRewards: FC = () => {
         </div>
 
         <p className="text-sm text-[var(--muted)]">
-          You earn 90% of pump.fun trading fees on every token you back.
-          Rewards appear here automatically once your backed tokens launch
-          and start trading — the <span className="text-[var(--success)] font-medium">Pending</span> counter
+          Trading-fee rebates from tokens you backed appear here once those tokens
+          launch and start trading — the <span className="text-[var(--success)] font-medium">Pending</span> counter
           updates in near-real-time as trades hit the on-chain creator vault,
           and the hourly cron sweeps it into <span className="text-[var(--foreground)] font-medium">Claimable</span> for
-          one-click payout.
+          one-click claim. Distributions are programmatic per the protocol's
+          fee-routing config.
         </p>
       </div>
     );

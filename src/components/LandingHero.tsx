@@ -143,10 +143,10 @@ export function LandingHero() {
         ))}
       </h1>
 
-      {/* Subtext — the earnings hook */}
+      {/* Subtext — the protocol hook */}
       <p className="mt-5 sm:mt-6 max-w-2xl font-mono uppercase tracking-[0.15em] text-[var(--muted)]"
          style={{ fontSize: 'clamp(0.875rem, 1.4vw, 1rem)' }}>
-        <span className="text-[var(--accent-gold)]">$PROOF</span> holders earn from every launch.
+        <span className="text-[var(--accent-gold)]">$PROOF</span> is the access token for the protocol.
       </p>
 
       {/* Live stats */}

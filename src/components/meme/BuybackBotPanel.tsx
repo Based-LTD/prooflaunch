@@ -20,8 +20,8 @@ const ACTION_LABELS: Record<string, { label: string; tag: string; tone: string; 
   hold:                        { label: 'HOLD',              tag: 'Treasury',     tone: 'var(--accent-gold)', emoji: '🏦' },
   distribute_tokens_holders:   { label: 'TOKENS → HOLDERS',  tag: 'Loyalty',      tone: 'var(--accent)',      emoji: '🪙' },
   distribute_tokens_backers:   { label: 'TOKENS → BACKERS',  tag: 'OG reward',    tone: 'var(--accent)',      emoji: '🎯' },
-  distribute_sol_holders:      { label: 'SOL → HOLDERS',     tag: 'Yield',        tone: 'var(--success)',     emoji: '💸' },
-  distribute_sol_backers:      { label: 'SOL → BACKERS',     tag: 'OG yield',     tone: 'var(--success)',     emoji: '💰' },
+  distribute_sol_holders:      { label: 'SOL → HOLDERS',     tag: 'Distribution', tone: 'var(--success)',     emoji: '💸' },
+  distribute_sol_backers:      { label: 'SOL → BACKERS',     tag: 'Distribution', tone: 'var(--success)',     emoji: '💰' },
   donate_sol:                  { label: 'DONATE SOL',        tag: 'Commitment',   tone: 'var(--accent-gold)', emoji: '🎁' },
   donate_tokens:               { label: 'DONATE TOKENS',     tag: 'Commitment',   tone: 'var(--accent-gold)', emoji: '🎀' },
   // Legacy enum values — surface the same way but tagged as such.
