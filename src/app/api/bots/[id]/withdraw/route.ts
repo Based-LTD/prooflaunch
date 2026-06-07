@@ -13,6 +13,7 @@ import {
 import bs58 from 'bs58';
 import { createServerClient } from '@/lib/supabase';
 import { decryptPrivateKey, verifySignedAuthMessage } from '@/lib/crypto';
+import { simulateAndSend, adaptivePriorityFeeIx } from '@/lib/rpcHelpers';
 
 // POST /api/bots/[id]/withdraw
 //
@@ -229,8 +230,10 @@ export async function POST(
         );
       }
 
+      // SOL-030: adaptive priority fee.
+      const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
       const tx = new Transaction().add(
-        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+        priorityIx,
         SystemProgram.transfer({
           fromPubkey: botKp.publicKey,
           toPubkey: destPk,
@@ -240,7 +243,8 @@ export async function POST(
       const { blockhash } = await conn.getLatestBlockhash('confirmed');
       tx.recentBlockhash = blockhash;
       tx.feePayer = botKp.publicKey;
-      txSignature = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+      // SOL-029: simulate before send.
+      txSignature = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: 'withdraw-sol' });
       const conf = await conn.confirmTransaction(txSignature, 'confirmed');
       if (conf.value.err) {
         return NextResponse.json(
@@ -292,8 +296,10 @@ export async function POST(
         );
       }
 
+      // SOL-030: adaptive priority fee.
+      const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
       const tx = new Transaction().add(
-        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+        priorityIx,
         // Create destination ATA if it doesn't exist (idempotent — no-op
         // when present). Bot wallet pays the rent (~0.002 SOL).
         createAssociatedTokenAccountIdempotentInstruction(
@@ -307,7 +313,8 @@ export async function POST(
       const { blockhash } = await conn.getLatestBlockhash('confirmed');
       tx.recentBlockhash = blockhash;
       tx.feePayer = botKp.publicKey;
-      txSignature = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+      // SOL-029: simulate before send.
+      txSignature = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: 'withdraw-token' });
       const conf = await conn.confirmTransaction(txSignature, 'confirmed');
       if (conf.value.err) {
         return NextResponse.json(

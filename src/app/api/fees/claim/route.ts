@@ -4,6 +4,7 @@ import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PE
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 import bs58 from 'bs58';
 import { verifySignedAuthMessage } from '@/lib/crypto';
+import { simulateAndSend } from '@/lib/rpcHelpers';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const ESCROW_PRIVATE_KEY = process.env.ESCROW_WALLET_PRIVATE_KEY!;
@@ -181,7 +182,8 @@ export async function POST(request: NextRequest) {
 
     let txSignature: string;
     try {
-      txSignature = await connection.sendTransaction(transaction, [escrowWallet]);
+      // SOL-029: simulate before send.
+      txSignature = await simulateAndSend(connection, transaction, [escrowWallet], { label: 'fees-claim' });
     } catch (e) {
       // On-chain send failed — REVERT the atomic claims so the user can retry,
       // and mark the audit rows failed.

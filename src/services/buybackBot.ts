@@ -15,6 +15,7 @@ import {
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
 import { KNOWN_PDA_PROGRAMS } from '@/lib/holderFilter';
+import { simulateAndSend, adaptivePriorityFeeIx, assertQuoteFresh } from '@/lib/rpcHelpers';
 
 // Per-meme buyback bot — Phase A: programmable tokenomics primitives.
 //
@@ -276,6 +277,9 @@ export async function executeBuybackBot(
     if (!qres.ok) throw new Error(`jupiter quote ${qres.status}: ${await qres.text()}`);
     const quote = await qres.json();
     if (quote.error) throw new Error(`jupiter quote: ${quote.error}`);
+    // SOL-031: reject the quote if its contextSlot lags the current slot.
+    // Stale routes ship worse fills or trigger slippage failures at swap time.
+    await assertQuoteFresh(conn, quote);
 
     const sres = await fetch(JUP_SWAP_URL, {
       method: 'POST',
@@ -293,7 +297,10 @@ export async function executeBuybackBot(
     const txBuf = Buffer.from(swapTransaction, 'base64');
     const swapVtx = VersionedTransaction.deserialize(txBuf);
     swapVtx.sign([botKp]);
-    swapTx = await conn.sendTransaction(swapVtx, { skipPreflight: false, maxRetries: 3 });
+    // SOL-029: simulate before send. swapVtx is the Jupiter-built swap;
+    // a stale quote or pool drift would surface here as a simulate error
+    // before we pay the priority fee on a doomed send.
+    swapTx = await simulateAndSend(conn, swapVtx, undefined, { maxRetries: 3, label: 'jupiter-swap' });
     const swapConf = await conn.confirmTransaction(swapTx, 'confirmed');
     if (swapConf.value.err) throw new Error(`swap tx failed: ${JSON.stringify(swapConf.value.err)}`);
 
@@ -348,7 +355,8 @@ async function executeBurn(
     const burnIx = createBurnCheckedInstruction(
       ata, mintPub, botKp.publicKey, actualTokensRaw, tokenDecimals, [], tokenProgramId,
     );
-    const priorityIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 });
+    // SOL-030: adaptive priority fee (fallback preserves the prior 50k).
+    const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
     const cuIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 80_000 });
     const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
     const msg = new TransactionMessage({
@@ -357,7 +365,8 @@ async function executeBurn(
     }).compileToV0Message();
     const burnTx = new VersionedTransaction(msg);
     burnTx.sign([botKp]);
-    actionTx = await conn.sendTransaction(burnTx, { skipPreflight: false, maxRetries: 3 });
+    // SOL-029: simulate before send.
+    actionTx = await simulateAndSend(conn, burnTx, undefined, { maxRetries: 3, label: 'bot-burn' });
     const burnConf = await conn.confirmTransaction({ signature: actionTx, blockhash, lastValidBlockHeight }, 'confirmed');
     if (burnConf.value.err) throw new Error(`burn failed: ${JSON.stringify(burnConf.value.err)}`);
   } catch (e) {
@@ -394,8 +403,10 @@ async function executeDonateSol(
   catch { return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, `donate_sol: invalid destination ${b.destination_wallet}`); }
 
   try {
+    // SOL-030: adaptive priority fee.
+    const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
     const tx = new Transaction().add(
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      priorityIx,
       SystemProgram.transfer({
         fromPubkey: botKp.publicKey,
         toPubkey: destPk,
@@ -405,7 +416,8 @@ async function executeDonateSol(
     const { blockhash } = await conn.getLatestBlockhash('confirmed');
     tx.recentBlockhash = blockhash;
     tx.feePayer = botKp.publicKey;
-    const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+    // SOL-029: simulate before send.
+    const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: 'donate_sol' });
     const conf = await conn.confirmTransaction(sig, 'confirmed');
     if (conf.value.err) throw new Error(`donate_sol tx failed: ${JSON.stringify(conf.value.err)}`);
     return finalize(
@@ -473,7 +485,8 @@ async function executeSolDistribute(
     try {
       tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
       tx.feePayer = botKp.publicKey;
-      const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+      // SOL-029: simulate before send.
+      const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `distribute_sol:${i}` });
       await conn.confirmTransaction(sig, 'confirmed');
       sigs.push(sig);
       actualSent += txTotal;
@@ -558,7 +571,8 @@ async function executeTokenDistribute(
     try {
       tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
       tx.feePayer = botKp.publicKey;
-      const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+      // SOL-029: simulate before send.
+      const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `distribute_tokens:${i}` });
       await conn.confirmTransaction(sig, 'confirmed');
       sigs.push(sig);
     } catch (e) {
@@ -599,8 +613,10 @@ async function executeDonateTokens(
     const mintPub = new PublicKey(m.mint_address!);
     const fromAta = getAssociatedTokenAddressSync(mintPub, botKp.publicKey, false, tokenProgramId);
     const toAta   = getAssociatedTokenAddressSync(mintPub, destPk,           true,  tokenProgramId);
+    // SOL-030: adaptive priority fee.
+    const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
     const tx = new Transaction().add(
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      priorityIx,
       createAssociatedTokenAccountIdempotentInstruction(
         botKp.publicKey, toAta, destPk, mintPub, tokenProgramId,
       ),
@@ -611,7 +627,8 @@ async function executeDonateTokens(
     );
     tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
     tx.feePayer = botKp.publicKey;
-    const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+    // SOL-029: simulate before send.
+    const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: 'donate_tokens' });
     const conf = await conn.confirmTransaction(sig, 'confirmed');
     if (conf.value.err) throw new Error(`donate_tokens tx failed: ${JSON.stringify(conf.value.err)}`);
     return finalize(
@@ -847,7 +864,8 @@ async function tryRecoverStrandedTokens(
     const burnIx = createBurnCheckedInstruction(
       ata, mintPub, botKp.publicKey, strandedRaw, tokenDecimals, [], tokenProgramId,
     );
-    const priorityIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 });
+    // SOL-030: adaptive priority fee.
+    const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
     const cuIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 80_000 });
     const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
     const msg = new TransactionMessage({
@@ -856,7 +874,8 @@ async function tryRecoverStrandedTokens(
     }).compileToV0Message();
     const burnTx = new VersionedTransaction(msg);
     burnTx.sign([botKp]);
-    const sig = await conn.sendTransaction(burnTx, { skipPreflight: false, maxRetries: 3 });
+    // SOL-029: simulate before send.
+    const sig = await simulateAndSend(conn, burnTx, undefined, { maxRetries: 3, label: 'recovery-burn' });
     const conf = await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
     if (conf.value.err) throw new Error(`recovery burn failed: ${JSON.stringify(conf.value.err)}`);
 
@@ -880,8 +899,10 @@ async function tryRecoverStrandedTokens(
     try { destPk = new PublicKey(b.destination_wallet); } catch { return; }
     const fromAta = ata;
     const toAta = getAssociatedTokenAddressSync(mintPub, destPk, true, tokenProgramId);
+    // SOL-030: adaptive priority fee.
+    const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
     const tx = new Transaction().add(
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+      priorityIx,
       createAssociatedTokenAccountIdempotentInstruction(
         botKp.publicKey, toAta, destPk, mintPub, tokenProgramId,
       ),
@@ -892,7 +913,8 @@ async function tryRecoverStrandedTokens(
     );
     tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
     tx.feePayer = botKp.publicKey;
-    const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+    // SOL-029: simulate before send.
+    const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: 'recovery-donate_tokens' });
     const conf = await conn.confirmTransaction(sig, 'confirmed');
     if (conf.value.err) throw new Error(`recovery donate_tokens failed: ${JSON.stringify(conf.value.err)}`);
 
@@ -954,7 +976,8 @@ async function tryRecoverStrandedTokens(
     try {
       tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
       tx.feePayer = botKp.publicKey;
-      const sig = await conn.sendTransaction(tx, [botKp], { maxRetries: 3 });
+      // SOL-029: simulate before send.
+      const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `recovery-distribute:${i}` });
       await conn.confirmTransaction(sig, 'confirmed');
       sigs.push(sig);
     } catch (e) {

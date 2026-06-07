@@ -5,6 +5,7 @@ import {
 import { createServerClient } from '@/lib/supabase';
 import { KNOWN_PDA_PROGRAMS } from '@/lib/holderFilter';
 import { authorizeCron } from '@/lib/cronAuth';
+import { simulateAndSend, adaptivePriorityFeeIx } from '@/lib/rpcHelpers';
 import { getAssociatedTokenAddressSync, NATIVE_MINT, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 import bs58 from 'bs58';
@@ -284,9 +285,11 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
   let successCount = 0, failCount = 0;
   for (let b = 0; b < payouts.length; b += PAYOUTS_PER_TX) {
     const batch = payouts.slice(b, b + PAYOUTS_PER_TX);
+    // SOL-030: adaptive priority fee.
+    const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
     const tx = new Transaction()
       .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }))
-      .add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
+      .add(priorityIx);
     for (const p of batch) {
       tx.add(SystemProgram.transfer({
         fromPubkey: rewardsKp.publicKey,
@@ -297,7 +300,8 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
     try {
       tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
       tx.feePayer = rewardsKp.publicKey;
-      const sig = await conn.sendTransaction(tx, [rewardsKp]);
+      // SOL-029: simulate before send.
+      const sig = await simulateAndSend(conn, tx, [rewardsKp], { label: `airdrop:${b}` });
       await conn.confirmTransaction(sig, 'confirmed');
       const ids = batch.map(p => p.wallet);
       await supabase.from('holder_distribution_payouts')

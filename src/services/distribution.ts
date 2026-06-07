@@ -5,6 +5,7 @@ import { Connection, PublicKey, Keypair, Transaction, SystemProgram, LAMPORTS_PE
 import { OnlinePumpSdk } from '@pump-fun/pump-sdk';
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
+import { simulateAndSend } from '@/lib/rpcHelpers';
 import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 
 // Shared, idempotent pooled-token distribution.
@@ -330,7 +331,8 @@ export async function collectAndCreditFees(
       const tx = new Transaction().add(...collectIxs);
       tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
       tx.feePayer = escrow.publicKey;
-      collectSig = await conn.sendTransaction(tx, [escrow]);
+      // SOL-029: simulate before send.
+      collectSig = await simulateAndSend(conn, tx, [escrow], { label: 'collect-creator-fee' });
       await conn.confirmTransaction(collectSig, 'confirmed');
       log('reconcile_recovered', { detail: { stage: 'collect_creator_fee', sig: collectSig, vaultLamports } });
     } catch (e) {
@@ -404,7 +406,8 @@ async function drainAndCreditFromSubEscrow(args: {
     );
     tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
     tx.feePayer = subKp.publicKey;
-    drainSig = await conn.sendTransaction(tx, [subKp]);
+    // SOL-029: simulate before send.
+    drainSig = await simulateAndSend(conn, tx, [subKp], { label: 'drain-subescrow' });
     await conn.confirmTransaction(drainSig, 'confirmed');
     log('reconcile_recovered', { detail: { stage: 'drain_subescrow_to_escrow', sig: drainSig, lamports: transferLamports } });
   } catch (e) {
@@ -485,7 +488,8 @@ async function drainAndCreditFromSubEscrow(args: {
       );
       tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
       tx.feePayer = escrow.publicKey;
-      p.sig = await conn.sendTransaction(tx, [escrow]);
+      // SOL-029: simulate before send.
+      p.sig = await simulateAndSend(conn, tx, [escrow], { label: `bot-fee-delegation:${p.id}` });
       await conn.confirmTransaction(p.sig, 'confirmed');
       log('reconcile_recovered', { detail: { stage: 'bot_fee_delegation', botId: p.id, action: p.action, sig: p.sig, lamports: p.lamports, pct: p.pct } });
     } catch (e) {
@@ -620,7 +624,8 @@ async function drainAndCreditFromSubEscrow(args: {
         );
         tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
         tx.feePayer = escrow.publicKey;
-        holderRewardsSig = await conn.sendTransaction(tx, [escrow]);
+        // SOL-029: simulate before send.
+        holderRewardsSig = await simulateAndSend(conn, tx, [escrow], { label: 'freed-to-holder-rewards' });
         await conn.confirmTransaction(holderRewardsSig, 'confirmed');
         log('reconcile_recovered', { detail: { stage: 'freed_to_holder_rewards', sig: holderRewardsSig, lamports: freedToHolderRewardsLam } });
       } catch (e) {

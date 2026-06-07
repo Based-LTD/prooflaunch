@@ -44,6 +44,7 @@ import {
 import { OnlinePumpSdk } from '@pump-fun/pump-sdk';
 import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 import bs58 from 'bs58';
+import { simulateAndSend, adaptivePriorityFeeIx } from '@/lib/rpcHelpers';
 
 // ── Constants ──────────────────────────────────────────────────────
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL!;
@@ -219,13 +220,16 @@ export async function distributeLegacyMeme(
   let collectSig: string;
   try {
     const collectIxs = await sdk.collectCoinCreatorFeeInstructions(escrow.publicKey, escrow.publicKey);
+    // SOL-030: adaptive priority fee.
+    const collectPriorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
     const collectTx = new Transaction()
       .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
-      .add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }))
+      .add(collectPriorityIx)
       .add(...collectIxs);
     collectTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
     collectTx.feePayer = escrow.publicKey;
-    collectSig = await conn.sendTransaction(collectTx, [escrow]);
+    // SOL-029: simulate before send.
+    collectSig = await simulateAndSend(conn, collectTx, [escrow], { label: 'legacy-collect' });
     await conn.confirmTransaction(collectSig, 'confirmed');
   } catch (e) {
     return { ok: false, error: `Collect failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
@@ -246,9 +250,11 @@ export async function distributeLegacyMeme(
   // ── Step 2: transfer slot 1 wallet + holder rewards in one tx ────
   let transferSig: string;
   try {
+    // SOL-030: adaptive priority fee.
+    const transferPriorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
     const transferTx = new Transaction()
       .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 150_000 }))
-      .add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }))
+      .add(transferPriorityIx)
       .add(SystemProgram.transfer({
         fromPubkey: escrow.publicKey,
         toPubkey: new PublicKey(config.consolidatedDestinationWallet),
@@ -261,7 +267,8 @@ export async function distributeLegacyMeme(
       }));
     transferTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
     transferTx.feePayer = escrow.publicKey;
-    transferSig = await conn.sendTransaction(transferTx, [escrow]);
+    // SOL-029: simulate before send.
+    transferSig = await simulateAndSend(conn, transferTx, [escrow], { label: 'legacy-transfer' });
     await conn.confirmTransaction(transferSig, 'confirmed');
   } catch (e) {
     // Collect succeeded but transfer failed — funds are safe in escrow,

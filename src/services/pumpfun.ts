@@ -17,6 +17,7 @@ import {
 } from '@solana/spl-token';
 import { PumpSdk, OnlinePumpSdk, getBuyTokenAmountFromSolAmount, getSellSolAmountFromTokenAmount } from '@pump-fun/pump-sdk';
 import BN from 'bn.js';
+import { simulateAndSend, adaptivePriorityFeeIx, getAdaptivePriorityFee } from '@/lib/rpcHelpers';
 
 // Simple wallet implementation for AnchorProvider
 class NodeWallet implements WalletInterface {
@@ -535,7 +536,8 @@ export async function buyAndTransferToBacker(
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = escrowWallet.publicKey;
 
-    const transferSignature = await connection.sendTransaction(transaction, [escrowWallet]);
+    // SOL-029: simulate before send.
+    const transferSignature = await simulateAndSend(connection, transaction, [escrowWallet], { label: 'transfer-to-backer' });
     console.log(`Transferred ${tokensReceived} tokens to ${backerWallet}: ${transferSignature}`);
 
     return {
@@ -598,7 +600,8 @@ export async function launchWithBackerBuys(
       feeTransaction.recentBlockhash = blockhash;
       feeTransaction.feePayer = escrowWallet.publicKey;
 
-      platformFeeSignature = await connection.sendTransaction(feeTransaction, [escrowWallet]);
+      // SOL-029: simulate before send.
+      platformFeeSignature = await simulateAndSend(connection, feeTransaction, [escrowWallet], { label: 'platform-fee' });
       console.log(`Platform fee sent: ${platformFeeSignature}`);
     } catch (feeError) {
       console.error('Platform fee transfer failed:', feeError);
@@ -870,7 +873,8 @@ export async function refundBacker(
     transaction.feePayer = escrowWallet.publicKey;
 
     console.log(`Sending transaction...`);
-    const signature = await connection.sendTransaction(transaction, [escrowWallet]);
+    // SOL-029: simulate before send.
+    const signature = await simulateAndSend(connection, transaction, [escrowWallet], { label: 'refund-backer' });
     console.log(`Transaction sent: ${signature}`);
 
     // Don't wait for confirmation - it can timeout
@@ -1011,7 +1015,10 @@ async function buildCreationVersionedTx(
   metadataUri: string,
   config: LaunchConfig,
   blockhash: string,
-  jitoTipLamports: number = 0 // Embed tip in create tx to save a slot
+  jitoTipLamports: number = 0, // Embed tip in create tx to save a slot
+  // SOL-030: caller pre-fetches the adaptive priority fee and passes it
+  // here. Builder stays RPC-free; fallback default preserves prior 500k.
+  priorityFeeMicroLamports: number = 500_000,
 ): Promise<VersionedTransaction> {
   // Get raw create instructions from SDK (doesn't send)
   const createTx = await sdk.getCreateInstructions(
@@ -1026,7 +1033,7 @@ async function buildCreationVersionedTx(
   const fullTx = new Transaction();
   fullTx.add(
     ComputeBudgetProgram.setComputeUnitLimit({ units: 500000 }),
-    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 })
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFeeMicroLamports })
   );
   fullTx.add(...createTx.instructions);
 
@@ -1064,7 +1071,10 @@ async function buildBundledBuyVersionedTx(
   creatorPubkey: PublicKey,
   solAmountLamports: bigint,
   predictedTokensOut: bigint,
-  blockhash: string
+  blockhash: string,
+  // SOL-030: caller pre-fetches the adaptive priority fee. Default
+  // preserves the prior 200k literal.
+  priorityFeeMicroLamports: number = 200_000,
 ): Promise<VersionedTransaction> {
   const bondingCurvePda = deriveBondingCurve(mintPubkey);
   const associatedBondingCurve = await getAssociatedTokenAddress(
@@ -1082,7 +1092,7 @@ async function buildBundledBuyVersionedTx(
   // Compute budget with higher priority for bundle
   tx.add(
     ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
-    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 })
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFeeMicroLamports })
   );
 
   // Always create ATA (token is brand new in the same bundle)
@@ -1367,9 +1377,11 @@ async function executeBurnerBuy(
     // Add compute budget instructions first
     // Pump.fun buy with volume tracking needs ~75k compute units, but CPI calls need more headroom
     // Set to 400k for safety - the actual cost depends on bonding curve state
+    // SOL-030: adaptive priority fee.
+    const burnerBuyPriorityIx = await adaptivePriorityFeeIx(connection, { fallback: 50000 });
     transaction.add(
       ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50000 })
+      burnerBuyPriorityIx
     );
 
     // Create ATA if it doesn't exist (we already checked above for fee calculation)
@@ -1415,8 +1427,9 @@ async function executeBurnerBuy(
     transaction.feePayer = burnerKeypair.publicKey;
 
     console.log('Sending transaction...');
-    const signature = await connection.sendTransaction(transaction, [burnerKeypair], {
-      skipPreflight: false,
+    // SOL-029: simulate before send.
+    const signature = await simulateAndSend(connection, transaction, [burnerKeypair], {
+      label: 'burner-buy',
       preflightCommitment: 'confirmed',
     });
     console.log('Transaction sent:', signature);
@@ -1712,9 +1725,14 @@ export async function launchWithBatchedBuys(
 
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
 
+    // SOL-030: pre-fetch the adaptive priority fee once for this launch.
+    // Threaded into the builder + the per-buy path below so the entire
+    // launch uses the same fee-market read instead of a stale literal.
+    const launchPriorityFee = await getAdaptivePriorityFee(connection, { fallback: 500_000 });
+
     // Build create tx
     const createTx = await buildCreationVersionedTx(
-      sdk, escrowKeypair, mintKeypair, metadataUri, config, blockhash, 0
+      sdk, escrowKeypair, mintKeypair, metadataUri, config, blockhash, 0, launchPriorityFee,
     );
 
     // Decrypt all burner keypairs upfront
@@ -1739,9 +1757,14 @@ export async function launchWithBatchedBuys(
     // === PHASE 3: Send create tx and wait for confirmation ===
     console.log('Phase 3: Sending create tx via RPC...');
 
-    const createSig = await connection.sendTransaction(createTx, {
+    // SOL-029: simulate before send. Keep skipPreflight: true on the
+    // actual send so the RPC node doesn't double-validate — we already
+    // verified locally. This preserves the launch-path latency win
+    // while catching doomed txns before we eat the priority fee.
+    const createSig = await simulateAndSend(connection, createTx, undefined, {
       skipPreflight: true,
       maxRetries: 3,
+      label: 'launch-burner-create',
     });
     console.log(`Create tx sent: ${createSig}`);
     log('create_sent', { signature: createSig, detail: { mint: mintPubkey.toBase58(), backers: sortedBackers.length } });
@@ -1829,10 +1852,11 @@ export async function launchWithBatchedBuys(
         console.log(`  Backer ${i + 1}: ${Number(buyAmount) / LAMPORTS_PER_SOL} SOL -> ~${rawExpectedTokens} tokens (asking ${expectedTokens}, maxCost: ${Number(maxSolCost) / LAMPORTS_PER_SOL} SOL)`);
 
         // Build transaction from actual state
+        // SOL-030: reuse the launch's pre-fetched adaptive priority fee.
         const tx = new Transaction();
         tx.add(
           ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
-          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 })
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: launchPriorityFee })
         );
         tx.add(
           createAssociatedTokenAccountInstruction(
@@ -1880,8 +1904,10 @@ export async function launchWithBatchedBuys(
       if (txs.length === 0) return;
 
       console.log(`Sending ${batchLabel} (${txs.length} buys)...`);
+      // SOL-029: simulate each parallel buy before send. Bundle still
+      // executes in parallel — wall-clock = max(simulate+send) per tx.
       const sigs = await Promise.all(
-        txs.map(tx => connection.sendTransaction(tx, { skipPreflight: true, maxRetries: 3 }))
+        txs.map(tx => simulateAndSend(connection, tx, undefined, { skipPreflight: true, maxRetries: 3, label: `launch-burner-buy:${batchLabel}` }))
       );
       infos.forEach((info, i) =>
         log('buy_sent', { backerWallet: info.backer.mainWallet, signature: sigs[i], detail: { batch: batchLabel } })
@@ -2093,6 +2119,12 @@ export async function launchWithJitoBundle(
     // 5. Get a fresh blockhash (shared by all txs in bundle)
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
+    // SOL-030: pre-fetch adaptive priority fees once for this Jito launch.
+    // Two values — one for the create tx (higher), one for the buy txs
+    // (matching the builder's prior 200k literal default).
+    const jitoLaunchCreateFee = await getAdaptivePriorityFee(connection, { fallback: 500_000 });
+    const jitoLaunchBuyFee = await getAdaptivePriorityFee(connection, { fallback: 200_000 });
+
     // 6. Build all transactions for the genesis bundle
     console.log('Step 4: Building genesis bundle (tip embedded in create tx)...');
     const transactions: VersionedTransaction[] = [];
@@ -2100,7 +2132,8 @@ export async function launchWithJitoBundle(
     // Transaction 1: Token creation WITH Jito tip embedded (saves a tx slot)
     const createTx = await buildCreationVersionedTx(
       sdk, escrowKeypair, mintKeypair, metadataUri, config, blockhash,
-      JITO_TIP_LAMPORTS // Embed tip here instead of separate tx
+      JITO_TIP_LAMPORTS, // Embed tip here instead of separate tx
+      jitoLaunchCreateFee,
     );
     transactions.push(createTx);
 
@@ -2130,7 +2163,8 @@ export async function launchWithJitoBundle(
         escrowKeypair.publicKey,
         buyAmount,
         tokensOut,
-        blockhash
+        blockhash,
+        jitoLaunchBuyFee,
       );
       transactions.push(buyTx);
       bundledBuyInfo.push({ backer, predictedTokens: tokensOut, buyAmount });
@@ -2291,14 +2325,18 @@ export async function launchWithJitoBundle(
 
       // Build and send create tx with high priority fees (no Jito tip)
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      // SOL-030: adaptive priority fee for the fallback path.
+      const fallbackCreateFee = await getAdaptivePriorityFee(connection, { fallback: 500_000 });
       const createTx = await buildCreationVersionedTx(
-        fallbackSdk, escrowKeypair, fallbackMintKeypair, fallbackUri, config, blockhash, 0
+        fallbackSdk, escrowKeypair, fallbackMintKeypair, fallbackUri, config, blockhash, 0, fallbackCreateFee,
       );
 
       console.log('Sending create tx via RPC...');
-      const createSig = await connection.sendTransaction(createTx, {
+      // SOL-029: simulate before send (keep skipPreflight on actual send).
+      const createSig = await simulateAndSend(connection, createTx, undefined, {
         skipPreflight: true,
         maxRetries: 3,
+        label: 'launch-jito-fallback-create',
       });
       console.log(`Create tx sent: ${createSig}`);
 
@@ -2478,12 +2516,14 @@ export async function sweepBurnerWallet(
         feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(),
         tokenProgram, cashback: false,
       });
+      // SOL-030: adaptive priority fee.
+      const sweepSellPriorityIx = await adaptivePriorityFeeIx(connection, { fallback: 500000 });
       const sellMsg = new TransactionMessage({
         payerKey: burnerKeypair.publicKey,
         recentBlockhash: (await connection.getLatestBlockhash('confirmed')).blockhash,
         instructions: [
           ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
-          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+          sweepSellPriorityIx,
           sellIx,
         ],
       }).compileToV0Message();
@@ -2491,7 +2531,8 @@ export async function sweepBurnerWallet(
       sellTx.sign([burnerKeypair]);
       let sellResult: { success: boolean; signature?: string; error?: string };
       try {
-        const sig = await connection.sendTransaction(sellTx, { skipPreflight: true, maxRetries: 3 });
+        // SOL-029: simulate before send (keep skipPreflight on actual send).
+        const sig = await simulateAndSend(connection, sellTx, undefined, { skipPreflight: true, maxRetries: 3, label: 'sweep-sell' });
         await connection.confirmTransaction(sig, 'confirmed');
         sellResult = { success: true, signature: sig };
       } catch (e) {
@@ -2521,7 +2562,8 @@ export async function sweepBurnerWallet(
         transferTx.recentBlockhash = blockhash;
         transferTx.feePayer = burnerKeypair.publicKey;
 
-        const transferSig = await connection.sendTransaction(transferTx, [burnerKeypair]);
+        // SOL-029: simulate before send.
+        const transferSig = await simulateAndSend(connection, transferTx, [burnerKeypair], { label: 'sweep-sol-transfer' });
         console.log(`SOL transferred to main wallet: ${transferSig}`);
       }
 
@@ -2596,7 +2638,8 @@ export async function sweepBurnerWallet(
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = burnerKeypair.publicKey;
 
-      const signature = await connection.sendTransaction(transaction, [burnerKeypair]);
+      // SOL-029: simulate before send.
+      const signature = await simulateAndSend(connection, transaction, [burnerKeypair], { label: 'sweep-token-transfer' });
       console.log(`Tokens transferred to main wallet: ${signature}`);
 
       return {
@@ -2714,7 +2757,8 @@ export async function refundFromBurnerWallet(
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = burnerKeypair.publicKey;
 
-    const signature = await connection.sendTransaction(transaction, [burnerKeypair]);
+    // SOL-029: simulate before send.
+    const signature = await simulateAndSend(connection, transaction, [burnerKeypair], { label: 'refund-burner' });
     console.log(`Refund sent: ${signature}`);
 
     // Wait for confirmation
@@ -2805,7 +2849,8 @@ export async function refundFromPool(
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = poolKp.publicKey;
 
-    const signature = await connection.sendTransaction(transaction, [poolKp]);
+    // SOL-029: simulate before send.
+    const signature = await simulateAndSend(connection, transaction, [poolKp], { label: 'refund-from-pool' });
     await connection.confirmTransaction(signature, 'confirmed');
 
     return {
@@ -2928,7 +2973,8 @@ export async function distributeTokensToBackers(
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = escrowWallet.publicKey;
 
-        const signature = await connection.sendTransaction(transaction, [escrowWallet]);
+        // SOL-029: simulate before send.
+        const signature = await simulateAndSend(connection, transaction, [escrowWallet], { label: 'distribute-tokens-to-backer' });
         // Don't wait for confirmation - transaction is already submitted
         // Add small delay between transfers to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -3023,6 +3069,10 @@ export async function launchViaCreateV2Bundle(
     const { metadataUri } = await uploadMetadata(config);
     const online = new OnlinePumpSdk(conn);
     const sdk = new PumpSdk();
+    // SOL-030: pre-fetch adaptive priority fees for this launch path.
+    // Two values — high-priority for create txns, lower for per-backer buys.
+    const v2CreateFee = await getAdaptivePriorityFee(conn, { fallback: 500_000 });
+    const v2BuyFee = await getAdaptivePriorityFee(conn, { fallback: 200_000 });
     const global = await online.fetchGlobal();
     let feeConfig = null;
     try { feeConfig = await online.fetchFeeConfig(); } catch { /* optional */ }
@@ -3056,7 +3106,8 @@ export async function launchViaCreateV2Bundle(
         payerKey: kp.publicKey, recentBlockhash: blockhash,
         instructions: [
           ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
-          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 }),
+          // SOL-030: use the pre-fetched adaptive fee for this launch.
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: v2BuyFee }),
           createAssociatedTokenAccountIdempotentInstruction(
             kp.publicKey, ata, kp.publicKey, mint, TOKEN_2022_PROGRAM_ID),
           buyIx,
@@ -3085,7 +3136,8 @@ export async function launchViaCreateV2Bundle(
       payerKey: escrow.publicKey, recentBlockhash: blockhash,
       instructions: [
         ComputeBudgetProgram.setComputeUnitLimit({ units: 500000 }),
-        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+        // SOL-030: use the pre-fetched adaptive create fee.
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: v2CreateFee }),
         createV2Ix,
         SystemProgram.transfer({ fromPubkey: escrow.publicKey,
           toPubkey: getRandomJitoTipAccount(), lamports: JITO_TIP_LAMPORTS }),
@@ -3155,7 +3207,8 @@ export async function launchViaCreateV2Bundle(
           const { blockhash: bh } = await conn.getLatestBlockhash('confirmed');
           const built = await buildBuyTx(b, bh);
           if (!built) { buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: 0, error: 'build failed/underfunded' }); continue; }
-          const sig = await conn.sendTransaction(built.tx, { skipPreflight: true, maxRetries: 3 });
+          // SOL-029: simulate before send (keep skipPreflight on actual send).
+          const sig = await simulateAndSend(conn, built.tx, undefined, { skipPreflight: true, maxRetries: 3, label: `wave2-buy:${b.mainWallet.slice(0, 4)}` });
           await conn.confirmTransaction(sig, 'confirmed');
           const toks = await readTokens(built.ata);
           buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: toks, buySignature: sig, error: toks > 0 ? undefined : 'no tokens' });
@@ -3184,13 +3237,15 @@ export async function launchViaCreateV2Bundle(
       payerKey: escrow.publicKey, recentBlockhash: fbBh,
       instructions: [
         ComputeBudgetProgram.setComputeUnitLimit({ units: 500000 }),
-        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 500000 }),
+        // SOL-030: reuse the launch's pre-fetched create fee.
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: v2CreateFee }),
         fbCreateIx,
       ],
     }).compileToV0Message();
     const fbCreateTx = new VersionedTransaction(fbMsg);
     fbCreateTx.sign([escrow, fbMintKp]);
-    const fbCreateSig = await conn.sendTransaction(fbCreateTx, { skipPreflight: true, maxRetries: 3 });
+    // SOL-029: simulate before send (keep skipPreflight on actual send).
+    const fbCreateSig = await simulateAndSend(conn, fbCreateTx, undefined, { skipPreflight: true, maxRetries: 3, label: 'fallback-create' });
     await conn.confirmTransaction(fbCreateSig, 'confirmed');
     let fbReady = false;
     for (let i = 0; i < 15; i++) {
@@ -3217,12 +3272,14 @@ export async function launchViaCreateV2Bundle(
         const buyIx = await sdk.getBuyInstructionRaw({ user: kp.publicKey, mint: fbMint, creator: escrow.publicKey, amount: new BN(1), solAmount: new BN(buyLamports.toString()), feeRecipient: PUMP_FEE_RECIPIENT, buybackFeeRecipient: getBuybackFeeRecipient(), tokenProgram: TOKEN_2022_PROGRAM_ID });
         const msg = new TransactionMessage({ payerKey: kp.publicKey, recentBlockhash: bh, instructions: [
           ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }),
-          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 200000 }),
+          // SOL-030: reuse the launch's pre-fetched buy fee.
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: v2BuyFee }),
           createAssociatedTokenAccountIdempotentInstruction(kp.publicKey, ata, kp.publicKey, fbMint, TOKEN_2022_PROGRAM_ID),
           buyIx,
         ] }).compileToV0Message();
         const tx = new VersionedTransaction(msg); tx.sign([kp]);
-        const sig = await conn.sendTransaction(tx, { skipPreflight: true, maxRetries: 3 });
+        // SOL-029: simulate before send (keep skipPreflight on actual send).
+        const sig = await simulateAndSend(conn, tx, undefined, { skipPreflight: true, maxRetries: 3, label: `fallback-buy:${b.mainWallet.slice(0, 4)}` });
         await conn.confirmTransaction(sig, 'confirmed');
         let toks = 0; try { toks = Number((await getAccount(conn, ata, 'confirmed', TOKEN_2022_PROGRAM_ID)).amount); } catch { /* none */ }
         buyResults.push({ mainWallet: b.mainWallet, burnerWallet: b.burnerWallet, amountSol: b.amountSol, tokensReceived: toks, buySignature: sig, error: toks > 0 ? undefined : 'no tokens' });
@@ -3291,6 +3348,10 @@ export async function launchPooledAtomic(
     const { metadataUri } = await uploadMetadata(config);
     const online = new OnlinePumpSdk(conn);
     const sdk = new PumpSdk();
+    // SOL-030: pre-fetch adaptive priority fee for this single-tx launch.
+    // Atomic createV2+buy uses a very high fee (this is the "land or die"
+    // tx) — preserve the 2M µL fallback as the floor.
+    const pooledAtomicFee = await getAdaptivePriorityFee(conn, { fallback: 2_000_000, minFloor: 2_000_000 });
     await online.fetchGlobal();
 
     const poolAta = getAssociatedTokenAddressSync(mint, poolKp.publicKey, true, TOKEN_2022_PROGRAM_ID);
@@ -3335,7 +3396,8 @@ export async function launchPooledAtomic(
     });
     const instructions = [
       ComputeBudgetProgram.setComputeUnitLimit({ units: 700000 }),
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 2_000_000 }),
+      // SOL-030: use the launch's pre-fetched adaptive fee (floored at 2M).
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: pooledAtomicFee }),
       ...builtIxs,
     ];
     const altAcc = (await conn.getAddressLookupTable(PRODUCTION_ALT)).value;
@@ -3358,7 +3420,8 @@ export async function launchPooledAtomic(
         }).compileToV0Message([altAcc]);
         const tx = new VersionedTransaction(msg);
         tx.sign([poolKp, mintKp]);
-        lastSig = await conn.sendTransaction(tx, { skipPreflight: true, maxRetries: 5 });
+        // SOL-029: simulate before send (keep skipPreflight on actual send).
+        lastSig = await simulateAndSend(conn, tx, undefined, { skipPreflight: true, maxRetries: 5, label: 'pooled-atomic-retry' });
       } catch { /* transient send error — retry */ }
       for (let i = 0; i < 4 && !landed; i++) {
         await new Promise(r => setTimeout(r, 400));
@@ -3432,7 +3495,8 @@ export async function distributeFromPool(
       fromPubkey: escrow.publicKey, toPubkey: poolKp.publicKey, lamports: need - have }));
     top.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
     top.feePayer = escrow.publicKey;
-    const ts = await conn.sendTransaction(top, [escrow]);
+    // SOL-029: simulate before send.
+    const ts = await simulateAndSend(conn, top, [escrow], { label: 'pool-gas-topup' });
     await conn.confirmTransaction(ts, 'confirmed');
     log('reconcile_recovered', { detail: { stage: 'pool gas topup', lamports: need - have } });
   }
@@ -3447,7 +3511,8 @@ export async function distributeFromPool(
       );
       tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
       tx.feePayer = poolKp.publicKey;
-      const sig = await conn.sendTransaction(tx, [poolKp]);
+      // SOL-029: simulate before send.
+      const sig = await simulateAndSend(conn, tx, [poolKp], { label: 'pool-distribute' });
       await conn.confirmTransaction(sig, 'confirmed');
       results.push({ backerWallet: a.backerWallet, tokens: a.tokens, signature: sig });
       log('reconcile_recovered', { backerWallet: a.backerWallet, signature: sig, detail: { stage: 'distribute', tokens: a.tokens } });

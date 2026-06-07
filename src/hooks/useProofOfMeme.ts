@@ -130,6 +130,13 @@ export function useProofOfMeme() {
       // Sign transaction
       const signedTx = await signTransaction(transaction);
 
+      // SOL-029: simulate before send. Catches a doomed user-signed tx
+      // BEFORE we eat the priority fee on broadcast.
+      const sim = await connection.simulateTransaction(signedTx);
+      if (sim.value.err) {
+        throw new Error(`tx would fail: ${JSON.stringify(sim.value.err)}`);
+      }
+
       // Send transaction
       const signature = await connection.sendRawTransaction(signedTx.serialize());
 

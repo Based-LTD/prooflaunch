@@ -39,6 +39,7 @@ import { getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError } 
 const QUOTE_MINT_SOL = new PublicKey('So11111111111111111111111111111111111111112');
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
+import { adaptivePriorityFeeIx } from '@/lib/rpcHelpers';
 import type { LaunchOutcome, LaunchParams } from './types';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -181,9 +182,9 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
       },
     });
 
-    tx.instructions.unshift(
-      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100_000 }),
-    );
+    // SOL-030: adaptive priority fee.
+    const meteoraPriorityIx = await adaptivePriorityFeeIx(conn, { fallback: 100_000 });
+    tx.instructions.unshift(meteoraPriorityIx);
 
     log('buy_sent', { detail: { platform: 'meteora' } });
     // Signer set: pool wallet (pays + buys), mint keypair (account being
