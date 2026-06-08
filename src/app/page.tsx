@@ -226,8 +226,8 @@ export default function Home() {
           {[
             { step: '01', title: 'SUBMIT', desc: 'Creator submits a token to the Proving Grounds' },
             { step: '02', title: 'BACK', desc: 'Community backs with SOL to prove demand' },
-            { step: '03', title: 'LAUNCH', desc: 'All slots filled = token launches on Pump.fun' },
-            { step: '04', title: 'TRADE', desc: 'Tokens land in backer wallets at launch and trade on Pump.fun' },
+            { step: '03', title: 'LAUNCH', desc: 'All slots filled = token launches on Pump.fun or Meteora' },
+            { step: '04', title: 'TRADE', desc: 'Tokens land in backer wallets at launch and trade on the chosen AMM' },
           ].map((item) => (
             <div key={item.step} className="p-4">
               <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">

@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://prooflaunch.fun"),
   title: "Proof Launch | Community-Pre-Formed Token Launchpad",
   description: "The launchpad where communities form BEFORE tokens launch. Back projects you believe in and participate in community-driven launches.",
-  keywords: ["solana", "token launchpad", "launchpad", "bonding curve", "defi", "proof launch", "pump.fun"],
+  keywords: ["solana", "token launchpad", "launchpad", "bonding curve", "defi", "proof launch", "pump.fun", "meteora", "DBC", "DAMM"],
   openGraph: {
     title: "Proof Launch | Community-Pre-Formed Token Launchpad",
     description: "Communities form BEFORE tokens launch. Back projects you believe in and participate in community-driven launches.",

@@ -42,7 +42,7 @@ export default function LaunchedPage() {
   const statsDisplay = [
     { label: 'Launched Tokens', value: stats.launchedCount.toString() },
     { label: 'Total Raised', value: `${stats.totalBacked.toFixed(1)} SOL` },
-    { label: 'Trading on Pump.fun', value: stats.launchedCount.toString() },
+    { label: 'Trading Live', value: stats.launchedCount.toString() },
   ];
 
   return (
@@ -65,7 +65,7 @@ export default function LaunchedPage() {
             Launched Tokens
           </h1>
           <p className="text-xs font-mono text-[var(--muted)] mt-2">
-            Tokens that hit all slots and went live on pump.fun
+            Tokens that hit all slots and went live on Pump.fun or Meteora
           </p>
         </div>
       </div>
