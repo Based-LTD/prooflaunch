@@ -16,6 +16,7 @@
 import type { LaunchOutcome, LaunchParams, LaunchPlatform } from './types';
 import { launch as launchPumpfun } from './pumpfun';
 import { launch as launchMeteora } from './meteora';
+import { launch as launchLaunchlab } from './launchlab';
 
 export async function launchOnPlatform(
   platform: LaunchPlatform,
@@ -26,6 +27,8 @@ export async function launchOnPlatform(
       return launchPumpfun(params);
     case 'meteora':
       return launchMeteora(params);
+    case 'launchlab':
+      return launchLaunchlab(params);
     case 'bags':
     case 'bonk':
       return {

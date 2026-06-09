@@ -1070,13 +1070,13 @@ async function isGraduated(mint: string): Promise<boolean> {
 
     // Routes containing pump.fun's bonding curve are flagged with the
     // "Pump.fun" label in routePlan steps. Same for the meteora DBC
-    // label. If the ONLY routes Jupiter knows are curve labels, the
-    // token hasn't graduated.
+    // and Raydium LaunchLab pre-grad labels. If the ONLY routes Jupiter
+    // knows are curve labels, the token hasn't graduated.
     const labels: string[] = (a.routePlan ?? []).flatMap((p: { swapInfo?: { label?: string } }) =>
       p?.swapInfo?.label ? [p.swapInfo.label] : []
     );
     const onlyCurves = labels.length > 0 && labels.every((l) =>
-      /pump\.?fun|meteora\s*dbc|dynamic\s*bonding\s*curve/i.test(l)
+      /pump\.?fun|meteora\s*dbc|dynamic\s*bonding\s*curve|raydium\s*launchlab|launchlab/i.test(l)
     );
     return !onlyCurves;
   } catch {

@@ -115,9 +115,10 @@ export default function DocsPage() {
               <p className="text-[var(--foreground)]/80 leading-relaxed">
                 Proof Launch is a community-pre-formed token launchpad on Solana. Unlike typical
                 launches where developers control everything, here <strong>communities form BEFORE
-                tokens launch</strong>. Creators set up to 24 backer slots, choose between <strong>Pump.fun</strong>
-                or <strong>Meteora</strong> as the launchpad, and once all slots are filled the token launches
-                with backers receiving supply proportional to their contribution.
+                tokens launch</strong>. Creators set up to 24 backer slots, choose between <strong>Pump.fun</strong>,
+                <strong> Meteora</strong>, or (coming soon) <strong>Raydium LaunchLab</strong> as the launchpad,
+                and once all slots are filled the token launches with backers receiving supply proportional
+                to their contribution.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">

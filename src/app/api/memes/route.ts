@@ -778,7 +778,7 @@ export async function POST(request: NextRequest) {
         // against the same allowlist /services/launch/index.ts knows
         // about — anything outside the set falls back to 'pumpfun'.
         launch_platform:
-          ['pumpfun', 'meteora', 'bags', 'bonk'].includes(launch_platform)
+          ['pumpfun', 'meteora', 'bags', 'bonk', 'launchlab'].includes(launch_platform)
             ? launch_platform
             : 'pumpfun',
         // Launch Configuration v2 — fee distribution config.

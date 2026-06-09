@@ -50,7 +50,7 @@ export interface Meme {
   // Which launchpad executed the create + first-buy. 'pumpfun' is the
   // legacy default; 'meteora' lights up the Meteora-flavored UI (BUY
   // button label, trade URL). Other values reserved for future routes.
-  launch_platform?: 'pumpfun' | 'meteora' | 'bags' | 'bonk';
+  launch_platform?: 'pumpfun' | 'meteora' | 'bags' | 'bonk' | 'launchlab';
 
   // Platform fees
   submission_fee_paid: boolean;

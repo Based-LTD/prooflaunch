@@ -684,16 +684,21 @@ export default function MemeDetailPage() {
               <DashboardCard label="TRADE" meta="LIVE">
                 <div className="space-y-3">
                   {(() => {
-                    // Platform-aware buy button. Meteora-launched tokens
-                    // route through Jupiter (universal AMM aggregator on
-                    // Solana); Pump.fun tokens stay on pump.fun. Falls back
-                    // to pump.fun for legacy rows where launch_platform is
-                    // unset.
-                    const isMeteora = meme.launch_platform === 'meteora';
-                    const buyHref = isMeteora
+                    // Platform-aware buy button. Tokens on non-pump.fun
+                    // launchpads (Meteora, LaunchLab) route through Jupiter
+                    // (universal AMM aggregator on Solana); Pump.fun tokens
+                    // keep their pump.fun deep-link. Falls back to pump.fun
+                    // for legacy rows where launch_platform is unset.
+                    const platform = meme.launch_platform;
+                    const useJupiter = platform === 'meteora' || platform === 'launchlab';
+                    const buyHref = useJupiter
                       ? `https://jup.ag/swap/SOL-${meme.mint_address}`
                       : (meme.pump_fun_url || `https://pump.fun/coin/${meme.mint_address}`);
-                    const buyLabel = isMeteora ? '▶ BUY ON METEORA' : '▶ BUY ON PUMP.FUN';
+                    const buyLabel = platform === 'meteora'
+                      ? '▶ BUY ON METEORA'
+                      : platform === 'launchlab'
+                        ? '▶ BUY ON LAUNCHLAB'
+                        : '▶ BUY ON PUMP.FUN';
                     return (
                       <a
                         href={buyHref}
@@ -790,7 +795,7 @@ export default function MemeDetailPage() {
         onClose={() => setShowBackConfirm(false)}
         onConfirm={confirmBack}
         title="Confirm Backing"
-        message={`You are backing ${meme.name} with ${amount} SOL.\n\nYour SOL goes into this token's shared pool. When all slots fill, the pool makes ONE atomic launch buy on ${meme.launch_platform === 'meteora' ? 'Meteora' : 'Pump.fun'} — every backer gets in at the exact same price, with no dev allocation and no sniper gap.\n\nAfter launch, your proportional share of supply is sent straight to this wallet.\n\nChanged your mind? You can withdraw while slots are still filling (2% fee). Once the pool is full it's committed and waits for the creator to launch on their schedule.`}
+        message={`You are backing ${meme.name} with ${amount} SOL.\n\nYour SOL goes into this token's shared pool. When all slots fill, the pool makes ONE atomic launch buy on ${meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'} — every backer gets in at the exact same price, with no dev allocation and no sniper gap.\n\nAfter launch, your proportional share of supply is sent straight to this wallet.\n\nChanged your mind? You can withdraw while slots are still filling (2% fee). Once the pool is full it's committed and waits for the creator to launch on their schedule.`}
         confirmText={`Back with ${amount} SOL`}
         variant="info"
         isLoading={backing}
@@ -816,7 +821,7 @@ export default function MemeDetailPage() {
         onClose={() => setShowLaunchConfirm(false)}
         onConfirm={confirmLaunch}
         title="Launch Token"
-        message={`You are about to deploy ${meme.name} ($${meme.symbol}) to ${meme.launch_platform === 'meteora' ? 'Meteora' : 'Pump.fun'} with ${totalBackingSol.toFixed(2)} SOL of community backing. This action cannot be undone. Tokens will be distributed to all backers proportionally.`}
+        message={`You are about to deploy ${meme.name} ($${meme.symbol}) to ${meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'} with ${totalBackingSol.toFixed(2)} SOL of community backing. This action cannot be undone. Tokens will be distributed to all backers proportionally.`}
         confirmText="Launch Now"
         variant="info"
         isLoading={launching}

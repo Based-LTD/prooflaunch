@@ -12,7 +12,7 @@
 
 import type { LaunchLogger } from '@/lib/launchLog';
 
-export type LaunchPlatform = 'pumpfun' | 'meteora' | 'bags' | 'bonk';
+export type LaunchPlatform = 'pumpfun' | 'meteora' | 'bags' | 'bonk' | 'launchlab';
 
 // Re-export the existing pump.fun config type so the rest of the
 // codebase gradually migrates to importing from launch/types instead

@@ -298,7 +298,7 @@ function SubmitPageInner() {
     // platform live today; Meteora / Bags / Bonk shown for transparency
     // with "Coming soon" gating in the UI. Default preserves legacy
     // behavior for every existing submission path.
-    launchPlatform: 'pumpfun' as 'pumpfun' | 'meteora' | 'bags' | 'bonk',
+    launchPlatform: 'pumpfun' as 'pumpfun' | 'meteora' | 'bags' | 'bonk' | 'launchlab',
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -768,13 +768,14 @@ function SubmitPageInner() {
                 {'// LAUNCH_PLATFORM'}
               </span>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                2 LIVE
+                2 LIVE · 1 SOON
               </span>
             </div>
-            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
               {([
-                { key: 'pumpfun', label: 'PUMP.FUN', sub: 'LIVE', enabled: true },
-                { key: 'meteora', label: 'METEORA',  sub: 'LIVE', enabled: true },
+                { key: 'pumpfun',   label: 'PUMP.FUN',  sub: 'LIVE', enabled: true  },
+                { key: 'meteora',   label: 'METEORA',   sub: 'LIVE', enabled: true  },
+                { key: 'launchlab', label: 'LAUNCHLAB', sub: 'SOON', enabled: false },
               ] as const).map((p) => {
                 const active = formData.launchPlatform === p.key;
                 return (
