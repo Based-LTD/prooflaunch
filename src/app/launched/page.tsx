@@ -65,7 +65,7 @@ export default function LaunchedPage() {
             Launched Tokens
           </h1>
           <p className="text-xs font-mono text-[var(--muted)] mt-2">
-            Tokens that hit all slots and went live on Pump.fun or Meteora
+            Tokens that hit all slots and went live on Pump.fun, Meteora, or LaunchLab
           </p>
         </div>
       </div>

@@ -116,7 +116,7 @@ export default function DocsPage() {
                 Proof Launch is a community-pre-formed token launchpad on Solana. Unlike typical
                 launches where developers control everything, here <strong>communities form BEFORE
                 tokens launch</strong>. Creators set up to 24 backer slots, choose between <strong>Pump.fun</strong>,
-                <strong> Meteora</strong>, or (coming soon) <strong>Raydium LaunchLab</strong> as the launchpad,
+                <strong> Meteora</strong>, or <strong>Raydium LaunchLab</strong> as the launchpad,
                 and once all slots are filled the token launches with backers receiving supply proportional
                 to their contribution.
               </p>
@@ -133,7 +133,7 @@ export default function DocsPage() {
                 </div>
                 <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 text-center">
                   <div className="text-3xl font-black text-[var(--accent)]">3</div>
-                  <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Launch on Pump.fun or Meteora</div>
+                  <div className="text-sm text-[var(--muted)] uppercase tracking-wide font-bold">Launch on Pump.fun, Meteora, or LaunchLab</div>
                   <div className="text-xs text-[var(--muted)] mt-1">All buy instantly</div>
                 </div>
               </div>
@@ -262,7 +262,7 @@ export default function DocsPage() {
               </p>
               <ul className="text-sm text-[var(--muted)] space-y-1 pl-4">
                 <li>· Open Phantom &rarr; Settings &rarr; <strong className="text-[var(--foreground)]">enable &quot;Show all tokens&quot;</strong> (or &quot;Show tokens with low value&quot;)</li>
-                <li>· Trade the coin once on its market (Pump.fun or Meteora) — visibility usually triggers within a few minutes of any activity</li>
+                <li>· Trade the coin once on its market (Pump.fun, Meteora, or LaunchLab) — visibility usually triggers within a few minutes of any activity</li>
                 <li>· Paste the contract address (CA) into Phantom&apos;s &quot;Manage Tokens&quot; search to manually un-hide it</li>
               </ul>
               <p className="text-xs font-mono text-[var(--muted)]/80 leading-relaxed pt-1">
@@ -285,9 +285,9 @@ export default function DocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { num: '1', title: 'Submit Your Token (0.02 SOL)', desc: 'Create your token with name, symbol, description, image, and socials (X, Telegram, Discord, Website, GitHub — GitHub links bake into the on-chain metadata extensions, so wallets and explorers can surface code-shipping devs). Set 2-24 backer slots and a minimum backing amount.' },
+                { num: '1', title: 'Submit Your Token (0.02 SOL)', desc: 'Create your token with name, symbol, description, image, and socials (X, Telegram, Discord, Website, GitHub — GitHub links bake into the on-chain metadata extensions, so wallets and explorers can surface code-shipping devs). Set 2-24 backer slots, a minimum backing amount, and pick your launchpad (Pump.fun, Meteora, or LaunchLab).' },
                 { num: '2', title: 'Fill the Slots', desc: 'Share your token page, engage in the community chat, and rally backers to fill all slots within 3 days.' },
-                { num: '3', title: 'Launch on Pump.fun or Meteora', desc: 'Once all slots are filled, click "Launch" when you\'re ready. Coordinate with whales, time the market, give yourself a runway. The pool waits for you — funded tokens don\'t expire.' },
+                { num: '3', title: 'Launch on Pump.fun, Meteora, or LaunchLab', desc: 'Once all slots are filled, click "Launch" when you\'re ready. Coordinate with whales, time the market, give yourself a runway. The pool waits for you — funded tokens don\'t expire.' },
               ].map((step) => (
                 <div key={step.num} className="flex items-start gap-4 p-4 bg-[var(--background)] border-l-4 border-[var(--accent-gold)]">
                   <div className="w-8 h-8 bg-[var(--accent-gold)] text-black flex items-center justify-center text-sm font-black flex-shrink-0">
@@ -350,7 +350,7 @@ export default function DocsPage() {
                 backers. Stack any combination you want, up to a 90% fee-budget cap.
               </p>
               <div className="bg-[var(--background)] border border-[var(--accent)]/40 p-4 text-sm leading-relaxed text-[var(--muted)]">
-                <strong className="text-[var(--accent)]">No other Pump.fun or Meteora launcher does this.</strong>{' '}
+                <strong className="text-[var(--accent)]">No other Pump.fun, Meteora, or LaunchLab launcher does this.</strong>{' '}
                 Every bonding-curve trade has always been &quot;buy the curve and hope.&quot; Proof gives
                 creators a real programmable layer — burn, treasury, holder distribution,
                 backer rebate — automated, every block, every trade, auditable forever.
@@ -478,7 +478,7 @@ export default function DocsPage() {
               </p>
               <div className="space-y-3 pt-2">
                 {[
-                  { label: 'Creation Fee', value: '0.02 SOL', color: 'border-[var(--accent)]', desc: 'One-time fee when submitting a token. Covers token creation on the chosen launchpad (Pump.fun or Meteora). Waived for $PROOF holders (≥500k).' },
+                  { label: 'Creation Fee', value: '0.02 SOL', color: 'border-[var(--accent)]', desc: 'One-time fee when submitting a token. Covers token creation on the chosen launchpad (Pump.fun, Meteora, or LaunchLab). Waived for $PROOF holders (≥500k).' },
                   { label: 'Backing Fee', value: 'None', color: 'border-[var(--success)]', desc: 'No fee on backing. 100% of your SOL goes to the token\'s pool wallet.' },
                   { label: 'Withdrawal Fee', value: '2%', color: 'border-[var(--warning)]', desc: 'If you withdraw your backing before launch, 2% is deducted to discourage frivolous backing/withdrawing.' },
                   { label: 'Trading Fees Routing', value: '90 / 5 / 5', color: 'border-[var(--accent)]', desc: 'Protocol routes trading fees: pro-rata rebate to genesis backers (hold-weighted), platform operations allocation, and a discretionary $PROOF distribution pool. Distributions are at protocol discretion.' },
@@ -504,11 +504,11 @@ export default function DocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">Trading Fee Distribution</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                Both Pump.fun and Meteora route a percentage of trading volume to the token's creator vault
-                (administered by Proof Launch). The protocol routes that vault three ways: a pro-rata rebate
-                to genesis backers (hold-weighted), an allocation to platform operations, and an allocation
-                to a discretionary $PROOF distribution pool. Creators are eligible for the backer rebate
-                only by participating as backers themselves.
+                Pump.fun, Meteora, and LaunchLab all route a percentage of trading volume to the token's
+                creator vault (administered by Proof Launch). The protocol routes that vault three ways:
+                a pro-rata rebate to genesis backers (hold-weighted), an allocation to platform operations,
+                and an allocation to a discretionary $PROOF distribution pool. Creators are eligible for
+                the backer rebate only by participating as backers themselves.
               </p>
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 mt-4">
                 <h3 className="font-bold mb-3 uppercase tracking-wide">Example: How Fees Flow</h3>
@@ -517,7 +517,7 @@ export default function DocsPage() {
                 </p>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between p-2 bg-[var(--card)]">
-                    <span className="text-[var(--muted)]">Launchpad creator fee (Pump.fun 0.5% / Meteora similar)</span>
+                    <span className="text-[var(--muted)]">Launchpad creator fee (Pump.fun 0.5% / Meteora + LaunchLab similar)</span>
                     <span className="font-bold">0.005 SOL</span>
                   </div>
                   <div className="border-t-2 border-[var(--border)] pt-3 mt-3 space-y-2">
@@ -568,9 +568,9 @@ export default function DocsPage() {
                   Platform Operations
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  The 5% platform cut funds token creation on the chosen launchpad (Pump.fun or Meteora)
-                  and ongoing operations. The other 5% platform-side allocation is routed to a
-                  discretionary $PROOF distribution pool. All fee transactions are verifiable on-chain
+                  The 5% platform cut funds token creation on the chosen launchpad (Pump.fun, Meteora,
+                  or LaunchLab) and ongoing operations. The other 5% platform-side allocation is routed
+                  to a discretionary $PROOF distribution pool. All fee transactions are verifiable on-chain
                   — see the <a href="/" className="text-[var(--accent)] hover:underline">Wallets transparency tab</a> in
                   the navbar for every platform wallet, live balances, and Solscan links.
                 </p>
@@ -590,7 +590,7 @@ export default function DocsPage() {
                 <ul className="text-sm text-[var(--muted)] space-y-1">
                   <li>· The pool buys at launch and tokens are distributed proportionally to backers</li>
                   <li>· Your tokens land in your own connected wallet — nothing to export or claim manually</li>
-                  <li>· Trade them on Pump.fun, Meteora, or any DEX the moment they arrive</li>
+                  <li>· Trade them on Pump.fun, Meteora, LaunchLab, or any DEX the moment they arrive</li>
                 </ul>
               </div>
 

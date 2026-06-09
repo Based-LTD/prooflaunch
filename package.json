@@ -22,6 +22,7 @@
     "@coral-xyz/anchor": "^0.32.1",
     "@meteora-ag/dynamic-bonding-curve-sdk": "^1.5.7",
     "@pump-fun/pump-sdk": "^1.35.0",
+    "@raydium-io/raydium-sdk-v2": "^0.2.50-alpha",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@solana/spl-token": "^0.4.14",

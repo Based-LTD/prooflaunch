@@ -668,7 +668,7 @@ function SubmitPageInner() {
             Submit a Token<span className="cursor-blink" />
           </h1>
           <p className="text-xs font-mono text-[var(--muted)] mt-1.5">
-            Configure · Rally backers · Launch on Pump.fun or Meteora
+            Configure · Rally backers · Launch on Pump.fun, Meteora, or LaunchLab
           </p>
         </div>
       </div>
@@ -759,23 +759,24 @@ function SubmitPageInner() {
           )}
 
           {/* ── LAUNCH PLATFORM — which launchpad executes the create + first-buy ── */}
-          {/* Pump.fun and Meteora are both live. Creator picks at submit.
-              State lives in formData.launchPlatform; default 'pumpfun'
-              preserves legacy behavior for clients that don't supply it. */}
+          {/* Pump.fun, Meteora, and Raydium LaunchLab are all live. Creator
+              picks at submit. State lives in formData.launchPlatform;
+              default 'pumpfun' preserves legacy behavior for clients that
+              don't supply it. */}
           <section className="border border-[var(--border)] bg-[var(--card)]">
             <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
                 {'// LAUNCH_PLATFORM'}
               </span>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                2 LIVE · 1 SOON
+                3 LIVE
               </span>
             </div>
             <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
               {([
-                { key: 'pumpfun',   label: 'PUMP.FUN',  sub: 'LIVE', enabled: true  },
-                { key: 'meteora',   label: 'METEORA',   sub: 'LIVE', enabled: true  },
-                { key: 'launchlab', label: 'LAUNCHLAB', sub: 'SOON', enabled: false },
+                { key: 'pumpfun',   label: 'PUMP.FUN',  sub: 'LIVE', enabled: true },
+                { key: 'meteora',   label: 'METEORA',   sub: 'LIVE', enabled: true },
+                { key: 'launchlab', label: 'LAUNCHLAB', sub: 'LIVE', enabled: true },
               ] as const).map((p) => {
                 const active = formData.launchPlatform === p.key;
                 return (
@@ -1235,7 +1236,7 @@ function SubmitPageInner() {
                   Submission fee · {CREATION_FEE_SOL} SOL
                 </div>
                 <div className="text-[var(--muted)]">
-                  Covers token creation on the launchpad you choose (Pump.fun or Meteora). Back your own token separately to receive supply at launch.
+                  Covers token creation on the launchpad you choose (Pump.fun, Meteora, or LaunchLab). Back your own token separately to receive supply at launch.
                   {submissionCost && (
                     <> Hold ≥ {submissionCost.threshold_tokens.toLocaleString()} <span className="text-[var(--accent-gold)]">$PROOF</span> for free submissions
                       {submissionCost.your_balance_tokens != null && submissionCost.your_balance_tokens > 0 && (
@@ -1756,7 +1757,7 @@ function SubmitPageInner() {
             </button>
             {showHowItWorks && (
               <div className="border-t border-[var(--border)] p-4 text-[11px] font-mono text-[var(--muted)] leading-relaxed space-y-2">
-                <p>&gt; Once all backer slots fill, the token launches on your chosen platform (Pump.fun or Meteora).</p>
+                <p>&gt; Once all backer slots fill, the token launches on your chosen platform (Pump.fun, Meteora, or LaunchLab).</p>
                 <p>&gt; The pool makes <span className="text-[var(--accent)]">ONE atomic buy</span> — every backer enters at the same price, no dev allocation, no sniper gap.</p>
                 <p>&gt; Each backer&apos;s proportional share of tokens is sent straight to their wallet.</p>
                 <p>&gt; If slots don&apos;t fill within 3 days, backers get refunds automatically.</p>
