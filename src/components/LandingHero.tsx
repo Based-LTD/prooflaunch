@@ -44,7 +44,7 @@ const fmtInt = (n: number) => {
 
 const HEADLINE_PARTS = [
   { text: 'Shared ', color: 'var(--foreground)' },
-  { text: 'Pump.fun', color: 'var(--accent)' },
+  { text: 'Token', color: 'var(--accent)' },
   { text: ' Launches. Equal entry. Shared trading fees.', color: 'var(--foreground)' },
 ] as const;
 const HEADLINE_FULL = HEADLINE_PARTS.map((p) => p.text).join('');

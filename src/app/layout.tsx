@@ -20,17 +20,17 @@ const sans = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://prooflaunch.fun"),
-  title: "Proof Launch | Community-Pre-Formed Token Launchpad",
+  title: "Proof Launch | Shared Token Launches on Solana",
   description: "The launchpad where communities form BEFORE tokens launch. Back projects you believe in and participate in community-driven launches.",
   keywords: ["solana", "token launchpad", "launchpad", "bonding curve", "defi", "proof launch", "pump.fun", "meteora", "DBC", "DAMM"],
   openGraph: {
-    title: "Proof Launch | Community-Pre-Formed Token Launchpad",
+    title: "Proof Launch | Shared Token Launches on Solana",
     description: "Communities form BEFORE tokens launch. Back projects you believe in and participate in community-driven launches.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Proof Launch | Community-Pre-Formed Token Launchpad",
+    title: "Proof Launch | Shared Token Launches on Solana",
     description: "Communities form BEFORE tokens launch. Back projects you believe in and participate in community-driven launches.",
   },
 };
