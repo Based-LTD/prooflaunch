@@ -63,18 +63,7 @@ export async function GET() {
             padding: '0 80px',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
-            <div
-              style={{
-                fontSize: 18,
-                color: MUTED,
-                letterSpacing: '0.3em',
-                textTransform: 'uppercase',
-                display: 'flex',
-              }}
-            >
-              &gt; SYSTEM
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <div
               style={{
                 fontSize: 92,
@@ -93,6 +82,7 @@ export async function GET() {
                 color: MUTED,
                 marginTop: 8,
                 display: 'flex',
+                textAlign: 'center',
               }}
             >
               Shared Token Launches. Equal entry. Shared trading fees.
