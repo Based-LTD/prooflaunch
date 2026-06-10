@@ -276,6 +276,24 @@ const BackingPanel: React.FC<BackingProps> = ({
   const filled = backerCount;
   const slotsFull = slotsRemaining <= 0;
 
+  // Allowlist-aware fill semantics. When reserved_slots > 0 and we
+  // know who the backers + allowlisted wallets are, allowlisted
+  // backings fill TEAM slots first (right side, gold squares) and
+  // public backings fill OPEN slots (left side). Without these
+  // inputs we fall back to the legacy "fill left-to-right" visual.
+  const reservedSlotsCount = Number(meme.reserved_slots) || 0;
+  const openSlotsCountLegacy = Math.max(0, (Number(meme.total_slots) || totalSlots) - reservedSlotsCount);
+  const allowSetForVisual = new Set(allowlistWallets ?? []);
+  const allowlistedBackingsForVisual = (backerWallets ?? []).filter((w) => allowSetForVisual.has(w)).length;
+  const publicBackingsForVisual = (backerWallets?.length ?? 0) - allowlistedBackingsForVisual;
+  const teamFilledForVisual = Math.min(allowlistedBackingsForVisual, reservedSlotsCount);
+  const teamOverflowForVisual = Math.max(0, allowlistedBackingsForVisual - reservedSlotsCount);
+  const openFilledForVisual = publicBackingsForVisual + teamOverflowForVisual;
+  const canDisaggregate = reservedSlotsCount > 0
+    && backerWallets !== undefined
+    && allowlistWallets !== undefined
+    && allowlistWallets.length > 0;
+
   // Launch Configuration v2 — visibility gating.
   // For stealth/spectator launches, check if the connected wallet is on
   // the backing_allowlist. If not, the backing UI is replaced with a
@@ -371,9 +389,26 @@ const BackingPanel: React.FC<BackingProps> = ({
               // tint the reserved positions amber-gold so backers see
               // the structure at a glance.
               const isReserved = hasReservedSlots && i >= openSlotsCount;
-              const isFilled = i < filled;
+              // Fill semantics:
+              //  - When we can disaggregate (allowlist + backers known),
+              //    open positions fill left-to-right based on openFilledForVisual,
+              //    reserved positions fill from openSlotsCount based on
+              //    teamFilledForVisual. So an allowlisted creator backing
+              //    correctly turns a GOLD reserved square solid, not an
+              //    amber open square.
+              //  - Legacy fallback (no allowlist data): plain left-to-right.
+              const isFilled = canDisaggregate
+                ? (isReserved
+                    ? i < openSlotsCountLegacy + teamFilledForVisual
+                    : i < openFilledForVisual)
+                : i < filled;
               if (isFilled) {
-                return <div key={i} className="flex-1 h-3 bg-[var(--accent)]" />;
+                return (
+                  <div
+                    key={i}
+                    className={`flex-1 h-3 ${isReserved ? 'bg-[var(--accent-gold)]' : 'bg-[var(--accent)]'}`}
+                  />
+                );
               }
               if (isReserved) {
                 return <div key={i} className="flex-1 h-3 border border-[var(--accent-gold)] bg-[var(--accent-gold)]/10" />;
