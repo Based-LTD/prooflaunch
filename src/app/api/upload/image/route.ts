@@ -10,7 +10,9 @@ import { createServerClient } from '@/lib/supabase';
 // and image_url just holds the public CDN URL.
 //
 // Path layout mirrors migration 028's banner pattern:
-//   token-assets/logos/<sha256>.<ext>
+//   token-assets/logos/<sha256>.<ext>   (the token icon, default)
+//   token-assets/banners/<sha256>.<ext> (the per-token X-style banner,
+//                                        when caller sends `kind=banner`)
 // Content-addressed so two creators uploading the same file dedupe
 // automatically (and re-uploads are idempotent).
 //
@@ -56,7 +58,13 @@ export async function POST(request: NextRequest) {
     const bytes = Buffer.from(await file.arrayBuffer());
     const hash = crypto.createHash('sha256').update(bytes).digest('hex');
     const ext = MIME_EXT[mime];
-    const path = `logos/${hash}.${ext}`;
+    // Default 'logo' goes to logos/. Caller sends `kind=banner` for the
+    // per-token X-style 1500×500 banner; that's just a folder routing
+    // decision — same size limit + mime allowlist apply to both.
+    const kindRaw = form.get('kind');
+    const kind = typeof kindRaw === 'string' && kindRaw === 'banner' ? 'banner' : 'logo';
+    const folder = kind === 'banner' ? 'banners' : 'logos';
+    const path = `${folder}/${hash}.${ext}`;
 
     const supabase = createServerClient();
     const { error: uploadErr } = await supabase.storage

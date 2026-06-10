@@ -302,6 +302,11 @@ function SubmitPageInner() {
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  // Optional X-style 1500×500 banner. Same upload route as the logo
+  // but routes to banners/ via the `kind=banner` form field.
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerError, setBannerError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -366,6 +371,14 @@ function SubmitPageInner() {
       .catch(() => setSubmissionCost(null));
   }, [publicKey]);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  // Allowlist chip-input state. The textarea got replaced by a tag-style
+  // input — paste an address, press Enter (or click +), validate as
+  // base58 pubkey, append to the chip list. We keep formData.allowlistText
+  // as the canonical store (newline-separated) so the submit payload
+  // shape is unchanged; the chips are just a derived view.
+  const [allowlistInput, setAllowlistInput] = useState('');
+  const [allowlistError, setAllowlistError] = useState<string | null>(null);
 
   const validateForm = (): boolean => {
     const errors: ValidationErrors = {
@@ -468,6 +481,22 @@ function SubmitPageInner() {
         imageUrl = partnerSession.image_url;
       }
 
+      // Optional X-style banner. Same upload route, kind=banner routes
+      // the file to banners/<sha256>.<ext> instead of logos/.
+      let bannerUrl: string | undefined;
+      if (bannerFile) {
+        const fd = new FormData();
+        fd.append('file', bannerFile);
+        fd.append('kind', 'banner');
+        const upRes = await fetch('/api/upload/image', { method: 'POST', body: fd });
+        if (!upRes.ok) {
+          const j = await upRes.json().catch(() => ({}));
+          throw new Error(j.error || 'Banner upload failed');
+        }
+        const upJson = await upRes.json();
+        bannerUrl = upJson.url;
+      }
+
       // Sign a wallet-bound auth message so the server can prove this POST
       // was authorized by the holder of creator_wallet (and not a stranger
       // impersonating them). 5-min replay window enforced server-side.
@@ -486,6 +515,7 @@ function SubmitPageInner() {
           symbol: formData.symbol.toUpperCase().trim(),
           description: formData.description.trim(),
           image_url: imageUrl,
+          banner_url: bannerUrl,
           creator_twitter: formData.creatorTwitter || undefined,
           twitter: formData.twitter || undefined,
           telegram: formData.telegram || undefined,
@@ -605,6 +635,45 @@ function SubmitPageInner() {
     setImagePreview(null);
     setImageFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Banner upload handler. Same upload route + 2 MB cap (enforced by
+  // both the bucket and /api/upload/image). X banner aspect = 3:1
+  // (1500×500); we don't reject off-ratio uploads but warn the creator.
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBannerError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setBannerError(`Banner must be under 2 MB (you have ${(file.size / 1024 / 1024).toFixed(1)} MB)`);
+      return;
+    }
+    setBannerFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      setBannerPreview(dataUrl);
+      // Off-ratio warn (3:1 = X banner). Non-blocking — creators can
+      // ship any aspect they want.
+      const img = new Image();
+      img.onload = () => {
+        const ratio = img.width / img.height;
+        if (Math.abs(ratio - 3) > 0.3) {
+          setBannerError(
+            `Tip: X banners are 1500×500 (3:1). Yours is ${img.width}×${img.height} — it'll render but may crop.`,
+          );
+        }
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+  const removeBanner = () => {
+    setBannerPreview(null);
+    setBannerFile(null);
+    setBannerError(null);
+    if (bannerInputRef.current) bannerInputRef.current.value = '';
   };
 
   // ── Success state ──────────────────────────────────────────────
@@ -928,6 +997,57 @@ function SubmitPageInner() {
                   <span>{formData.description.length}/500</span>
                 </div>
               </div>
+
+              {/* Banner upload — optional, X-style 1500×500. Renders
+                  full-width at the top of the token detail page when set. */}
+              <div className="border-t border-[var(--border)] pt-4 space-y-2">
+                <label className={labelClass}>Banner image (optional · X-style 1500×500)</label>
+                {bannerPreview ? (
+                  <div className="relative w-full">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={bannerPreview}
+                      alt="Banner preview"
+                      className="w-full border border-[var(--accent)]"
+                      style={{ aspectRatio: '3 / 1', objectFit: 'cover' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={removeBanner}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-[var(--error)] flex items-center justify-center hover:opacity-90 transition-opacity"
+                      aria-label="Remove banner"
+                    >
+                      <X className="w-3 h-3 text-[#0a0a0a]" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => bannerInputRef.current?.click()}
+                    className="w-full border border-dashed border-[var(--border)] hover:border-[var(--accent)] transition-colors flex flex-col items-center justify-center gap-1.5 text-[var(--muted)] hover:text-[var(--accent)]"
+                    style={{ aspectRatio: '3 / 1' }}
+                  >
+                    <Upload className="w-5 h-5" />
+                    <span className="text-[10px] font-mono uppercase tracking-widest">Upload banner</span>
+                    <span className="text-[9px] font-mono text-[var(--muted)]">PNG/JPG/WebP · 1500×500 · 2MB</span>
+                  </button>
+                )}
+                <input
+                  ref={bannerInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleBannerChange}
+                  className="hidden"
+                />
+                {bannerError && (
+                  <span className="text-[10px] font-mono text-[var(--warning)] block">
+                    {bannerError}
+                  </span>
+                )}
+                <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
+                  Renders at the top of your token page. Same dimensions as an X profile banner. Leave empty to skip.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -1117,22 +1237,25 @@ function SubmitPageInner() {
               {/* Optional per-backer maximum (Phase 3.5).
                   When set, applies to allowlisted + public alike — every
                   backing is bounded by the same SOL ceiling, so no whale
-                  can out-back any team member. 0 = uncapped (default). */}
+                  can out-back any team member. 0 = uncapped (default).
+                  Free-form number — creators set exactly what they want
+                  (the old preset chips skipped from 2 to 5 SOL). */}
               <div>
                 <label className={labelClass}>Maximum per backer (optional)</label>
-                <select
+                <input
+                  type="number"
                   name="maxBackingSol"
                   value={formData.maxBackingSol}
                   onChange={handleChange}
+                  min={0}
+                  step="any"
+                  placeholder={`Any value ≥ ${formData.minBackingSol}, or 0 for uncapped`}
                   className={inputClass()}
-                >
-                  <option value={0}>No cap — anyone can back any amount</option>
-                  {[0.1, 0.25, 0.5, 1, 2, 5, 10, 25].filter((n) => n >= formData.minBackingSol).map((n) => (
-                    <option key={n} value={n}>{n} SOL max per backer</option>
-                  ))}
-                </select>
+                />
                 <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
-                  &gt; Team-fairness lock: every backing bounded equally, no whale exceeds your team.
+                  &gt; {formData.maxBackingSol > 0
+                    ? `Each backing capped at ${formData.maxBackingSol} SOL — no whale can exceed it.`
+                    : 'No cap — anyone can back any amount. Set a value to enforce a per-backer ceiling.'}
                 </span>
               </div>
 
@@ -1171,24 +1294,128 @@ function SubmitPageInner() {
                   </span>
                 </div>
 
-                {formData.reservedSlots > 0 && (
-                  <div className="space-y-2">
-                    <label className={labelClass}>
-                      Allowlist wallets (one per line · creator covers 1 reserved slot, so you need {Math.max(0, formData.reservedSlots - 1)} more)
-                    </label>
-                    <textarea
-                      name="allowlistText"
-                      value={formData.allowlistText}
-                      onChange={handleChange}
-                      placeholder={'Wallet1...\nWallet2...\nWallet3...'}
-                      rows={Math.max(3, Math.min(formData.reservedSlots + 1, 8))}
-                      className="w-full text-xs font-mono bg-[var(--background)] border border-[var(--border)] p-2 focus:outline-none focus:border-[var(--accent)]"
-                    />
-                    <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
-                      Your own wallet is auto-added — don't include it here. Allowlisted wallets can back either open OR reserved slots (their reservation guarantees entry). You can add/remove wallets later from your creator dashboard.
-                    </p>
-                  </div>
-                )}
+                {formData.reservedSlots > 0 && (() => {
+                  // Parse the canonical store into chips. Filter out the
+                  // creator's wallet if they pasted it (auto-added server-side).
+                  const allowlistChips = formData.allowlistText
+                    .split('\n')
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0)
+                    .filter((s) => !publicKey || s !== publicKey.toBase58());
+                  const creatorWalletStr = publicKey?.toBase58() ?? null;
+                  const totalCount = allowlistChips.length + (creatorWalletStr ? 1 : 0);
+                  const needed = formData.reservedSlots;
+                  const addWallet = () => {
+                    const candidate = allowlistInput.trim();
+                    if (!candidate) return;
+                    if (creatorWalletStr && candidate === creatorWalletStr) {
+                      setAllowlistError("Your wallet is already included (locked above).");
+                      return;
+                    }
+                    if (allowlistChips.includes(candidate)) {
+                      setAllowlistError('Already in the list.');
+                      return;
+                    }
+                    try {
+                      new PublicKey(candidate);
+                    } catch {
+                      setAllowlistError('Not a valid Solana wallet address.');
+                      return;
+                    }
+                    const next = [...allowlistChips, candidate].join('\n');
+                    setFormData((d) => ({ ...d, allowlistText: next }));
+                    setAllowlistInput('');
+                    setAllowlistError(null);
+                  };
+                  const removeWallet = (w: string) => {
+                    const next = allowlistChips.filter((x) => x !== w).join('\n');
+                    setFormData((d) => ({ ...d, allowlistText: next }));
+                    setAllowlistError(null);
+                  };
+                  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Enter' || e.key === ',') {
+                      e.preventDefault();
+                      addWallet();
+                    }
+                  };
+                  return (
+                    <div className="space-y-2">
+                      <label className={labelClass}>
+                        Allowlist wallets · {totalCount}/{needed} added
+                      </label>
+                      <div className="border border-[var(--border)] bg-[var(--background)] p-2 space-y-2">
+                        {/* Chip list */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {creatorWalletStr && (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2 py-1 border border-[var(--accent)]/60 bg-[var(--accent)]/10 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]"
+                              title="Your connected wallet — auto-included, can't be removed"
+                            >
+                              <span className="text-[8px]">YOU</span>
+                              <code className="normal-case tracking-normal">
+                                {creatorWalletStr.slice(0, 4)}…{creatorWalletStr.slice(-4)}
+                              </code>
+                            </span>
+                          )}
+                          {allowlistChips.map((w) => (
+                            <span
+                              key={w}
+                              className="inline-flex items-center gap-1 px-2 py-1 border border-[var(--border)] bg-[var(--card)] text-[10px] font-mono"
+                              title={w}
+                            >
+                              <code className="normal-case tracking-normal">
+                                {w.slice(0, 4)}…{w.slice(-4)}
+                              </code>
+                              <button
+                                type="button"
+                                onClick={() => removeWallet(w)}
+                                className="text-[var(--muted)] hover:text-[var(--error)] transition-colors"
+                                aria-label={`Remove ${w}`}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                          {allowlistChips.length === 0 && (
+                            <span className="text-[10px] font-mono text-[var(--muted)] italic px-1 py-1">
+                              No additional wallets yet.
+                            </span>
+                          )}
+                        </div>
+                        {/* Add input */}
+                        <div className="flex gap-1.5 border-t border-[var(--border)] pt-2">
+                          <input
+                            type="text"
+                            value={allowlistInput}
+                            onChange={(e) => { setAllowlistInput(e.target.value); setAllowlistError(null); }}
+                            onKeyDown={onKeyDown}
+                            placeholder="Paste a wallet address, then Enter"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            className="flex-1 text-xs font-mono bg-[var(--background)] border border-[var(--border)] px-2 py-1 focus:outline-none focus:border-[var(--accent)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={addWallet}
+                            disabled={!allowlistInput.trim()}
+                            className="text-[10px] font-mono uppercase tracking-widest px-3 py-1 border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--accent)] transition-colors"
+                          >
+                            + Add
+                          </button>
+                        </div>
+                        {allowlistError && (
+                          <span className="text-[10px] font-mono text-[var(--error)] block">
+                            {allowlistError}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
+                        Your connected wallet counts as one reserved slot automatically. Add up to {Math.max(0, needed - 1)} more for the rest. Allowlisted wallets can back either open OR reserved slots. You can edit this list later from your creator dashboard.
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Compact slot preview — single row of boxes + min raise line */}

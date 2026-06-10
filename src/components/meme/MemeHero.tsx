@@ -40,6 +40,17 @@ export const MemeHero: React.FC<Props> = ({ meme }) => {
 
   return (
     <div className="border border-[var(--border)] bg-[var(--card)]">
+      {/* Optional X-style banner — renders flush with the top border
+          and only when the creator uploaded one at submit. */}
+      {meme.banner_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={meme.banner_url}
+          alt=""
+          className="w-full block"
+          style={{ aspectRatio: '3 / 1', objectFit: 'cover' }}
+        />
+      )}
       <div className="p-4 sm:p-6">
         <div className="flex items-start gap-4 sm:gap-5">
           {/* Image */}

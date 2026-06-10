@@ -15,6 +15,9 @@ export interface Meme {
   symbol: string;
   description: string;
   image_url: string;
+  // Optional X-style landscape banner (1500×500). Renders at the top
+  // of the meme detail page when set; absent → no banner.
+  banner_url?: string;
 
   // Creator's personal social (Proof Launch only, not in token metadata)
   creator_twitter?: string;
