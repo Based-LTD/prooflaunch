@@ -17,6 +17,7 @@ import { BackerLoungePanel } from '@/components/meme/BackerLoungePanel';
 import { BuybackBotPanel } from '@/components/meme/BuybackBotPanel';
 import { LaunchVisibilityPanel } from '@/components/meme/LaunchVisibilityPanel';
 import { BackerVaultManager } from '@/components/meme/BackerVaultManager';
+import { EditMetadataPanel } from '@/components/meme/EditMetadataPanel';
 import { ClaimRewards } from '@/components/ClaimRewards';
 import { BackersList } from '@/components/BackersList';
 import { GenesisBackerRoster } from '@/components/GenesisBackerRoster';
@@ -794,6 +795,9 @@ export default function MemeDetailPage() {
                     maxBackingSol={meme.max_backing_sol ?? null}
                     reservedSlots={meme.reserved_slots ?? 0}
                   />
+                  {meme.status === 'backing' && (
+                    <EditMetadataPanel meme={meme} onSaved={refetchMeme} />
+                  )}
                   <BackerVaultManager meme={meme} isCreator={true} />
                 </div>
               </DashboardCard>
