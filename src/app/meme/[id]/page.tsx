@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -73,6 +73,28 @@ export default function MemeDetailPage() {
 
   const { meme, loading, error, refetch: refetchMeme } = useRealtimeMeme(id as string);
   const { backings, refetch: refetchBackings } = useRealtimeBackings(id as string);
+
+  // Page-level allowlist fetch. Only meaningful when the meme has
+  // reserved slots — otherwise the breakdown UI doesn't render. We
+  // hold the list in state so the action panel can show "team N/M
+  // filled · open M/K filled" without re-fetching per render. Refresh
+  // alongside backings so a freshly-added allowlist wallet appears.
+  const [allowlistWallets, setAllowlistWallets] = useState<string[]>([]);
+  useEffect(() => {
+    if (!id || !meme || (meme.reserved_slots ?? 0) === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/memes/${id}/allowlist`);
+        if (!r.ok) return;
+        const j = await r.json();
+        if (cancelled) return;
+        const list: { wallet: string }[] = Array.isArray(j?.allowlist) ? j.allowlist : [];
+        setAllowlistWallets(list.map((row) => row.wallet));
+      } catch { /* swallow — breakdown just doesn't render */ }
+    })();
+    return () => { cancelled = true; };
+  }, [id, meme]);
 
   // ── Backing ──────────────────────────────────────────────────────
   // Helper — checks whether the connected wallet is on the meme's
@@ -585,6 +607,8 @@ export default function MemeDetailPage() {
           backingPaused={false}
           connected={connected}
           projectedSharePct={projectedSharePct}
+          backerWallets={backings.map((b) => b.backer_wallet)}
+          allowlistWallets={allowlistWallets}
         />
       )}
     </div>

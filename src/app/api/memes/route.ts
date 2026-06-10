@@ -110,29 +110,38 @@ export async function GET(request: NextRequest) {
 
     // Augment each meme with extra card-level signals that the cached
     // memes_with_stats view doesn't carry:
-    //   - bot_count        (Phase B meme_bots rows + legacy single-bot)
-    //   - reserved_slots   (migration 037; view's SELECT m.* is cached
-    //                       and doesn't auto-pick up new columns —
-    //                       same issue documented in /api/memes/[id])
-    // Both fetched in a single batched query to keep list-view cheap.
+    //   - bot_count             (Phase B meme_bots rows + legacy single-bot)
+    //   - reserved_slots        (migration 037; view's SELECT m.* is cached
+    //                             and doesn't auto-pick up new columns —
+    //                             same issue documented in /api/memes/[id])
+    //   - github                (migration 050; card-level social icon)
+    //   - launch_platform       (migration 046; card-level platform badge)
+    //   - banner_url            (migration 052; not used on card today
+    //                             but flowed through so client can opt in)
+    // Single batched query to keep list-view cheap.
     if (filteredData && filteredData.length > 0) {
       const memeIds = filteredData.map((m) => m.id);
       const [{ data: botRows }, { data: poolRows }] = await Promise.all([
         supabase.from('meme_bots').select('meme_id').in('meme_id', memeIds),
-        supabase.from('memes').select('id, reserved_slots').in('id', memeIds),
+        supabase.from('memes').select('id, reserved_slots, github, launch_platform, banner_url').in('id', memeIds),
       ]);
       const botCountByMeme = new Map<string, number>();
       for (const row of botRows ?? []) {
         botCountByMeme.set(row.meme_id, (botCountByMeme.get(row.meme_id) ?? 0) + 1);
       }
-      const reservedByMeme = new Map<string, number>();
+      const extrasByMeme = new Map<string, { reserved_slots: number; github: string | null; launch_platform: string | null; banner_url: string | null }>();
       for (const row of poolRows ?? []) {
-        reservedByMeme.set(row.id, row.reserved_slots ?? 0);
+        extrasByMeme.set(row.id, {
+          reserved_slots: row.reserved_slots ?? 0,
+          github: row.github ?? null,
+          launch_platform: row.launch_platform ?? null,
+          banner_url: row.banner_url ?? null,
+        });
       }
       filteredData = filteredData.map((m) => ({
         ...m,
         bot_count: botCountByMeme.get(m.id) ?? (m.buyback_bot_enabled ? 1 : 0),
-        reserved_slots: reservedByMeme.get(m.id) ?? 0,
+        ...(extrasByMeme.get(m.id) ?? { reserved_slots: 0, github: null, launch_platform: null, banner_url: null }),
       }));
     }
 
