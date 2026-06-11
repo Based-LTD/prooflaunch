@@ -8,9 +8,20 @@ import { rateLimiters } from '@/lib/rateLimit';
 // through no fault of theirs). Returns a NextResponse with both the
 // error context AND the refund tx so the client UI can show "rejected
 // → refunded" in one shot. Used by every post-verify rejection path so
-// SOL can't be stranded in a pool wallet after a server-side rule fires.
+// the quote currency can't be stranded in a pool wallet after a
+// server-side rule fires.
+//
+// Quote-currency branch (migration 053). When the meme is USDC-quoted,
+// we route through sendUsdcFromPool (SPL transfer) instead of
+// refundFromPool (SystemProgram.transfer of lamports). Existing memes
+// (quote_currency='sol') go through the unchanged SOL path.
 async function rejectAndRefund(
-  meme: { id: string; pool_wallet: string; encrypted_pool_key: string },
+  meme: {
+    id: string;
+    pool_wallet: string;
+    encrypted_pool_key: string;
+    quote_currency?: 'sol' | 'usdc';
+  },
   backerWallet: string,
   amountSol: number,
   error: string,
@@ -18,13 +29,39 @@ async function rejectAndRefund(
   extra: Record<string, unknown> = {},
 ): Promise<NextResponse> {
   try {
-    const result = await refundFromPool(
-      meme.encrypted_pool_key,
-      meme.pool_wallet,
-      backerWallet,
-      amountSol,
-      0,
-    );
+    let result: { success: boolean; signature?: string; amountRefunded?: number; error?: string };
+    if (meme.quote_currency === 'usdc') {
+      const { sendUsdcFromPool } = await import('@/lib/usdc');
+      const { decryptPrivateKey } = await import('@/lib/crypto');
+      const { Connection, Keypair, PublicKey } = await import('@solana/web3.js');
+      const bs58Mod = await import('bs58');
+      const conn = new Connection(
+        process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+        'confirmed',
+      );
+      const poolKp = Keypair.fromSecretKey(bs58Mod.default.decode(decryptPrivateKey(meme.encrypted_pool_key)));
+      const usdcResult = await sendUsdcFromPool({
+        conn,
+        poolKp,
+        destOwner: new PublicKey(backerWallet),
+        amount: amountSol, // amount_sol = "quote units" for USDC memes
+        label: `reject-refund-usdc:${meme.id.slice(0, 8)}`,
+      });
+      result = {
+        success: usdcResult.ok,
+        signature: usdcResult.signature,
+        amountRefunded: usdcResult.ok ? amountSol : undefined,
+        error: usdcResult.error,
+      };
+    } else {
+      result = await refundFromPool(
+        meme.encrypted_pool_key,
+        meme.pool_wallet,
+        backerWallet,
+        amountSol,
+        0,
+      );
+    }
     if (result.success) {
       return NextResponse.json(
         {
@@ -172,14 +209,34 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Verify on-chain deposit FIRST ────────────────────────────────
-    // Everything after this point assumes SOL is confirmed in the pool
-    // wallet. Any subsequent rejection MUST refund via rejectAndRefund
-    // so SOL can't be stranded by a server-side rule fire. Pre-verify
-    // rejections (above) don't need to refund because we can't prove the
-    // deposit even landed.
+    // Everything after this point assumes the quote currency is
+    // confirmed in the pool wallet. Any subsequent rejection MUST refund
+    // via rejectAndRefund so funds can't be stranded by a server-side
+    // rule fire. Pre-verify rejections (above) don't need to refund
+    // because we can't prove the deposit even landed.
+    //
+    // Quote-currency branch (migration 053). USDC memes route to the
+    // SPL verifier in src/lib/usdc — checks token-balance deltas
+    // instead of native lamport deltas. SOL is unchanged.
     let isValid = false;
     try {
-      isValid = await verifyPoolDeposit(deposit_tx, amount_sol, backer_wallet, meme.pool_wallet);
+      if (meme.quote_currency === 'usdc') {
+        const { verifyPoolUsdcDeposit } = await import('@/lib/usdc');
+        const { Connection } = await import('@solana/web3.js');
+        const usdcConn = new Connection(
+          process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+          'confirmed',
+        );
+        isValid = await verifyPoolUsdcDeposit(
+          usdcConn,
+          deposit_tx,
+          amount_sol, // `amount_sol` is the canonical "backing size in quote units"
+          backer_wallet,
+          meme.pool_wallet,
+        );
+      } else {
+        isValid = await verifyPoolDeposit(deposit_tx, amount_sol, backer_wallet, meme.pool_wallet);
+      }
     } catch (verifyError) {
       console.error('Verification error:', verifyError);
     }
@@ -196,6 +253,9 @@ export async function POST(request: NextRequest) {
       id: meme.id,
       pool_wallet: meme.pool_wallet,
       encrypted_pool_key: meme.encrypted_pool_key,
+      // Threaded through so post-verify rejections refund in the right
+      // currency. Defaults to 'sol' (legacy memes pre-migration 053).
+      quote_currency: (meme.quote_currency as 'sol' | 'usdc' | undefined) ?? 'sol',
     };
 
     if (meme.status !== 'backing') {

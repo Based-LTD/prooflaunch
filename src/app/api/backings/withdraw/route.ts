@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Get the meme to check status
     const { data: meme, error: memeError } = await supabase
       .from('memes')
-      .select('status, name, pool_wallet, encrypted_pool_key')
+      .select('status, name, pool_wallet, encrypted_pool_key, quote_currency')
       .eq('id', meme_id)
       .single();
 
@@ -143,17 +143,50 @@ export async function POST(request: NextRequest) {
     const expectedRefund = amountSol - withdrawalFee;
 
     // Process the on-chain refund. If anything fails we MUST revert the
-    // lock above, otherwise the user is stuck "withdrawn" with no SOL.
-    console.log(`Processing pool withdrawal: ${amountSol} SOL - ${WITHDRAWAL_FEE_PERCENT}% fee to ${backer_wallet}`);
-    let refundResult;
+    // lock above, otherwise the user is stuck "withdrawn" with no funds.
+    // Quote-currency branch (migration 053): USDC memes route through
+    // sendUsdcFromPool. Same 2% withdraw-fee math, just expressed in
+    // USDC instead of SOL — the fee is retained by the pool wallet
+    // (in USDC ATA) for the eventual launch buy.
+    const quoteCurrency: 'sol' | 'usdc' = (meme as { quote_currency?: 'sol' | 'usdc' }).quote_currency ?? 'sol';
+    const unit = quoteCurrency === 'usdc' ? 'USDC' : 'SOL';
+    console.log(`Processing pool withdrawal: ${amountSol} ${unit} - ${WITHDRAWAL_FEE_PERCENT}% fee to ${backer_wallet}`);
+    let refundResult: { success: boolean; signature?: string; amountRefunded?: number; error?: string };
     try {
-      refundResult = await refundFromPool(
-        meme.encrypted_pool_key,
-        meme.pool_wallet,
-        backer_wallet,
-        amountSol,
-        WITHDRAWAL_FEE_PERCENT
-      );
+      if (quoteCurrency === 'usdc') {
+        const { sendUsdcFromPool } = await import('@/lib/usdc');
+        const { decryptPrivateKey } = await import('@/lib/crypto');
+        const { Connection, Keypair, PublicKey } = await import('@solana/web3.js');
+        const bs58Mod = await import('bs58');
+        const conn = new Connection(
+          process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+          'confirmed',
+        );
+        const poolKp = Keypair.fromSecretKey(
+          bs58Mod.default.decode(decryptPrivateKey(meme.encrypted_pool_key)),
+        );
+        const usdcSendResult = await sendUsdcFromPool({
+          conn,
+          poolKp,
+          destOwner: new PublicKey(backer_wallet),
+          amount: expectedRefund,
+          label: 'pool-withdraw-usdc',
+        });
+        refundResult = {
+          success: usdcSendResult.ok,
+          signature: usdcSendResult.signature,
+          amountRefunded: usdcSendResult.ok ? expectedRefund : undefined,
+          error: usdcSendResult.error,
+        };
+      } else {
+        refundResult = await refundFromPool(
+          meme.encrypted_pool_key,
+          meme.pool_wallet,
+          backer_wallet,
+          amountSol,
+          WITHDRAWAL_FEE_PERCENT
+        );
+      }
     } catch (e) {
       // Revert the lock so the user can retry.
       await supabase

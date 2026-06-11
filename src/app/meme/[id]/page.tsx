@@ -205,20 +205,36 @@ export default function MemeDetailPage() {
         throw new Error('This meme has no pool wallet yet — please refresh and try again.');
       }
 
-      const lamports = Math.floor(amountSol * LAMPORTS_PER_SOL);
-      const tx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey: new PublicKey(poolWallet),
-          lamports,
-        }),
-      );
+      // Quote-currency branch (migration 053). USDC memes sign an SPL
+      // USDC transfer to the pool's USDC ATA (with idempotent ATA-create
+      // for the pool's first USDC deposit). SOL memes use the existing
+      // SystemProgram.transfer path — byte-identical to today.
+      const quoteCurrency: 'sol' | 'usdc' = (meme as { quote_currency?: 'sol' | 'usdc' }).quote_currency ?? 'sol';
+      let tx: Transaction;
+      if (quoteCurrency === 'usdc') {
+        const { buildUsdcBackingTx } = await import('@/lib/usdc');
+        tx = buildUsdcBackingTx({
+          backer: publicKey,
+          pool: new PublicKey(poolWallet),
+          amount: amountSol, // amountSol is the quote-units value (USDC here)
+        });
+      } else {
+        const lamports = Math.floor(amountSol * LAMPORTS_PER_SOL);
+        tx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: publicKey,
+            toPubkey: new PublicKey(poolWallet),
+            lamports,
+          }),
+        );
+      }
 
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
 
-      setBackingStatus(`Approve ${amountSol} SOL to the pool...`);
+      const unit = quoteCurrency === 'usdc' ? 'USDC' : 'SOL';
+      setBackingStatus(`Approve ${amountSol} ${unit} to the pool...`);
       const signed = await signTransaction(tx);
       const sig = await connection.sendRawTransaction(signed.serialize());
 

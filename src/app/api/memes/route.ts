@@ -123,25 +123,26 @@ export async function GET(request: NextRequest) {
       const memeIds = filteredData.map((m) => m.id);
       const [{ data: botRows }, { data: poolRows }] = await Promise.all([
         supabase.from('meme_bots').select('meme_id').in('meme_id', memeIds),
-        supabase.from('memes').select('id, reserved_slots, github, launch_platform, banner_url').in('id', memeIds),
+        supabase.from('memes').select('id, reserved_slots, github, launch_platform, banner_url, quote_currency').in('id', memeIds),
       ]);
       const botCountByMeme = new Map<string, number>();
       for (const row of botRows ?? []) {
         botCountByMeme.set(row.meme_id, (botCountByMeme.get(row.meme_id) ?? 0) + 1);
       }
-      const extrasByMeme = new Map<string, { reserved_slots: number; github: string | null; launch_platform: string | null; banner_url: string | null }>();
+      const extrasByMeme = new Map<string, { reserved_slots: number; github: string | null; launch_platform: string | null; banner_url: string | null; quote_currency: string }>();
       for (const row of poolRows ?? []) {
         extrasByMeme.set(row.id, {
           reserved_slots: row.reserved_slots ?? 0,
           github: row.github ?? null,
           launch_platform: row.launch_platform ?? null,
           banner_url: row.banner_url ?? null,
+          quote_currency: row.quote_currency ?? 'sol',
         });
       }
       filteredData = filteredData.map((m) => ({
         ...m,
         bot_count: botCountByMeme.get(m.id) ?? (m.buyback_bot_enabled ? 1 : 0),
-        ...(extrasByMeme.get(m.id) ?? { reserved_slots: 0, github: null, launch_platform: null, banner_url: null }),
+        ...(extrasByMeme.get(m.id) ?? { reserved_slots: 0, github: null, launch_platform: null, banner_url: null, quote_currency: 'sol' }),
       }));
     }
 
