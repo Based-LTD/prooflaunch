@@ -255,13 +255,23 @@ export async function distributeLegacyMeme(
     return { ok: false, error: `Collect failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
   }
 
-  // Verify the collect actually moved funds
-  const escrowLamPost = await conn.getBalance(escrow.publicKey, 'confirmed');
-  const collectedActualLam = escrowLamPost - escrowLamPre;
+  // Verify the collect actually moved funds. The post-balance read can
+  // lag confirmed-commitment by a few seconds on busy RPC nodes — when
+  // the collect tx claims 3+ SOL across BC + AMM vaults the cron's
+  // immediate getBalance() sometimes returns the pre-collect amount.
+  // Retry up to 5 times (1s spacing) before failing.
+  let escrowLamPost = 0;
+  let collectedActualLam = 0;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    escrowLamPost = await conn.getBalance(escrow.publicKey, 'confirmed');
+    collectedActualLam = escrowLamPost - escrowLamPre;
+    if (collectedActualLam >= totalCollectableLam * 0.95) break;
+    if (attempt < 4) await new Promise(r => setTimeout(r, 1500));
+  }
   if (collectedActualLam < totalCollectableLam * 0.95) {
     return {
       ok: false,
-      error: `Collect verify failed: escrow grew by ${collectedActualLam} lamports, expected ≥${Math.floor(totalCollectableLam * 0.95)}`,
+      error: `Collect verify failed after 5 retries: escrow grew by ${collectedActualLam} lamports, expected ≥${Math.floor(totalCollectableLam * 0.95)} (collectSig ${collectSig})`,
       symbol: config.symbol,
       collectSig,
     };
