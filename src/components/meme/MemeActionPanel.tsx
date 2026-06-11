@@ -512,7 +512,7 @@ const BackingPanel: React.FC<BackingProps> = ({
               [!] NO_WALLET
             </div>
             <div className="text-[11px] font-mono uppercase tracking-widest text-[var(--muted)]">
-              &gt; Connect a wallet to back this meme
+              &gt; Connect a wallet to back this token
             </div>
           </div>
         ) : (

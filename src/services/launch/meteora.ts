@@ -145,15 +145,19 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
         const needed = POOL_GAS_RESERVE - solBal;
         try {
           const { SystemProgram, Transaction, Keypair: Kp2 } = await import('@solana/web3.js');
-          const { decryptPrivateKey: dk2 } = await import('@/lib/crypto');
-          const escrowKeyRaw = process.env.ESCROW_WALLET_PRIVATE_KEY;
+          // Platform escrow secret is stored as raw base58 in
+          // ESCROW_WALLET_PRIVATE_KEY (NOT encrypted via the burner
+          // crypto module). Mirror the load pattern from
+          // legacyFeeDistribution.ts to stay consistent with prod —
+          // \n-normalize + trim then bs58.decode.
+          const escrowKeyRaw = (process.env.ESCROW_WALLET_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
           if (!escrowKeyRaw) {
             return {
               success: false,
               error: 'USDC launch: pool needs SOL gas but ESCROW_WALLET_PRIVATE_KEY env is unset',
             };
           }
-          const escrowKp = Kp2.fromSecretKey(bs58.decode(dk2(escrowKeyRaw)));
+          const escrowKp = Kp2.fromSecretKey(bs58.decode(escrowKeyRaw));
           const topupTx = new Transaction().add(
             SystemProgram.transfer({
               fromPubkey: escrowKp.publicKey,
