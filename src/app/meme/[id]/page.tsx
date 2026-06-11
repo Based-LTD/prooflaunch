@@ -634,6 +634,19 @@ export default function MemeDetailPage() {
           [&lt;] Back to Proving Grounds
         </Link>
 
+        {/* Optional X-style banner — renders full-width above the slim
+            identity strip when the creator uploaded one. Skipped when
+            absent so the page looks identical to legacy memes. */}
+        {meme.banner_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={meme.banner_url}
+            alt=""
+            className="w-full block border border-[var(--border)]"
+            style={{ aspectRatio: '3 / 1', objectFit: 'cover' }}
+          />
+        )}
+
         {/* Slim identity bar — the token headliner. */}
         <MemeIdentityBar
           meme={meme}
@@ -642,6 +655,20 @@ export default function MemeDetailPage() {
           totalSlots={totalSlots}
           timeRemaining={timeRemaining}
         />
+
+        {/* Description block — only renders when the creator set one.
+            Sits right under the identity strip so it reads as the
+            token's tagline / one-liner before the dashboard panels. */}
+        {meme.description && (
+          <div className="border border-[var(--border)] bg-[var(--card)] p-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">
+              {'// DESCRIPTION'}
+            </div>
+            <p className="text-sm font-mono text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap">
+              {meme.description}
+            </p>
+          </div>
+        )}
 
         {/* Creator track record — collapsible, sits right under the
             identity bar so the creator's wallet history is part of the
