@@ -124,6 +124,7 @@ export const MemeTabs: React.FC<Props> = ({
               onWithdraw={onWithdraw}
               withdrawing={withdrawing}
               withdrawStatus={withdrawStatus}
+              unit={meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}
             />
           )
         )}
@@ -217,7 +218,7 @@ const OverviewTab: React.FC<{ meme: Meme; isProving: boolean }> = ({ meme, isPro
         <ol className="space-y-2 text-xs sm:text-sm font-mono text-[var(--muted)] leading-relaxed">
           <li className="flex gap-2">
             <span className="text-[var(--accent-gold)] font-semibold">1.</span>
-            <span>Backers pledge SOL into {meme.total_slots} equal slots.</span>
+            <span>Backers pledge {meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} into {meme.total_slots} equal slots.</span>
           </li>
           <li className="flex gap-2">
             <span className="text-[var(--accent-gold)] font-semibold">2.</span>

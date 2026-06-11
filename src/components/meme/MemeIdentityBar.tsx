@@ -3,6 +3,7 @@
 import { Copy, Check, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import type { Meme } from '@/types/database';
+import { quoteLabel } from '@/lib/usdc';
 
 // Slim identity strip for the meme dashboard. Replaces the big MemeHero
 // so the dashboard grid can sit higher in the viewport. One horizontal
@@ -110,7 +111,7 @@ export const MemeIdentityBar: React.FC<Props> = ({
           <div className="text-right">
             <div>Backed</div>
             <div className="text-[var(--foreground)] text-base normal-case tracking-tight">
-              {totalBackingSol.toFixed(2)} <span className="text-[var(--muted)]">SOL</span>
+              {totalBackingSol.toFixed(2)} <span className="text-[var(--muted)]">{quoteLabel(meme.quote_currency)}</span>
             </div>
           </div>
           {!isLive && (

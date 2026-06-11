@@ -54,4 +54,12 @@ tools/migrate-proof-to-pool.mjs
 # Meteora DBC config keypair stashes — contain private keys; never commit.
 # Created by tools/meteora-create-config.mjs after a successful config init.
 meteora-dbc-config.*.json
+meteora-dbc-config-usdc.*.json
 meteora-mainnet-test.*.json
+meteora-distribute-test.*.json
+meteora-prod-e2e.*.json
+# E2E test keypair files written by tools/usdc-mainnet-e2e.mjs and similar.
+# These contain raw base58 secret keys for temporary test wallets — sweep
+# the wallets and delete the file when done; NEVER commit.
+usdc-e2e-keys.*.json
+*-e2e-keys.*.json

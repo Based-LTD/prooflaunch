@@ -4,6 +4,7 @@ import { Loader2, ExternalLink, Copy, Check, Clock, RefreshCw, Lock } from 'luci
 import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import type { Meme } from '@/types/database';
+import { quoteLabel } from '@/lib/usdc';
 
 // All four status branches in one component because they share the same
 // visual slot on the page. Each branch renders its own primary action
@@ -135,6 +136,7 @@ const FundedPanel: React.FC<FundedProps> = ({
   meme, totalSlots, totalBackingSol, isCreator, isLaunching, launching, launchStatus,
   onLaunch, onResetWindow, resetting, resetStatus, connected,
 }) => {
+  const unit = quoteLabel(meme.quote_currency);
   // Live-updating countdown to launch_deadline. Re-renders every second
   // when not loading. Once the deadline hits, the cron auto-refunds
   // backers — anyone viewing then sees a clear "expired" state.
@@ -173,10 +175,10 @@ const FundedPanel: React.FC<FundedProps> = ({
       <div className="p-4 sm:p-5 space-y-4">
         <div className="text-center">
           <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
-            ALL {totalSlots} SLOTS FILLED · {totalBackingSol.toFixed(2)} SOL RAISED
+            ALL {totalSlots} SLOTS FILLED · {totalBackingSol.toFixed(2)} {unit} RAISED
           </div>
           <p className="text-xs font-mono text-[var(--muted)] mt-2">
-            Token is ready to deploy on pump.fun.
+            Token is ready to deploy on {meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'}.
           </p>
         </div>
 
@@ -275,6 +277,7 @@ const BackingPanel: React.FC<BackingProps> = ({
 }) => {
   const filled = backerCount;
   const slotsFull = slotsRemaining <= 0;
+  const unit = quoteLabel(meme.quote_currency);
 
   // Allowlist-aware fill semantics. When reserved_slots > 0 and we
   // know who the backers + allowlisted wallets are, allowlisted
@@ -389,7 +392,7 @@ const BackingPanel: React.FC<BackingProps> = ({
           <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest mb-2">
             <span className="text-[var(--muted)]">SLOTS [{filled}/{totalSlots}]</span>
             <span className="text-[var(--accent)]">{slotsRemaining > 0 ? `${slotsRemaining} OPEN` : 'FULL'}</span>
-            <span className="text-[var(--muted)]">{totalBackingSol.toFixed(2)} SOL</span>
+            <span className="text-[var(--muted)]">{totalBackingSol.toFixed(2)} {unit}</span>
           </div>
           <div className="flex gap-1">
             {Array.from({ length: totalSlots }).map((_, i) => {
@@ -452,7 +455,7 @@ const BackingPanel: React.FC<BackingProps> = ({
           <div className="flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-widest">
             {cap !== null && (
               <span className="border border-[var(--border)] px-2 py-1 text-[var(--muted)]">
-                Max <span className="text-[var(--foreground)]">{cap} SOL</span> per backer
+                Max <span className="text-[var(--foreground)]">{cap} {unit}</span> per backer
               </span>
             )}
             {isTeamRound ? (
@@ -521,7 +524,7 @@ const BackingPanel: React.FC<BackingProps> = ({
             <div>
               <div className="flex items-baseline justify-between mb-1.5">
                 <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  &gt; Your Pledge (SOL)
+                  &gt; Your Pledge ({unit})
                 </label>
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                   Min: <span className="text-[var(--foreground)]">{minBacking}</span>
@@ -558,14 +561,14 @@ const BackingPanel: React.FC<BackingProps> = ({
               ) : slotsFull ? (
                 <>SLOTS FULL</>
               ) : (
-                <>▶ BACK WITH {amount || '0'} SOL</>
+                <>▶ BACK WITH {amount || '0'} {unit}</>
               )}
             </button>
 
             {amount && Number(amount) > 0 && (
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] bg-[var(--background)] p-3">
                 <span className="text-[var(--muted)]">
-                  To pool: <span className="text-[var(--foreground)]">{Number(amount).toFixed(4)} SOL</span>
+                  To pool: <span className="text-[var(--foreground)]">{Number(amount).toFixed(4)} {unit}</span>
                   <span className="text-[var(--muted)]/70 ml-1">(no fee)</span>
                 </span>
                 <span className="text-[var(--muted)] sm:ml-auto">

@@ -20,6 +20,9 @@ interface BackersListProps {
   onWithdraw?: (backerWallet: string) => void;
   withdrawing?: boolean;
   withdrawStatus?: string | null;
+  // Quote currency for label display. Defaults to 'SOL' when omitted
+  // so legacy callers (pre-USDC) render identically to today.
+  unit?: 'SOL' | 'USDC';
 }
 
 export const BackersList: FC<BackersListProps> = ({
@@ -30,6 +33,7 @@ export const BackersList: FC<BackersListProps> = ({
   onWithdraw,
   withdrawing = false,
   withdrawStatus,
+  unit = 'SOL',
 }) => {
   // Sort by amount descending
   const sortedBackings = [...backings].sort((a, b) => b.amount_sol - a.amount_sol);
@@ -134,7 +138,7 @@ export const BackersList: FC<BackersListProps> = ({
                 {/* Amount and percentage */}
                 <div className="text-right">
                   <div className={`font-semibold text-sm ${isWithdrawn ? 'line-through' : ''}`}>
-                    {backing.amount_sol.toFixed(2)} SOL
+                    {backing.amount_sol.toFixed(2)} {unit}
                   </div>
                   <div className="text-xs text-[var(--muted)]">
                     {isWithdrawn ? 'Refunded' : `${getPercentage(backing.amount_sol)}% of total`}
@@ -195,7 +199,7 @@ export const BackersList: FC<BackersListProps> = ({
       {backings.length > 0 && (
         <div className="mt-4 pt-3 border-t border-[var(--border)] flex justify-between text-sm">
           <span className="text-[var(--muted)]">Total Backed</span>
-          <span className="font-semibold">{totalBacking.toFixed(2)} SOL</span>
+          <span className="font-semibold">{totalBacking.toFixed(2)} {unit}</span>
         </div>
       )}
     </div>

@@ -27,6 +27,14 @@ import {
 export const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 export const USDC_DECIMALS = 6;
 
+// Display label for a meme's quote currency. Centralized so every
+// UI surface that shows a backing amount or pool total reads the
+// same canonical 'SOL' / 'USDC' string.
+export type QuoteCurrency = 'sol' | 'usdc';
+export function quoteLabel(quoteCurrency: QuoteCurrency | string | null | undefined): 'SOL' | 'USDC' {
+  return quoteCurrency === 'usdc' ? 'USDC' : 'SOL';
+}
+
 // Helper: raw USDC amount → lamport-equivalent integer (6 decimals).
 export function usdcToRaw(amount: number): bigint {
   // Avoid float drift by rounding via Math.round on the multiplied value.

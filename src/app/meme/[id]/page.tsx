@@ -129,13 +129,19 @@ export default function MemeDetailPage() {
       return;
     }
 
+    // Quote-currency unit string for user-facing labels in this fn.
+    // Hoisted to the top so every error message + balance check
+    // downstream renders the correct denomination.
+    const quoteCurrencyEarly: 'sol' | 'usdc' = (meme as { quote_currency?: 'sol' | 'usdc' }).quote_currency ?? 'sol';
+    const unitLabel = quoteCurrencyEarly === 'usdc' ? 'USDC' : 'SOL';
+
     // Pre-check the team-fairness cap so the user doesn't sign a tx
-    // the API will reject (which would leave their SOL stranded in the
-    // pool wallet because the on-chain deposit lands BEFORE the API
-    // validates).
+    // the API will reject (which would leave their funds stranded in
+    // the pool wallet because the on-chain deposit lands BEFORE the
+    // API validates).
     const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
     if (cap !== null && amountSol > cap + 1e-9) {
-      setBackingStatus(`Error: This launch has a per-backer cap of ${cap} SOL. Your amount exceeds it.`);
+      setBackingStatus(`Error: This launch has a per-backer cap of ${cap} ${unitLabel}. Your amount exceeds it.`);
       return;
     }
 
@@ -144,7 +150,7 @@ export default function MemeDetailPage() {
     );
     if (myExisting) {
       setBackingStatus(
-        `Error: You already have an active backing of ${Number(myExisting.amount_sol).toFixed(2)} SOL. Withdraw first to change your amount.`,
+        `Error: You already have an active backing of ${Number(myExisting.amount_sol).toFixed(2)} ${unitLabel}. Withdraw first to change your amount.`,
       );
       return;
     }
@@ -171,7 +177,18 @@ export default function MemeDetailPage() {
           );
           return;
         }
-        if (activeBackings >= openSlots) {
+        // Count public-bucket fills ONLY — by slot_number, not total
+        // active backings. After the slot-assignment fix (commit 57b4604)
+        // team backers land in slot_numbers > openSlots (the reserved
+        // bucket), so counting public bucket = active backings whose
+        // slot_number <= openSlots. Using activeBackings >= openSlots
+        // here would wrongly include team fills and lock public out.
+        const publicBucketFilled = backings
+          .filter((b) => b.status !== 'withdrawn'
+            && b.slot_number != null
+            && Number(b.slot_number) <= openSlots)
+          .length;
+        if (publicBucketFilled >= openSlots) {
           setBackingStatus(
             `Error: All ${openSlots} open slots are filled. The remaining ${reservedSlots} are reserved for allowlisted wallets.`,
           );
@@ -181,15 +198,42 @@ export default function MemeDetailPage() {
     }
 
     // Balance pre-check — saves the user a failed signature prompt.
-    const totalNeeded = amountSol + 0.005;
+    // USDC memes: need amountSol (USDC) in the backer's USDC ATA, and
+    // ~0.01 SOL for gas + idempotent ATA-create rent. SOL memes:
+    // amount + 0.005 SOL gas. SOL flow byte-identical to before.
     try {
-      const balance = await connection.getBalance(publicKey);
-      const balanceSol = balance / LAMPORTS_PER_SOL;
-      if (balanceSol < totalNeeded) {
-        setBackingStatus(
-          `Error: Insufficient balance. You have ${balanceSol.toFixed(4)} SOL but need ~${totalNeeded.toFixed(4)} SOL.`,
-        );
-        return;
+      if (quoteCurrencyEarly === 'usdc') {
+        const { getUsdcAta } = await import('@/lib/usdc');
+        const { PublicKey: Pk } = await import('@solana/web3.js');
+        const usdcAta = getUsdcAta(new Pk(publicKey.toBase58()));
+        let usdcBal = 0;
+        try {
+          const bal = await connection.getTokenAccountBalance(usdcAta, 'confirmed');
+          usdcBal = Number(bal.value.uiAmount);
+        } catch { /* ATA may not exist yet → treated as 0 */ }
+        if (usdcBal < amountSol) {
+          setBackingStatus(
+            `Error: Insufficient USDC. You have ${usdcBal.toFixed(2)} USDC but need ${amountSol.toFixed(2)} USDC.`,
+          );
+          return;
+        }
+        const solBal = await connection.getBalance(publicKey);
+        if (solBal / LAMPORTS_PER_SOL < 0.01) {
+          setBackingStatus(
+            `Error: Insufficient SOL for gas. You need ~0.01 SOL to pay for the transaction (USDC backing).`,
+          );
+          return;
+        }
+      } else {
+        const totalNeeded = amountSol + 0.005;
+        const balance = await connection.getBalance(publicKey);
+        const balanceSol = balance / LAMPORTS_PER_SOL;
+        if (balanceSol < totalNeeded) {
+          setBackingStatus(
+            `Error: Insufficient balance. You have ${balanceSol.toFixed(4)} SOL but need ~${totalNeeded.toFixed(4)} SOL.`,
+          );
+          return;
+        }
       }
     } catch {
       // If RPC balance check fails, let the transaction itself fail
@@ -257,7 +301,7 @@ export default function MemeDetailPage() {
         // If the server rejected but auto-refunded, tell the user
         // explicitly so they see the SOL came back rather than guessing.
         if (d?.refunded === true && d?.refund_tx) {
-          throw new Error(`${d.error || 'Backing rejected'} — your SOL was refunded automatically (tx ${String(d.refund_tx).slice(0, 8)}…).`);
+          throw new Error(`${d.error || 'Backing rejected'} — your ${unitLabel} was refunded automatically (tx ${String(d.refund_tx).slice(0, 8)}…).`);
         }
         if (d?.refunded === false) {
           throw new Error(`${d.error || 'Backing rejected'} — auto-refund failed; contact support with deposit tx ${String(sig).slice(0, 8)}…`);
@@ -490,7 +534,7 @@ export default function MemeDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Withdrawal failed');
 
-      setWithdrawStatus(`Successfully withdrew ${data.amount_refunded} SOL!`);
+      setWithdrawStatus(`Successfully withdrew ${data.amount_refunded} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}!`);
       await Promise.all([refetchMeme(), refetchBackings()]);
       setTimeout(() => setWithdrawStatus(null), 5000);
     } catch (err) {
@@ -580,6 +624,7 @@ export default function MemeDetailPage() {
         onPledge: requestBack,
         disabled: !amount || Number(amount) <= 0 || slotsRemaining <= 0,
         pledging: backing,
+        unit: (meme.quote_currency === 'usdc' ? 'USDC' : 'SOL') as 'SOL' | 'USDC',
       };
     }
     return { mode: 'connect' as const, label: 'Loading…' };
@@ -727,6 +772,7 @@ export default function MemeDetailPage() {
                   onWithdraw={requestWithdraw}
                   withdrawing={withdrawing}
                   withdrawStatus={withdrawStatus}
+                  unit={meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}
                 />
               )}
             </DashboardCard>
@@ -866,8 +912,8 @@ export default function MemeDetailPage() {
         onClose={() => setShowBackConfirm(false)}
         onConfirm={confirmBack}
         title="Confirm Backing"
-        message={`You are backing ${meme.name} with ${amount} SOL.\n\nYour SOL goes into this token's shared pool. When all slots fill, the pool makes ONE atomic launch buy on ${meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'} — every backer gets in at the exact same price, with no dev allocation and no sniper gap.\n\nAfter launch, your proportional share of supply is sent straight to this wallet.\n\nChanged your mind? You can withdraw while slots are still filling (2% fee). Once the pool is full it's committed and waits for the creator to launch on their schedule.`}
-        confirmText={`Back with ${amount} SOL`}
+        message={`You are backing ${meme.name} with ${amount} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}.\n\nYour ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} goes into this token's shared pool. When all slots fill, the pool makes ONE atomic launch buy on ${meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'} — every backer gets in at the exact same price, with no dev allocation and no sniper gap.\n\nAfter launch, your proportional share of supply is sent straight to this wallet.\n\nChanged your mind? You can withdraw while slots are still filling (2% fee). Once the pool is full it's committed and waits for the creator to launch on their schedule.`}
+        confirmText={`Back with ${amount} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}`}
         variant="info"
         isLoading={backing}
       />
@@ -881,8 +927,8 @@ export default function MemeDetailPage() {
         }}
         onConfirm={confirmWithdraw}
         title="Confirm Withdrawal"
-        message={`Withdraw ${pendingWithdrawAmount.toFixed(4)} SOL from this token?\n\nWithdrawal fee: ${(pendingWithdrawAmount * 0.02).toFixed(4)} SOL (2%)\n\nYou will receive: ${(pendingWithdrawAmount * 0.98).toFixed(4)} SOL`}
-        confirmText={`Withdraw ${(pendingWithdrawAmount * 0.98).toFixed(4)} SOL`}
+        message={`Withdraw ${pendingWithdrawAmount.toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} from this token?\n\nWithdrawal fee: ${(pendingWithdrawAmount * 0.02).toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} (2%)\n\nYou will receive: ${(pendingWithdrawAmount * 0.98).toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}`}
+        confirmText={`Withdraw ${(pendingWithdrawAmount * 0.98).toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}`}
         variant="warning"
         isLoading={withdrawing}
       />
@@ -892,7 +938,7 @@ export default function MemeDetailPage() {
         onClose={() => setShowLaunchConfirm(false)}
         onConfirm={confirmLaunch}
         title="Launch Token"
-        message={`You are about to deploy ${meme.name} ($${meme.symbol}) to ${meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'} with ${totalBackingSol.toFixed(2)} SOL of community backing. This action cannot be undone. Tokens will be distributed to all backers proportionally.`}
+        message={`You are about to deploy ${meme.name} ($${meme.symbol}) to ${meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'} with ${totalBackingSol.toFixed(2)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} of community backing. This action cannot be undone. Tokens will be distributed to all backers proportionally.`}
         confirmText="Launch Now"
         variant="info"
         isLoading={launching}

@@ -16,6 +16,7 @@ interface BackingMode {
   onPledge: () => void;
   disabled: boolean;
   pledging: boolean;
+  unit?: 'SOL' | 'USDC';
 }
 
 interface FundedMode {
@@ -76,7 +77,7 @@ export const MobileStickyCTA: React.FC<Props> = ({ mode, hideWhenVisibleId }) =>
               <Loader2 className="w-4 h-4 animate-spin" /> Pledging…
             </span>
           ) : (
-            <>▶ BACK WITH {mode.amount || mode.minBacking} SOL</>
+            <>▶ BACK WITH {mode.amount || mode.minBacking} {mode.unit ?? 'SOL'}</>
           )}
         </button>
       )}
