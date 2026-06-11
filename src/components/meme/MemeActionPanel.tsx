@@ -316,7 +316,16 @@ const BackingPanel: React.FC<BackingProps> = ({
   const needsAllowlistCheck = isGated || hasReservedSlots;
   // Whether all open (non-reserved) slots are filled — used to gate
   // non-allowlisted backers from trying the API.
-  const allOpenSlotsFilled = filled >= openSlotsCount;
+  //
+  // When we can disaggregate (allowlist + backer wallets known), count
+  // ONLY public-bucket fills against openSlotsCount; otherwise team
+  // backings sitting in reserved slots wrongly "fill up" the open
+  // bucket and gate public backers out prematurely. Legacy fallback
+  // (no allowlist data) keeps the old totals comparison so non-
+  // reservation launches behave identically.
+  const allOpenSlotsFilled = canDisaggregate
+    ? openFilledForVisual >= openSlotsCount
+    : filled >= openSlotsCount;
   const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
 
   // Eligibility state: 'open' | 'checking' | 'eligible' | 'not_eligible'
@@ -416,6 +425,25 @@ const BackingPanel: React.FC<BackingProps> = ({
               return <div key={i} className="flex-1 h-3 border border-[var(--accent)]" />;
             })}
           </div>
+
+          {/* Color-keyed legend immediately under the bar. When the launch
+              has reserved slots AND we can disaggregate, this is the ONE
+              source of truth tying orange=OPEN and gold=TEAM to actual
+              fill counts. Replaces the older second split-bar block. */}
+          {hasReservedSlots && canDisaggregate && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-mono uppercase tracking-widest mt-2">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 bg-[var(--accent)]" />
+                <span className="text-[var(--muted)]">OPEN</span>
+                <span className="text-[var(--foreground)]">{openFilledForVisual}/{openSlotsCount}</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 bg-[var(--accent-gold)]" />
+                <span className="text-[var(--muted)]">TEAM</span>
+                <span className="text-[var(--foreground)]">{teamFilledForVisual}/{reservedSlots}</span>
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Rules chip row — surfaces cap + reservation structure so
@@ -438,67 +466,6 @@ const BackingPanel: React.FC<BackingProps> = ({
             )}
           </div>
         )}
-
-        {/* Reserved-vs-open fill breakdown. When reserved_slots > 0 and
-            we know the backer + allowlist wallets, show how many
-            allowlisted backers have entered the team slots vs how many
-            public backers have entered the open slots. Answers the
-            "did my creator/team backing fill a team slot?" question. */}
-        {hasReservedSlots && backerWallets && allowlistWallets && allowlistWallets.length > 0 && (() => {
-          const allowSet = new Set(allowlistWallets);
-          // An "allowlisted backing" counts toward team slots up to the
-          // reserved cap; anything beyond that spills into open slots.
-          const allowlistedBackings = backerWallets.filter((w) => allowSet.has(w)).length;
-          const publicBackings = backerWallets.length - allowlistedBackings;
-          const teamFilled = Math.min(allowlistedBackings, reservedSlots);
-          const teamOverflow = Math.max(0, allowlistedBackings - reservedSlots);
-          const openFilled = publicBackings + teamOverflow;
-          const allowlistRemaining = Math.max(0, allowlistWallets.length - allowlistedBackings);
-          return (
-            <div className="border border-[var(--border)] bg-[var(--background)] p-3 space-y-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest mb-1.5">
-                    <span className="text-[var(--accent-gold)]">TEAM</span>
-                    <span className="text-[var(--foreground)]">{teamFilled}/{reservedSlots}</span>
-                  </div>
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: reservedSlots }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`flex-1 h-2 ${i < teamFilled ? 'bg-[var(--accent-gold)]' : 'border border-[var(--accent-gold)]/40'}`}
-                      />
-                    ))}
-                  </div>
-                  <div className="text-[9px] font-mono text-[var(--muted)] mt-1.5">
-                    {allowlistRemaining > 0
-                      ? `${allowlistRemaining} allowlisted wallet${allowlistRemaining === 1 ? '' : 's'} can still take a team slot`
-                      : 'All allowlisted wallets have backed'}
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest mb-1.5">
-                    <span className="text-[var(--accent)]">OPEN</span>
-                    <span className="text-[var(--foreground)]">{openFilled}/{openSlotsCount}</span>
-                  </div>
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: openSlotsCount }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`flex-1 h-2 ${i < openFilled ? 'bg-[var(--accent)]' : 'border border-[var(--accent)]/40'}`}
-                      />
-                    ))}
-                  </div>
-                  <div className="text-[9px] font-mono text-[var(--muted)] mt-1.5">
-                    {openSlotsCount - openFilled > 0
-                      ? `${openSlotsCount - openFilled} public slot${openSlotsCount - openFilled === 1 ? '' : 's'} still open`
-                      : 'All public slots filled'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
 
         {showGatedState ? (
           <div className="border border-[var(--accent-gold)] bg-[var(--background)] p-5 space-y-3">
