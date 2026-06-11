@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import type { Meme } from '@/types/database';
 import { quoteLabel } from '@/lib/usdc';
+import { isPublicBucketFull } from '@/lib/backingEligibility';
 
 // All four status branches in one component because they share the same
 // visual slot on the page. Each branch renders its own primary action

@@ -24,6 +24,7 @@ import { GenesisBackerRoster } from '@/components/GenesisBackerRoster';
 import { MemeChat } from '@/components/MemeChat';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useRealtimeMeme, useRealtimeBackings } from '@/hooks/useRealtimeMemes';
+import { computeBackingEligibility } from '@/lib/backingEligibility';
 
 // Page is now a thin shell: it owns state + handlers (SOL transactions,
 // wallet signing, status messages) and assembles the new components.
@@ -124,8 +125,9 @@ export default function MemeDetailPage() {
     }
 
     const minBacking = Number(meme.min_backing_sol) || 0.1;
+    const minBackingUnit = (meme.quote_currency === 'usdc') ? 'USDC' : 'SOL';
     if (amountSol < minBacking) {
-      setBackingStatus(`Error: Minimum backing is ${minBacking} SOL.`);
+      setBackingStatus(`Error: Minimum backing is ${minBacking} ${minBackingUnit}.`);
       return;
     }
 
@@ -155,46 +157,21 @@ export default function MemeDetailPage() {
       return;
     }
 
-    const totalSlots = Number(meme.total_slots) || 8;
-    const reservedSlots = Number(meme.reserved_slots) || 0;
-    const openSlots = Math.max(0, totalSlots - reservedSlots);
-    const activeBackings = backings.filter((b) => b.status !== 'withdrawn').length;
-    if (activeBackings >= totalSlots) {
-      setBackingStatus('Error: All backer slots are filled.');
+    // Single-source gate. Checks "all slots filled", "team round",
+    // and "public bucket filled" in one place — same helper as
+    // confirmBack and the lock-card UI. See src/lib/backingEligibility.ts.
+    const reservedSlotsCount = Number(meme.reserved_slots) || 0;
+    const isAllowlisted = reservedSlotsCount > 0
+      ? await checkAllowlistMembership(meme.id, publicKey.toBase58())
+      : true;
+    const eligibility = computeBackingEligibility({
+      meme: { total_slots: Number(meme.total_slots) || 8, reserved_slots: reservedSlotsCount },
+      backings,
+      isAllowlisted,
+    });
+    if (!eligibility.canBack) {
+      setBackingStatus(`Error: ${eligibility.message}`);
       return;
-    }
-
-    // Reserved-slot gate (Phase 7). When reserved_slots > 0, non-
-    // allowlisted backers can only take slots 1..openSlots. If those
-    // are all filled, they can't back at all. We check allowlist
-    // membership BEFORE Phantom prompts to prevent stranded SOL.
-    if (reservedSlots > 0) {
-      const isAllowlisted = await checkAllowlistMembership(meme.id, publicKey.toBase58());
-      if (!isAllowlisted) {
-        if (openSlots === 0) {
-          setBackingStatus(
-            `Error: This is a TEAM ROUND — all ${totalSlots} slots are reserved for declared wallets. Public can't back.`,
-          );
-          return;
-        }
-        // Count public-bucket fills ONLY — by slot_number, not total
-        // active backings. After the slot-assignment fix (commit 57b4604)
-        // team backers land in slot_numbers > openSlots (the reserved
-        // bucket), so counting public bucket = active backings whose
-        // slot_number <= openSlots. Using activeBackings >= openSlots
-        // here would wrongly include team fills and lock public out.
-        const publicBucketFilled = backings
-          .filter((b) => b.status !== 'withdrawn'
-            && b.slot_number != null
-            && Number(b.slot_number) <= openSlots)
-          .length;
-        if (publicBucketFilled >= openSlots) {
-          setBackingStatus(
-            `Error: All ${openSlots} open slots are filled. The remaining ${reservedSlots} are reserved for allowlisted wallets.`,
-          );
-          return;
-        }
-      }
     }
 
     // Balance pre-check — saves the user a failed signature prompt.
@@ -347,33 +324,23 @@ export default function MemeDetailPage() {
       );
       return;
     }
-    // Reserved-slot gate — fetch allowlist BEFORE opening confirm
-    // dialog so non-allowlisted backers learn early, not at sign time.
-    // MUST count public-bucket fills by slot_number (≤ openSlots) so
-    // team backings sitting in reserved slot numbers don't wrongly
-    // gate the public out. Same bug class as the submitBacking pre-
-    // check fixed in commit 20b2348.
+    // Single-source gate — same helper used by submitBacking and the
+    // lock-card UI. Fetches allowlist membership before opening the
+    // confirm dialog so non-allowlisted backers learn early, not at
+    // sign time.
     if (meme && publicKey) {
-      const reservedSlots = Number(meme.reserved_slots) || 0;
-      if (reservedSlots > 0) {
-        const totalSlots = Number(meme.total_slots) || 8;
-        const openSlots = Math.max(0, totalSlots - reservedSlots);
-        const isAllowlisted = await checkAllowlistMembership(meme.id, publicKey.toBase58());
-        if (!isAllowlisted) {
-          if (openSlots === 0) {
-            setBackingStatus(`Error: This is a TEAM ROUND — all ${totalSlots} slots are reserved for declared wallets. Public can't back.`);
-            return;
-          }
-          const publicBucketFilled = backings
-            .filter((b) => b.status !== 'withdrawn'
-              && b.slot_number != null
-              && Number(b.slot_number) <= openSlots)
-            .length;
-          if (publicBucketFilled >= openSlots) {
-            setBackingStatus(`Error: All ${openSlots} open slots are filled. The remaining ${reservedSlots} are reserved for allowlisted wallets.`);
-            return;
-          }
-        }
+      const reservedSlotsCount = Number(meme.reserved_slots) || 0;
+      const isAllowlisted = reservedSlotsCount > 0
+        ? await checkAllowlistMembership(meme.id, publicKey.toBase58())
+        : true;
+      const eligibility = computeBackingEligibility({
+        meme: { total_slots: Number(meme.total_slots) || 8, reserved_slots: reservedSlotsCount },
+        backings,
+        isAllowlisted,
+      });
+      if (!eligibility.canBack) {
+        setBackingStatus(`Error: ${eligibility.message}`);
+        return;
       }
     }
     setBackingStatus(null);
