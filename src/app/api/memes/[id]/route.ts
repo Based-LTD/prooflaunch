@@ -266,6 +266,15 @@ export async function GET(
         keycard_gate_id: poolFields?.keycard_gate_id ?? null,
         keycard_gate_url: poolFields?.keycard_gate_url ?? null,
         keycard_synced_at: poolFields?.keycard_synced_at ?? null,
+        // Newer columns the cached view doesn't carry. SELECT'd above —
+        // explicit override here so the response surfaces them. Earlier
+        // I added to the SELECT but forgot to spread; without these
+        // lines the github icon + banner image never reached the client.
+        github: poolFields?.github ?? null,
+        banner_url: poolFields?.banner_url ?? null,
+        launch_platform: poolFields?.launch_platform ?? null,
+        launchlab_pool_address: poolFields?.launchlab_pool_address ?? null,
+        dbc_pool_address: poolFields?.dbc_pool_address ?? null,
         vault_lamports: vaultLamports,
         backings: enrichedBackings,
       },
