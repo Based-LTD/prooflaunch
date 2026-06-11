@@ -165,6 +165,9 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
               lamports: needed,
             }),
           );
+          const { blockhash: topupBh } = await conn.getLatestBlockhash('confirmed');
+          topupTx.recentBlockhash = topupBh;
+          topupTx.feePayer = escrowKp.publicKey;
           const { simulateAndSend } = await import('@/lib/rpcHelpers');
           await simulateAndSend(conn, topupTx, [escrowKp], {
             maxRetries: 3,
