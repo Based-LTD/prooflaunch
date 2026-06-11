@@ -17,10 +17,14 @@ interface Props {
   totalBackingSol: number;
   totalSlots: number;
   timeRemaining: string;
+  // Caption above the countdown. Backing-phase memes show "Ends"
+  // (proving window); funded memes show "Launch by" (launch window).
+  // Defaults to "Ends" so legacy callers keep current behavior.
+  timeRemainingLabel?: string;
 }
 
 export const MemeIdentityBar: React.FC<Props> = ({
-  meme, backerCount, totalBackingSol, totalSlots, timeRemaining,
+  meme, backerCount, totalBackingSol, totalSlots, timeRemaining, timeRemainingLabel = 'Ends',
 }) => {
   const [copied, setCopied] = useState(false);
   const copy = (text: string) => {
@@ -116,7 +120,7 @@ export const MemeIdentityBar: React.FC<Props> = ({
           </div>
           {!isLive && (
             <div className="text-right">
-              <div>Ends</div>
+              <div>{timeRemainingLabel}</div>
               <div className="text-[var(--accent-gold)] text-base normal-case tracking-tight">{timeRemaining}</div>
             </div>
           )}

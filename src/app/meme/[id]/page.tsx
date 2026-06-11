@@ -557,7 +557,18 @@ export default function MemeDetailPage() {
   const minBacking = Number(meme.min_backing_sol) || 0.1;
   const backerCount = backings.length;
   const slotsRemaining = totalSlots - backerCount;
-  const timeRemaining = getTimeRemaining(meme.backing_deadline);
+  // Header countdown picks the active deadline by status:
+  //   backing  → backing_deadline (proving window)
+  //   funded   → launch_deadline (creator-must-launch window)
+  //   live     → hidden by IdentityBar's isLive guard
+  // Without this, hitting "Reset Launch Window" extended launch_deadline
+  // server-side but the header still showed backing_deadline, so the
+  // counter looked stuck and the reset button felt broken.
+  const activeDeadline = (isFunded || isLaunching)
+    ? meme.launch_deadline
+    : meme.backing_deadline;
+  const timeRemaining = getTimeRemaining(activeDeadline ?? meme.backing_deadline);
+  const timeRemainingLabel = (isFunded || isLaunching) ? 'Launch by' : 'Ends';
   const totalBackingSol = Number(meme.current_backing_sol) || 0;
 
   const projectedSharePct = (() => {
@@ -690,6 +701,7 @@ export default function MemeDetailPage() {
           totalBackingSol={totalBackingSol}
           totalSlots={totalSlots}
           timeRemaining={timeRemaining}
+          timeRemainingLabel={timeRemainingLabel}
         />
 
         {/* Description block — only renders when the creator set one.
