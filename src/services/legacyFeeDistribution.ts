@@ -91,6 +91,9 @@ export interface LegacyDistributionResult {
   freedLamports?: number;
   collectSig?: string;
   transferSig?: string;
+  // When the meme's on-chain creator is the pre-rotation old escrow,
+  // this is the sig of the residual sweep tx (old → new escrow).
+  oldEscrowSweepSig?: string;
   error?: string;
 }
 
@@ -111,20 +114,37 @@ export async function distributeLegacyMeme(
   const conn = new Connection(RPC_URL, 'confirmed');
 
   // ── Load escrow (the shared platform escrow == pump.fun creator) ─
-  const escrowKeyRaw = (process.env.ESCROW_WALLET_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
-  if (!escrowKeyRaw) {
-    return { ok: false, error: 'ESCROW_WALLET_PRIVATE_KEY not set' };
+  // For pre-rotation memes (PROOF, TEST) whose on-chain creator is the
+  // OLD escrow, fall back to OLD_ESCROW_WALLET_PRIVATE_KEY env. The
+  // June 4 wallet rotation orphaned these memes from the new escrow,
+  // and pump.fun doesn't support transferring creator authority
+  // post-launch. The old key is still held by the platform owner;
+  // using it here keeps fee collection live for legacy launches. After
+  // distribution, residual SOL on the old escrow is swept to the new
+  // escrow (see end of function).
+  function loadKey(envName: string): Keypair | null {
+    const raw = (process.env[envName] || '').replace(/\\n/g, '\n').trim();
+    if (!raw) return null;
+    try { return Keypair.fromSecretKey(bs58.decode(raw)); }
+    catch { return null; }
   }
+  const newEscrow = loadKey('ESCROW_WALLET_PRIVATE_KEY');
+  if (!newEscrow) {
+    return { ok: false, error: 'ESCROW_WALLET_PRIVATE_KEY not set or invalid' };
+  }
+  const oldEscrow = loadKey('OLD_ESCROW_WALLET_PRIVATE_KEY');
+
   let escrow: Keypair;
-  try {
-    escrow = Keypair.fromSecretKey(bs58.decode(escrowKeyRaw));
-  } catch (e) {
-    return { ok: false, error: `Escrow key decode failed: ${e instanceof Error ? e.message : e}` };
-  }
-  if (escrow.publicKey.toBase58() !== config.expectedCreatorPubkey) {
+  let isOldEscrow = false;
+  if (newEscrow.publicKey.toBase58() === config.expectedCreatorPubkey) {
+    escrow = newEscrow;
+  } else if (oldEscrow && oldEscrow.publicKey.toBase58() === config.expectedCreatorPubkey) {
+    escrow = oldEscrow;
+    isOldEscrow = true;
+  } else {
     return {
       ok: false,
-      error: `Safety gate: escrow pubkey ${escrow.publicKey.toBase58()} != expected creator ${config.expectedCreatorPubkey} for ${config.symbol}`,
+      error: `Safety gate: neither ESCROW (${newEscrow.publicKey.toBase58()}) nor OLD_ESCROW (${oldEscrow?.publicKey.toBase58() ?? 'unset'}) matches expected creator ${config.expectedCreatorPubkey} for ${config.symbol}. Add OLD_ESCROW_WALLET_PRIVATE_KEY env to claim pre-rotation creator vaults.`,
     };
   }
 
@@ -307,6 +327,35 @@ export async function distributeLegacyMeme(
     await supabase.from('backings').update({ claimable_fees_sol: newClaimable }).eq('id', b.id);
   }
 
+  // Step 4 — sweep old-escrow residual to new escrow when isOldEscrow.
+  // After the distribution txes, the old escrow still holds the rent
+  // floor + any rounding remainder. We want those funds living in the
+  // new escrow so all platform SOL stays centralized. Leaves 5000
+  // lamports behind for the next tx fee. Non-fatal on failure.
+  let oldEscrowSweepSig: string | undefined;
+  if (isOldEscrow) {
+    try {
+      const oldBal = await conn.getBalance(escrow.publicKey, 'confirmed');
+      const sweepLam = oldBal - 5000;
+      if (sweepLam > 100_000) { // only sweep if > 0.0001 SOL after fee
+        const sweepTx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: escrow.publicKey,
+            toPubkey: newEscrow.publicKey,
+            lamports: sweepLam,
+          }),
+        );
+        sweepTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+        sweepTx.feePayer = escrow.publicKey;
+        oldEscrowSweepSig = await simulateAndSend(conn, sweepTx, [escrow], { label: 'legacy-old-escrow-sweep' });
+        await conn.confirmTransaction(oldEscrowSweepSig, 'confirmed');
+      }
+    } catch (e) {
+      // Non-fatal — funds safe in old escrow, next tick will sweep.
+      console.error(`[legacy ${config.symbol}] old-escrow sweep failed (funds safe): ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
   return {
     ok: true,
     symbol: config.symbol,
@@ -316,6 +365,7 @@ export async function distributeLegacyMeme(
     freedLamports: freedLam,
     collectSig,
     transferSig,
+    oldEscrowSweepSig,
   };
 }
 
