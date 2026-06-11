@@ -37,6 +37,7 @@ import { getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError } 
 // Quote mint = native SOL (wrapped). Same constant we used in the
 // config template. Required to derive the DBC pool address.
 const QUOTE_MINT_SOL = new PublicKey('So11111111111111111111111111111111111111112');
+const QUOTE_MINT_USDC = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
 import { adaptivePriorityFeeIx } from '@/lib/rpcHelpers';
@@ -296,7 +297,15 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     // Deterministic — same triple always yields the same pool address.
     // The launch route persists this to memes.dbc_pool_address so the
     // hourly fee cron can locate the pool to claim from.
-    const dbcPoolAddress = deriveDbcPoolAddress(QUOTE_MINT_SOL, mint, dbcConfig).toBase58();
+    //
+    // Quote mint MUST match what the launch tx actually used. For
+    // SOL memes that's wrapped SOL; for USDC memes that's USDC. Using
+    // the wrong one gives a deterministic-but-wrong address — the
+    // launch succeeds, status flips to live, but the fee cron throws
+    // "Pool not found" every cycle because it's looking at a phantom
+    // pubkey. (This bit the first USDC test launch.)
+    const dbcQuoteMint = quoteCurrency === 'usdc' ? QUOTE_MINT_USDC : QUOTE_MINT_SOL;
+    const dbcPoolAddress = deriveDbcPoolAddress(dbcQuoteMint, mint, dbcConfig).toBase58();
 
     // Read the pool wallet's token balance so settlePoolDistribution
     // can compute backer pro-rata shares. Mainnet RPC nodes lag a few

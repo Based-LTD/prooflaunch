@@ -136,8 +136,32 @@ export async function collectMeteoraFeesForCron(
     return { ok: true, skipped: 'no sub-escrow (legacy pre-P2 meme)' };
   }
 
+  // Before claiming: ensure the sub-escrow has SOL for the claim tx fee.
+  // SOL memes were always implicitly funded via the launch flow, so this
+  // top-up is a no-op (already > minLamports). USDC memes start with 0
+  // native SOL on the sub-escrow because the launch path only ever
+  // moved USDC there. Without this, claimCreatorFees throws "Attempt to
+  // debit an account but found no record of a prior credit".
+  try {
+    const { Connection: Conn, Keypair: Kp } = await import('@solana/web3.js');
+    const { ensureGasReserveAndSend } = await import('@/lib/quoteAsset');
+    const bs58Mod = await import('bs58');
+    const escrowRaw = (process.env.ESCROW_WALLET_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
+    if (escrowRaw) {
+      const escrowKp = Kp.fromSecretKey(bs58Mod.default.decode(escrowRaw));
+      const subKp = Kp.fromSecretKey(bs58Mod.default.decode(decryptPrivateKey(meme.encrypted_creator_subescrow_key)));
+      const conn = new Conn(RPC_URL, 'confirmed');
+      await ensureGasReserveAndSend({
+        conn, wallet: subKp.publicKey, minLamports: 5_000_000,
+        funder: escrowKp, label: `subescrow-claim-gas:${memeId}`,
+      });
+    }
+  } catch (e) {
+    return { ok: false, error: `pre-claim sub-escrow gas top-up failed: ${e instanceof Error ? e.message : String(e)}` };
+  }
+
   // Step A — platform-specific: claim DBC creator fees on-chain.
-  // SOL lands in the sub-escrow.
+  // Quote currency lands in the sub-escrow (SOL → native, USDC → ATA).
   const claim = await claimCreatorFees({
     poolAddress: meme.dbc_pool_address,
     subEscrowEncryptedKey: meme.encrypted_creator_subescrow_key,

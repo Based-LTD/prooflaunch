@@ -524,16 +524,6 @@ export async function POST(request: NextRequest) {
       'distribute_holders',
       'distribute_backers',
     ]);
-    // Server-side defense: USDC raises don't support buyback bots in
-    // this release. UI hides the section, but a client that forges the
-    // request must still get rejected. Same rule applies to the legacy
-    // single-bot field and the new bots[] stack.
-    if (quote_currency === 'usdc' && (buyback_bot_enabled || (Array.isArray(bots) && bots.length > 0))) {
-      return NextResponse.json(
-        { error: 'Buyback bots are not yet supported for USDC-quoted launches. Submit without bots; USDC bot support ships in a follow-up.' },
-        { status: 400 },
-      );
-    }
     if (buyback_bot_enabled) {
       if (typeof buyback_bot_action !== 'string' || !VALID_BOT_ACTIONS.has(buyback_bot_action)) {
         return NextResponse.json(

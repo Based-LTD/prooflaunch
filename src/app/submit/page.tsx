@@ -26,6 +26,29 @@ interface BotActionMeta {
 // Action display metadata. DB enum value stays as `hold` but the UI
 // surfaces it as VAULT — vaults are labeled, multiple-per-meme, and
 // creator-withdrawable (operational bots are sealed).
+// Action label/desc text varies with the meme's quote currency: SOL memes
+// see 'SOL → HOLDERS' / 'DONATE SOL'; USDC memes see 'USDC → HOLDERS' /
+// 'DONATE USDC'. The action enum stays the same so the DB schema and
+// downstream code don't need to know the difference.
+function botActionsForQuote(qc: 'sol' | 'usdc'): BotActionMeta[] {
+  const Q = qc === 'usdc' ? 'USDC' : 'SOL';
+  const ql = qc === 'usdc' ? 'USDC' : 'SOL';
+  return [
+    { value: 'burn',                       label: 'BURN',                short: 'Burn',                tag: 'Deflationary', emoji: '🔥', desc: `Swap delegated ${Q} → token then burnChecked the result. Every cycle permanently removes supply from the circulating set.` },
+    { value: 'hold',                       label: 'HOLD',                short: 'Vault',               tag: 'Treasury',     emoji: '🏦', desc: `Swap delegated ${Q} → token and HOLD the tokens in a labeled vault wallet. Creator-withdrawable; supports unlimited labeled vaults (Marketing, DAO, Liquidity).` },
+    { value: 'distribute_tokens_holders',  label: 'TOKENS → HOLDERS',    short: 'Tokens→Holders',      tag: 'Loyalty',      emoji: '🪙', desc: `Swap delegated ${Q} → token, airdrop pro-rata to current holders. Every cycle deepens the loyalty ladder.` },
+    { value: 'distribute_tokens_backers',  label: 'TOKENS → BACKERS',    short: 'Tokens→Backers',      tag: 'OG reward',    emoji: '🎯', desc: `Swap delegated ${Q} → token, airdrop pro-rata to genesis backers. OG-reward incentive that rewards the people who funded the launch.` },
+    { value: 'distribute_sol_holders',     label: `${ql} → HOLDERS`,     short: `${ql}→Holders`,       tag: 'Distribution', emoji: '💸', desc: `Skip the swap. Route delegated ${Q} pro-rata to every current holder as a protocol distribution.` },
+    { value: 'distribute_sol_backers',     label: `${ql} → BACKERS`,     short: `${ql}→Backers`,       tag: 'Distribution', emoji: '💰', desc: `Skip the swap. Route delegated ${Q} pro-rata to the genesis backers as a protocol distribution.` },
+    { value: 'donate_sol',                 label: `DONATE ${ql}`,        short: `Donate ${ql}`,        tag: 'Commitment',   emoji: '🎁', desc: `Send ${Q} straight to a fixed destination wallet you name (charity, DAO, partner). Address is locked in at submit — can never be changed.` },
+    { value: 'donate_tokens',              label: 'DONATE TOKENS',       short: 'Donate Tokens',       tag: 'Commitment',   emoji: '🎀', desc: `Buy tokens, send them to a fixed destination wallet. Same immutable-address commitment as DONATE ${ql}.` },
+    { value: 'feed_lp',                    label: 'POOL FEEDER',         short: 'Pool Feeder',         tag: 'Liquidity',    emoji: '🌊', desc: `Deepen the LP after graduation. Bot swaps half ${Q} into tokens, deposits both as locked liquidity, owns the LP position forever. Activates the moment the token graduates from the bonding curve to a full AMM pool.` },
+  ];
+}
+
+// Default action list (SOL) — used by validation helpers that don't have
+// access to the current form state. The display picker uses the quote-
+// aware function above.
 const BOT_ACTIONS: BotActionMeta[] = [
   { value: 'burn',                       label: 'BURN',                short: 'Burn',                tag: 'Deflationary', emoji: '🔥', desc: 'Buy tokens, burn them. Permanent supply reduction.' },
   { value: 'hold',                       label: 'VAULT',               short: 'Vault',               tag: 'Treasury',     emoji: '🏦', desc: 'Buy tokens, park them in a labeled vault wallet you can withdraw from anytime (e.g. Marketing, DAO, Liquidity).' },
@@ -1570,27 +1593,13 @@ function SubmitPageInner() {
               wallet on Solscan; vaults are creator-withdrawable, all
               other bots are sealed. Total delegation ≤ 90%.
               ──
-              USDC memes: bots are temporarily hidden because the bot
-              cron + fee-distribution pipeline assumes SOL-denominated
-              fees end-to-end (Jupiter swaps, balance checks, transfers).
-              USDC parity ships in a follow-up. Until then, USDC raises
-              skip the bot stack entirely and route 100% of trading fees
-              to backers via the standard split. */}
-          {formData.quoteCurrency === 'usdc' && (
-            <div className="border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 p-4 sm:p-5">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] mb-2">
-                BUYBACK BOTS · NOT AVAILABLE FOR USDC LAUNCHES YET
-              </div>
-              <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-2xl">
-                USDC-quoted launches don&apos;t support buyback bots in this release.
-                Trading fees still flow to backers via the standard split — you just
-                won&apos;t see the bot configuration panel. Full bot parity (burn,
-                airdrops, vaults, pool feeder) ships in the next phase, gated on
-                live USDC fee-flow verification.
-              </p>
-            </div>
-          )}
-          {formData.quoteCurrency !== 'usdc' && (() => {
+              USDC parity (commit shipping with this section): action
+              labels and the bot pipeline both branch on quote_currency.
+              feed_lp is the only action that's still SOL-only — the
+              picker shows it but the cron returns a clear "DAMM v2
+              USDC LP not yet wired" skip until the LP-add path lands. */}
+          {(() => {
+            const QUOTE_BOT_ACTIONS = botActionsForQuote(formData.quoteCurrency);
             const totalBotPct = formData.botStack.reduce((sum, b) => sum + b.fee_pct, 0);
             const backerPct = Math.max(0, 90 - totalBotPct);
             // UNIQUE-per-action only applies to single-instance actions.
@@ -1599,7 +1608,7 @@ function SubmitPageInner() {
             const usedSingleActions = new Set(
               formData.botStack.filter((b) => !REPEATABLE_ACTIONS.has(b.action)).map((b) => b.action),
             );
-            const availableActions = BOT_ACTIONS.filter(
+            const availableActions = QUOTE_BOT_ACTIONS.filter(
               (a) => REPEATABLE_ACTIONS.has(a.value) || !usedSingleActions.has(a.value),
             );
             // Soft cap to prevent UI runaway; the real limit is the
@@ -1755,7 +1764,7 @@ function SubmitPageInner() {
                         ADD A BOT
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {BOT_ACTIONS.map((opt) => {
+                        {QUOTE_BOT_ACTIONS.map((opt) => {
                           const isRepeatable = REPEATABLE_ACTIONS.has(opt.value);
                           const alreadyUsed = !isRepeatable && usedSingleActions.has(opt.value);
                           const disabled = alreadyUsed || totalBotPct >= 90 || formData.botStack.length >= HARD_CAP;
@@ -1798,7 +1807,7 @@ function SubmitPageInner() {
                         </div>
                       ) : (
                         formData.botStack.map((bot, idx) => {
-                          const meta = BOT_ACTION_BY_VALUE[bot.action];
+                          const meta = QUOTE_BOT_ACTIONS.find((a) => a.value === bot.action) ?? BOT_ACTION_BY_VALUE[bot.action];
                           const isVault = bot.action === 'hold';
                           const isDonate = DONATE_ACTIONS.has(bot.action);
                           const labelInvalid =
@@ -1921,7 +1930,7 @@ function SubmitPageInner() {
                                     </div>
                                   ) : (
                                     <div className="text-[10px] font-mono text-[var(--muted)] italic">
-                                      Every {bot.action === 'donate_sol' ? 'SOL' : 'token'} payout flows here forever. You cannot change this after submit — the address is locked on-chain.
+                                      Every {bot.action === 'donate_sol' ? (formData.quoteCurrency === 'usdc' ? 'USDC' : 'SOL') : 'token'} payout flows here forever. You cannot change this after submit — the address is locked on-chain.
                                     </div>
                                   )}
 
@@ -1968,7 +1977,7 @@ function SubmitPageInner() {
                           {/* Hidden on narrow segments */}
                         </div>
                         {formData.botStack.map((bot, idx) => {
-                          const meta = BOT_ACTION_BY_VALUE[bot.action];
+                          const meta = QUOTE_BOT_ACTIONS.find((a) => a.value === bot.action) ?? BOT_ACTION_BY_VALUE[bot.action];
                           return (
                             <div
                               key={idx}

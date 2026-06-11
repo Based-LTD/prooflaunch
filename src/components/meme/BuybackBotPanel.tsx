@@ -15,19 +15,26 @@ import { VaultWithdrawModal } from './VaultWithdrawModal';
 // public-read RLS. The brand story is "every buyback is provable,
 // on-chain, from THESE addresses."
 
-const ACTION_LABELS: Record<string, { label: string; tag: string; tone: string; emoji: string }> = {
-  burn:                        { label: 'BURN',              tag: 'Deflationary', tone: 'var(--status-down)', emoji: '🔥' },
-  hold:                        { label: 'HOLD',              tag: 'Treasury',     tone: 'var(--accent-gold)', emoji: '🏦' },
-  distribute_tokens_holders:   { label: 'TOKENS → HOLDERS',  tag: 'Loyalty',      tone: 'var(--accent)',      emoji: '🪙' },
-  distribute_tokens_backers:   { label: 'TOKENS → BACKERS',  tag: 'OG reward',    tone: 'var(--accent)',      emoji: '🎯' },
-  distribute_sol_holders:      { label: 'SOL → HOLDERS',     tag: 'Distribution', tone: 'var(--success)',     emoji: '💸' },
-  distribute_sol_backers:      { label: 'SOL → BACKERS',     tag: 'Distribution', tone: 'var(--success)',     emoji: '💰' },
-  donate_sol:                  { label: 'DONATE SOL',        tag: 'Commitment',   tone: 'var(--accent-gold)', emoji: '🎁' },
-  donate_tokens:               { label: 'DONATE TOKENS',     tag: 'Commitment',   tone: 'var(--accent-gold)', emoji: '🎀' },
-  // Legacy enum values — surface the same way but tagged as such.
-  distribute_holders:          { label: 'TOKENS → HOLDERS',  tag: 'Legacy',       tone: 'var(--accent)',      emoji: '🪙' },
-  distribute_backers:          { label: 'TOKENS → BACKERS',  tag: 'Legacy',       tone: 'var(--accent)',      emoji: '🎯' },
-};
+// Action labels are quote-currency aware: distribute_sol_* and donate_sol
+// render as 'USDC → HOLDERS' / 'DONATE USDC' when the meme is USDC-quoted
+// (action enum stays the same to preserve back-compat).
+function labelsForQuote(qc: 'sol' | 'usdc'): Record<string, { label: string; tag: string; tone: string; emoji: string }> {
+  const quoteTxt = qc === 'usdc' ? 'USDC' : 'SOL';
+  return {
+    burn:                        { label: 'BURN',              tag: 'Deflationary', tone: 'var(--status-down)', emoji: '🔥' },
+    hold:                        { label: 'HOLD',              tag: 'Treasury',     tone: 'var(--accent-gold)', emoji: '🏦' },
+    distribute_tokens_holders:   { label: 'TOKENS → HOLDERS',  tag: 'Loyalty',      tone: 'var(--accent)',      emoji: '🪙' },
+    distribute_tokens_backers:   { label: 'TOKENS → BACKERS',  tag: 'OG reward',    tone: 'var(--accent)',      emoji: '🎯' },
+    distribute_sol_holders:      { label: `${quoteTxt} → HOLDERS`, tag: 'Distribution', tone: 'var(--success)', emoji: '💸' },
+    distribute_sol_backers:      { label: `${quoteTxt} → BACKERS`, tag: 'Distribution', tone: 'var(--success)', emoji: '💰' },
+    donate_sol:                  { label: `DONATE ${quoteTxt}`, tag: 'Commitment',  tone: 'var(--accent-gold)', emoji: '🎁' },
+    donate_tokens:               { label: 'DONATE TOKENS',     tag: 'Commitment',   tone: 'var(--accent-gold)', emoji: '🎀' },
+    // Legacy enum values — surface the same way but tagged as such.
+    distribute_holders:          { label: 'TOKENS → HOLDERS',  tag: 'Legacy',       tone: 'var(--accent)',      emoji: '🪙' },
+    distribute_backers:          { label: 'TOKENS → BACKERS',  tag: 'Legacy',       tone: 'var(--accent)',      emoji: '🎯' },
+  };
+}
+const ACTION_LABELS = labelsForQuote('sol'); // default for any callers that still read it
 
 const DONATE_ACTIONS = new Set(['donate_sol', 'donate_tokens']);
 
@@ -116,8 +123,12 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
 
   if (bots.length === 0) return null;
 
+  // Quote currency drives the action label text. SOL memes render
+  // identical to today; USDC memes show 'USDC → HOLDERS' etc.
+  const qc: 'sol' | 'usdc' = meme.quote_currency === 'usdc' ? 'usdc' : 'sol';
+  const labels = labelsForQuote(qc);
   const activeBot = bots.find((b) => b.id === activeBotId) ?? bots[0];
-  const a = ACTION_LABELS[activeBot.action] ?? {
+  const a = labels[activeBot.action] ?? {
     label: activeBot.action.toUpperCase(),
     tag: '',
     tone: 'var(--muted)',
@@ -134,7 +145,7 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
       {/* Tab row — one per applied bot */}
       <div className="flex flex-wrap gap-1 mb-3">
         {bots.map((bot) => {
-          const meta = ACTION_LABELS[bot.action];
+          const meta = labels[bot.action];
           const active = bot.id === activeBot.id;
           const tabLabel = bot.action === 'hold' && bot.label ? bot.label : meta?.label.split(' ')[0];
           return (
@@ -188,8 +199,8 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
         </div>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-mono border-t border-[var(--border)] pt-2">
-          <div className="text-[var(--muted)]">Total SOL spent</div>
-          <div className="text-[var(--foreground)] text-right">{totalSol.toFixed(4)} SOL</div>
+          <div className="text-[var(--muted)]">Total {qc === 'usdc' ? 'USDC' : 'SOL'} spent</div>
+          <div className="text-[var(--foreground)] text-right">{totalSol.toFixed(4)} {qc === 'usdc' ? 'USDC' : 'SOL'}</div>
           <div className="text-[var(--muted)]">Last run</div>
           <div className="text-[var(--foreground)] text-right">
             {activeBot.last_run_at
@@ -243,7 +254,7 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
                   <span className="text-[var(--muted)]">
                     {new Date(r.executed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
                   </span>
-                  <span className="text-[var(--foreground)]">{sol.toFixed(4)} SOL</span>
+                  <span className="text-[var(--foreground)]">{sol.toFixed(4)} {qc === 'usdc' ? 'USDC' : 'SOL'}</span>
                   <span className={
                     r.status === 'completed' ? 'text-[var(--success)]'
                     : r.status === 'partial' ? 'text-[var(--accent-gold)]'

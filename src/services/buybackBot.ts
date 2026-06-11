@@ -151,6 +151,11 @@ interface MemeRow {
   symbol: string;
   mint_address: string | null;
   status: string;
+  // Quote currency of the meme's raise + DBC pool. SOL memes operate
+  // identically to today; USDC memes read the bot wallet's USDC ATA
+  // balance, top up SOL gas from escrow, and use USDC as the Jupiter
+  // swap input. Defaults to 'sol' for legacy rows pre-053.
+  quote_currency?: 'sol' | 'usdc' | null;
 }
 
 interface BotRow {
@@ -183,7 +188,7 @@ export async function executeBuybackBot(
 
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select('id, symbol, mint_address, status')
+    .select('id, symbol, mint_address, status, quote_currency')
     .eq('id', b.meme_id)
     .single();
   if (memeErr || !meme) return { ok: false, botId: b.id, memeId: b.meme_id, error: 'meme not found' };
@@ -231,48 +236,83 @@ export async function executeBuybackBot(
     }
   }
 
-  const balance = await conn.getBalance(botKp.publicKey);
+  // Quote currency drives ALL the dispatch from here. SOL memes:
+  // balance = native SOL, usable = balance - gas reserve. USDC memes:
+  // balance = bot's USDC ATA, gas comes from a SOL top-up from escrow,
+  // usable = full USDC ATA balance.
+  const qc: 'sol' | 'usdc' = m.quote_currency === 'usdc' ? 'usdc' : 'sol';
 
   // For swap-based actions, gas reserve is 0.01 SOL (BC overhead).
-  // For SOL-distribution actions, we leave 0.02 because per-recipient
-  // tx fees add up across multiple txes.
+  // For distribution actions, we leave 0.02 because per-recipient tx
+  // fees add up across multiple txes. USDC paths use these as the SOL
+  // top-up target (USDC bots hold 0 SOL by default; we fund just enough
+  // to cover this tick).
   const isDistribute = action !== 'burn' && action !== 'hold';
   const gasReserve = isDistribute ? DIST_GAS_RESERVE_LAMPORTS : GAS_RESERVE_LAMPORTS;
-  const usableLamports = balance - gasReserve;
-  if (usableLamports < MIN_SWAP_LAMPORTS) {
-    return { ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action, skipped: `bot wallet balance ${balance} below action threshold (need ${MIN_SWAP_LAMPORTS + gasReserve} lamports)` };
+
+  let usableLamports: number;
+  if (qc === 'usdc') {
+    // Top up native SOL for tx fees (idempotent — only if short).
+    try {
+      const { ensureGasReserveAndSend } = await import('@/lib/quoteAsset');
+      await ensureGasReserveAndSend({
+        conn, wallet: botKp.publicKey, minLamports: gasReserve,
+        funder: loadEscrow(), label: `usdc-bot-gas:${b.id}`,
+      });
+    } catch (e) {
+      return { ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, action,
+        error: `usdc bot gas top-up failed: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    // Read USDC ATA balance — that's the actionable amount.
+    const { readQuoteBalance } = await import('@/lib/quoteAsset');
+    const usdcRaw = await readQuoteBalance(conn, botKp.publicKey, 'usdc');
+    usableLamports = Number(usdcRaw);
+    // Min-swap threshold for USDC: prod default 10M lamports = 0.01 SOL.
+    // For USDC raw (6 decimals), use BOT_MIN_SWAP_USDC_RAW (default 100_000 = 0.1 USDC).
+    const minUsdcRaw = Number(process.env.BOT_MIN_SWAP_USDC_RAW || 100_000);
+    if (usableLamports < minUsdcRaw) {
+      return { ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action,
+        skipped: `bot wallet USDC ${usableLamports} raw below action threshold (need ${minUsdcRaw} raw / ${minUsdcRaw / 1e6} USDC)` };
+    }
+  } else {
+    const balance = await conn.getBalance(botKp.publicKey);
+    usableLamports = balance - gasReserve;
+    if (usableLamports < MIN_SWAP_LAMPORTS) {
+      return { ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action, skipped: `bot wallet balance ${balance} below action threshold (need ${MIN_SWAP_LAMPORTS + gasReserve} lamports)` };
+    }
   }
 
-  // ── SOL-only distribute actions skip the swap entirely ─────────────
+  // ── Quote-only distribute actions skip the swap entirely ─────────
+  // Action names stay 'distribute_sol_*' / 'donate_sol' for back-compat,
+  // but for USDC memes they distribute/donate USDC.
   if (action === 'distribute_sol_holders' || action === 'distribute_sol_backers') {
-    return executeSolDistribute(supabase, m, b, botKp, conn, action, usableLamports);
+    return executeSolDistribute(supabase, m, b, botKp, conn, action, usableLamports, qc);
   }
 
   // ── POOL_FEEDER: pre-grad accumulates, post-grad deploys LP ───────
   // Only viable AFTER the bonding curve graduates to a real AMM
   // (PumpSwap for Pump.fun, DAMM v2 for Meteora). Pre-grad behavior is
-  // "wait" — SOL stays in the bot wallet, logged as a no-op tick. The
-  // moment graduation lands, the next cron tick deploys.
-  //
-  // The post-grad LP-add path is per-platform and lives in
-  // executeFeedLp — see that function for the Phase-2 status of each
-  // platform integration.
+  // "wait" — funds stay in the bot wallet, logged as a no-op tick.
   if (action === 'feed_lp') {
-    return executeFeedLp(supabase, m, b, botKp, conn, usableLamports);
+    return executeFeedLp(supabase, m, b, botKp, conn, usableLamports, qc);
   }
 
-  // ── DONATE_SOL: skip swap, send SOL straight to destination ───────
+  // ── DONATE_SOL: skip swap, send the quote currency to destination ─
   if (action === 'donate_sol') {
-    return executeDonateSol(supabase, m, b, botKp, conn, usableLamports);
+    return executeDonateSol(supabase, m, b, botKp, conn, usableLamports, qc);
   }
 
   // ── Swap branch (burn / hold / token-distribute) ──────────────────
+  // Jupiter input mint switches to USDC for USDC memes; swap math is
+  // identical (input raw → output raw token).
   let actualTokensRaw: bigint;
   let tokenProgramId: PublicKey;
   let tokenDecimals: number;
   let swapTx: string;
   try {
-    const quoteUrl = `${JUP_QUOTE_URL}?inputMint=${SOL_MINT}&outputMint=${m.mint_address}&amount=${usableLamports}&slippageBps=${SLIPPAGE_BPS}`;
+    const { quoteInputMint } = await import('@/lib/quoteAsset');
+    const inputMint = quoteInputMint(qc);
+    const quoteUrl = `${JUP_QUOTE_URL}?inputMint=${inputMint}&outputMint=${m.mint_address}&amount=${usableLamports}&slippageBps=${SLIPPAGE_BPS}`;
     const qres = await fetch(quoteUrl);
     if (!qres.ok) throw new Error(`jupiter quote ${qres.status}: ${await qres.text()}`);
     const quote = await qres.json();
@@ -385,14 +425,15 @@ async function executeHold(
   return finalize(supabase, m, b, action, usableLamports, actualTokensRaw, actualTokensRaw, swapTx, undefined);
 }
 
-// ── DONATE_SOL ─────────────────────────────────────────────────────
-// Skip swap. Send the bot's usable SOL straight to the committed
-// destination wallet (set at submit, immutable). One tx, one recipient,
-// no batching — much simpler than DISTRIBUTE_SOL_*.
+// ── DONATE QUOTE ───────────────────────────────────────────────────
+// Skip swap. Send the bot's usable quote currency straight to the
+// committed destination wallet (set at submit, immutable). One tx, one
+// recipient, no batching. Branches SOL vs USDC via buildQuoteTransferIxs.
 async function executeDonateSol(
   supabase: SupabaseClient, m: MemeRow, b: BotRow,
   botKp: Keypair, conn: Connection,
   usableLamports: number,
+  qc: 'sol' | 'usdc' = 'sol',
 ): Promise<BuybackResult> {
   const action: BotAction = 'donate_sol';
   if (!b.destination_wallet) {
@@ -403,26 +444,27 @@ async function executeDonateSol(
   catch { return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, `donate_sol: invalid destination ${b.destination_wallet}`); }
 
   try {
+    const { buildQuoteTransferIxs } = await import('@/lib/quoteAsset');
     // SOL-030: adaptive priority fee.
     const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
-    const tx = new Transaction().add(
-      priorityIx,
-      SystemProgram.transfer({
-        fromPubkey: botKp.publicKey,
-        toPubkey: destPk,
-        lamports: usableLamports,
-      }),
-    );
+    const tx = new Transaction().add(priorityIx);
+    for (const ix of buildQuoteTransferIxs({
+      from: botKp.publicKey,
+      to: destPk,
+      amountRaw: BigInt(usableLamports),
+      qc,
+      payer: botKp.publicKey,
+    })) tx.add(ix);
     const { blockhash } = await conn.getLatestBlockhash('confirmed');
     tx.recentBlockhash = blockhash;
     tx.feePayer = botKp.publicKey;
     // SOL-029: simulate before send.
-    const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: 'donate_sol' });
+    const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `donate_${qc}` });
     const conf = await conn.confirmTransaction(sig, 'confirmed');
-    if (conf.value.err) throw new Error(`donate_sol tx failed: ${JSON.stringify(conf.value.err)}`);
+    if (conf.value.err) throw new Error(`donate_${qc} tx failed: ${JSON.stringify(conf.value.err)}`);
     return finalize(
       supabase, m, b, action,
-      usableLamports,     // sol spent
+      usableLamports,     // quote raw spent
       BigInt(0),          // tokens bought (none)
       BigInt(0),          // tokens acted (none)
       undefined,          // swap tx (none)
@@ -431,15 +473,19 @@ async function executeDonateSol(
       undefined,
     );
   } catch (e) {
-    return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, `donate_sol: ${e instanceof Error ? e.message : String(e)}`);
+    return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, `donate_${qc}: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
-// ── DISTRIBUTE SOL (no swap) ───────────────────────────────────────
+// ── DISTRIBUTE QUOTE (no swap) ─────────────────────────────────────
+// Name stays 'distribute_sol_*' for back-compat. For USDC memes this
+// distributes USDC via SPL TransferChecked. SOL memes use the original
+// SystemProgram.transfer path.
 async function executeSolDistribute(
   supabase: SupabaseClient, m: MemeRow, b: BotRow,
   botKp: Keypair, conn: Connection,
   action: BotAction, usableLamports: number,
+  qc: 'sol' | 'usdc' = 'sol',
 ): Promise<BuybackResult> {
   const recipients = await buildRecipientList(
     supabase, conn, m, botKp.publicKey,
@@ -452,14 +498,22 @@ async function executeSolDistribute(
     return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'no recipients found');
   }
 
-  // Pro-rata SOL allocation. weights are unitless — sum normalizes.
+  // Pro-rata allocation. weights are unitless — sum normalizes.
   const totalWeight = recipients.list.reduce((s, r) => s + r.weight, 0);
   if (totalWeight <= 0) {
     return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'total weight 0');
   }
 
-  // Send per-recipient. Batch into multiple txes if needed.
-  const transfersPerTx = 18; // safe for SOL transfers within tx size limits
+  const { buildQuoteTransferIxs } = await import('@/lib/quoteAsset');
+
+  // USDC: each idempotent ATA-create + SPL TransferChecked is ~2 ix, so
+  // fewer recipients per tx than SOL's single transfer. 6 keeps us under
+  // the tx size limit safely (12 ix per tx).
+  // SOL: 18 fits within the size limit. Min-recipient floor for USDC is
+  // 1000 raw = 0.001 USDC; for SOL it's the legacy 50_000 lamports.
+  const transfersPerTx = qc === 'usdc' ? 6 : 18;
+  const minRecipientRaw = qc === 'usdc' ? 1000 : MIN_SOL_RECIPIENT_LAMPORTS;
+
   const sigs: string[] = [];
   let actualSent = 0;
   let credited = 0;
@@ -472,12 +526,14 @@ async function executeSolDistribute(
     let batchHasAny = false;
     for (const r of batch) {
       const share = Math.floor((usableLamports * r.weight) / totalWeight);
-      if (share < MIN_SOL_RECIPIENT_LAMPORTS) continue; // skip dust
-      tx.add(SystemProgram.transfer({
-        fromPubkey: botKp.publicKey,
-        toPubkey: new PublicKey(r.wallet),
-        lamports: share,
-      }));
+      if (share < minRecipientRaw) continue; // skip dust
+      for (const ix of buildQuoteTransferIxs({
+        from: botKp.publicKey,
+        to: new PublicKey(r.wallet),
+        amountRaw: BigInt(share),
+        qc,
+        payer: botKp.publicKey, // bot wallet pays ATA-create rent on USDC path
+      })) tx.add(ix);
       txTotal += share;
       batchHasAny = true;
     }
@@ -486,11 +542,12 @@ async function executeSolDistribute(
       tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
       tx.feePayer = botKp.publicKey;
       // SOL-029: simulate before send.
-      const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `distribute_sol:${i}` });
+      const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `distribute_${qc}:${i}` });
       await conn.confirmTransaction(sig, 'confirmed');
       sigs.push(sig);
       actualSent += txTotal;
-      credited += tx.instructions.length;
+      // Count actual transfers, not raw ix count (USDC has 2 ix per recipient).
+      credited += batch.filter((r) => Math.floor((usableLamports * r.weight) / totalWeight) >= minRecipientRaw).length;
     } catch (e) {
       errors.push(`batch starting at ${i}: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -1088,11 +1145,27 @@ async function executeFeedLp(
   supabase: SupabaseClient, m: MemeRow, b: BotRow,
   botKp: Keypair, conn: Connection,
   usableLamports: number,
+  qc: 'sol' | 'usdc' = 'sol',
 ): Promise<BuybackResult> {
   const action: BotAction = 'feed_lp';
 
   if (!m.mint_address) {
     return finalizePartial(supabase, m, b, action, usableLamports, BigInt(0), undefined, undefined, undefined, undefined, 'feed_lp: mint_address missing');
+  }
+
+  // USDC LP feed (DAMM v2 USDC/token pair) is a separate code path from
+  // SOL LP feed (PumpSwap SOL/token or DAMM v2 SOL/token). The actual
+  // deposit calls are platform-specific and not yet wired for USDC. For
+  // now log + no-op so SOL bots keep working and USDC bots accumulate.
+  if (qc === 'usdc') {
+    await supabase
+      .from('meme_bots')
+      .update({ last_run_at: new Date().toISOString() })
+      .eq('id', b.id);
+    return {
+      ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action,
+      skipped: 'feed_lp USDC: DAMM v2 USDC/token deposit not yet wired (USDC stays in bot wallet, compounds)',
+    };
   }
 
   // ── Graduation gate ───────────────────────────────────────────────

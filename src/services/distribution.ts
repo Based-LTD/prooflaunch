@@ -283,7 +283,7 @@ export async function collectAndCreditFees(
 ): Promise<CollectAndCreditResult> {
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct, buyback_bot_enabled, buyback_bot_fee_pct, buyback_bot_wallet')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct, buyback_bot_enabled, buyback_bot_fee_pct, buyback_bot_wallet, quote_currency')
     .eq('id', memeId)
     .single();
   if (memeErr || !meme) return { ok: false, error: 'meme not found' };
@@ -363,6 +363,10 @@ interface MemeForCredit {
   mint_address?: string | null;
   fee_distribution_mode?: string | null;
   fee_backer_pct?: number | null;
+  // Quote currency drives the drain + bot-delegation transfer paths.
+  // 'sol' (default for legacy + pump.fun) uses lamports + SystemProgram.transfer.
+  // 'usdc' reads the sub-escrow's USDC ATA + SPL TransferChecked.
+  quote_currency?: 'sol' | 'usdc' | null;
 }
 
 async function drainAndCreditFromSubEscrow(args: {
@@ -380,43 +384,76 @@ async function drainAndCreditFromSubEscrow(args: {
   const feeMode: 'legacy_flat' | 'hold_weighted' =
     meme.fee_distribution_mode === 'hold_weighted' ? 'hold_weighted' : 'legacy_flat';
 
-  // Step B: drain sub-escrow → shared escrow, drain-to-zero (sub-escrow
-  // ends at exactly 0; same Solana-rent-floor rule that bit refundFromPool).
+  // Quote currency drives the drain. SOL flow byte-identical to pre-USDC;
+  // USDC reads the sub-escrow's USDC ATA + SPL transfer.
+  const qc: 'sol' | 'usdc' = meme.quote_currency === 'usdc' ? 'usdc' : 'sol';
+
+  // Step B: drain sub-escrow → shared escrow, drain-to-zero.
   // Retry the balance read up to 5 times with 1s delay to handle the
   // collect→drain timing race where RPC nodes haven't yet propagated
   // the new sub-escrow balance. Each loop iteration also re-reads the
   // balance, so a slow-confirming collect won't trick us into thinking
   // sub-escrow is empty.
   const BASE_FEE = 5000;
-  let subBalance = 0;
+  const { readQuoteBalance, buildQuoteTransferIxs, ensureGasReserveAndSend } = await import('@/lib/quoteAsset');
+
+  let subQuoteRaw: bigint = BigInt(0);
   for (let attempt = 0; attempt < 5; attempt++) {
-    subBalance = await conn.getBalance(subKp.publicKey);
-    if (subBalance > BASE_FEE) break;
+    subQuoteRaw = await readQuoteBalance(conn, subKp.publicKey, qc);
+    if (qc === 'sol' ? subQuoteRaw > BigInt(BASE_FEE) : subQuoteRaw > BigInt(0)) break;
     if (attempt < 4) await new Promise(r => setTimeout(r, 1000));
   }
-  const transferLamports = subBalance - BASE_FEE;
-  if (transferLamports <= 0) {
-    return { ok: false, error: `sub-escrow balance ${subBalance} too low for drain (collectSig ${collectSig ?? 'none — recovery path'}; investigate manually)` };
+  // SOL: leave BASE_FEE behind for the drain tx fee. USDC: drain the full
+  // USDC ATA (gas comes from native SOL, topped up below).
+  const transferRaw = qc === 'sol'
+    ? subQuoteRaw - BigInt(BASE_FEE)
+    : subQuoteRaw;
+  if (transferRaw <= BigInt(0)) {
+    return { ok: false, error: `sub-escrow balance ${subQuoteRaw} too low for drain (collectSig ${collectSig ?? 'none — recovery path'}; investigate manually)` };
+  }
+
+  // USDC path: sub-escrow may have 0 SOL for gas (USDC-only memes never
+  // funded their sub-escrow with SOL). Top up enough for the drain tx.
+  // ~0.0015 SOL covers ATA-create + transferChecked + buffer. Idempotent.
+  if (qc === 'usdc') {
+    try {
+      const topup = await ensureGasReserveAndSend({
+        conn, wallet: subKp.publicKey, minLamports: 1_500_000,
+        funder: escrow, label: `usdc-subescrow-gas:${meme.id}`,
+      });
+      if (topup.toppedUpLamports > 0) {
+        log('reconcile_recovered', { detail: { stage: 'usdc_subescrow_gas_topup', sig: topup.sig, lamports: topup.toppedUpLamports } });
+      }
+    } catch (e) {
+      return {
+        ok: false,
+        error: `usdc sub-escrow gas top-up failed: ${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
   }
 
   let drainSig: string;
   try {
-    const tx = new Transaction().add(
-      SystemProgram.transfer({ fromPubkey: subKp.publicKey, toPubkey: escrow.publicKey, lamports: transferLamports })
-    );
+    const tx = new Transaction();
+    for (const ix of buildQuoteTransferIxs({
+      from: subKp.publicKey,
+      to: escrow.publicKey,
+      amountRaw: transferRaw,
+      qc,
+      payer: subKp.publicKey,
+    })) tx.add(ix);
     tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
     tx.feePayer = subKp.publicKey;
     // SOL-029: simulate before send.
     drainSig = await simulateAndSend(conn, tx, [subKp], { label: 'drain-subescrow' });
     await conn.confirmTransaction(drainSig, 'confirmed');
-    log('reconcile_recovered', { detail: { stage: 'drain_subescrow_to_escrow', sig: drainSig, lamports: transferLamports } });
+    log('reconcile_recovered', { detail: { stage: 'drain_subescrow_to_escrow', sig: drainSig, lamports: transferRaw.toString(), quote: qc } });
   } catch (e) {
     // Drain failed but collect succeeded (or this was a recovery run).
-    // SOL is in sub-escrow safely. Next cron tick will catch it via the
-    // recovery branch above (vault empty + sub-escrow has SOL → drain).
+    // Funds are in sub-escrow safely. Next cron tick will catch it.
     return {
       ok: false,
-      error: `drain failed: ${e instanceof Error ? e.message : String(e)} — sub-escrow holds ${subBalance} lamports (collectSig ${collectSig ?? 'recovery'})`,
+      error: `drain failed: ${e instanceof Error ? e.message : String(e)} — sub-escrow holds ${subQuoteRaw} ${qc.toUpperCase()} raw units (collectSig ${collectSig ?? 'recovery'})`,
     };
   }
 
@@ -437,7 +474,11 @@ async function drainAndCreditFromSubEscrow(args: {
     typeof meme.fee_backer_pct === 'number' && meme.fee_backer_pct >= 0 && meme.fee_backer_pct <= 100
       ? meme.fee_backer_pct / 100
       : 1 - DEFAULT_PLATFORM_FEE_CUT;
-  const collectedLamports = transferLamports;
+  // From here down, "lamports" is a misnomer for USDC memes — values are
+  // actually USDC raw (6-decimals) units. The math is identical because
+  // every operation is proportional splits. Display layers read
+  // meme.quote_currency to pick the right unit label.
+  const collectedLamports = Number(transferRaw);
   const rawBackerPoolLamports = Math.floor(collectedLamports * backerCut);
 
   // Phase B — Bot stack fee delegation. Read the meme's bot stack from
@@ -476,25 +517,29 @@ async function drainAndCreditFromSubEscrow(args: {
   // Transfer each bot its share. We use one tx per bot for clean
   // per-bot tx receipts (auditable on Solscan). Total bot count is
   // capped at 6 by UNIQUE (meme_id, action) so this loop is bounded.
+  // SOL: SystemProgram.transfer; USDC: idempotent ATA-create + SPL
+  // TransferChecked. Escrow pays both gas and ATA rent (~0.002 SOL
+  // per first-time bot wallet on USDC memes).
   for (const p of botPayouts) {
     if (p.lamports <= 0) continue;
     try {
-      const tx = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: escrow.publicKey,
-          toPubkey: new PublicKey(p.wallet),
-          lamports: p.lamports,
-        })
-      );
+      const tx = new Transaction();
+      for (const ix of buildQuoteTransferIxs({
+        from: escrow.publicKey,
+        to: new PublicKey(p.wallet),
+        amountRaw: BigInt(p.lamports),
+        qc,
+        payer: escrow.publicKey,
+      })) tx.add(ix);
       tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
       tx.feePayer = escrow.publicKey;
       // SOL-029: simulate before send.
       p.sig = await simulateAndSend(conn, tx, [escrow], { label: `bot-fee-delegation:${p.id}` });
       await conn.confirmTransaction(p.sig, 'confirmed');
-      log('reconcile_recovered', { detail: { stage: 'bot_fee_delegation', botId: p.id, action: p.action, sig: p.sig, lamports: p.lamports, pct: p.pct } });
+      log('reconcile_recovered', { detail: { stage: 'bot_fee_delegation', botId: p.id, action: p.action, sig: p.sig, lamports: p.lamports, pct: p.pct, quote: qc } });
     } catch (e) {
       p.error = e instanceof Error ? e.message : String(e);
-      log('reconcile_error', { ok: false, detail: { stage: 'bot_fee_delegation', botId: p.id, action: p.action, err: p.error, lamports: p.lamports } });
+      log('reconcile_error', { ok: false, detail: { stage: 'bot_fee_delegation', botId: p.id, action: p.action, err: p.error, lamports: p.lamports, quote: qc } });
     }
   }
 
@@ -615,32 +660,38 @@ async function drainAndCreditFromSubEscrow(args: {
     const holderRewardsAddr = process.env.HOLDER_REWARDS_WALLET_ADDRESS;
     if (holderRewardsAddr) {
       try {
-        const tx = new Transaction().add(
-          SystemProgram.transfer({
-            fromPubkey: escrow.publicKey,
-            toPubkey: new PublicKey(holderRewardsAddr),
-            lamports: freedToHolderRewardsLam,
-          })
-        );
+        const tx = new Transaction();
+        for (const ix of buildQuoteTransferIxs({
+          from: escrow.publicKey,
+          to: new PublicKey(holderRewardsAddr),
+          amountRaw: BigInt(freedToHolderRewardsLam),
+          qc,
+          payer: escrow.publicKey,
+        })) tx.add(ix);
         tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
         tx.feePayer = escrow.publicKey;
         // SOL-029: simulate before send.
         holderRewardsSig = await simulateAndSend(conn, tx, [escrow], { label: 'freed-to-holder-rewards' });
         await conn.confirmTransaction(holderRewardsSig, 'confirmed');
-        log('reconcile_recovered', { detail: { stage: 'freed_to_holder_rewards', sig: holderRewardsSig, lamports: freedToHolderRewardsLam } });
+        log('reconcile_recovered', { detail: { stage: 'freed_to_holder_rewards', sig: holderRewardsSig, lamports: freedToHolderRewardsLam, quote: qc } });
       } catch (e) {
-        log('reconcile_error', { ok: false, detail: { stage: 'freed_to_holder_rewards', err: e instanceof Error ? e.message : String(e), lamports: freedToHolderRewardsLam } });
-        // Non-fatal: SOL stays in escrow, can be swept manually next cycle
+        log('reconcile_error', { ok: false, detail: { stage: 'freed_to_holder_rewards', err: e instanceof Error ? e.message : String(e), lamports: freedToHolderRewardsLam, quote: qc } });
+        // Non-fatal: funds stay in escrow, can be swept manually next cycle
       }
     }
   }
 
   // ── Credit backers in DB ────────────────────────────────────────────
+  // Column name is claimable_fees_sol but the stored value is in the
+  // meme's quote currency (SOL or USDC). SOL: divide raw by 1e9.
+  // USDC: divide raw by 1e6. The UI reads meme.quote_currency to pick
+  // the display label.
+  const quoteDenom = qc === 'usdc' ? 1_000_000 : LAMPORTS_PER_SOL;
   const errors: string[] = [];
   let credited = 0;
   for (const c of credits) {
-    const shareSol = c.effectiveShareLam / LAMPORTS_PER_SOL;
-    const newClaimable = c.existingClaimable + shareSol;
+    const shareUnit = c.effectiveShareLam / quoteDenom;
+    const newClaimable = c.existingClaimable + shareUnit;
     const { error: upErr } = await supabase
       .from('backings')
       .update({ claimable_fees_sol: newClaimable })
@@ -697,7 +748,7 @@ export async function drainAndCreditAfterPlatformClaim(
 ): Promise<CollectAndCreditResult> {
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct, quote_currency')
     .eq('id', memeId)
     .single();
   if (memeErr || !meme) return { ok: false, error: 'meme not found' };
