@@ -349,19 +349,27 @@ export default function MemeDetailPage() {
     }
     // Reserved-slot gate — fetch allowlist BEFORE opening confirm
     // dialog so non-allowlisted backers learn early, not at sign time.
+    // MUST count public-bucket fills by slot_number (≤ openSlots) so
+    // team backings sitting in reserved slot numbers don't wrongly
+    // gate the public out. Same bug class as the submitBacking pre-
+    // check fixed in commit 20b2348.
     if (meme && publicKey) {
       const reservedSlots = Number(meme.reserved_slots) || 0;
       if (reservedSlots > 0) {
         const totalSlots = Number(meme.total_slots) || 8;
         const openSlots = Math.max(0, totalSlots - reservedSlots);
-        const activeBackings = backings.filter((b) => b.status !== 'withdrawn').length;
         const isAllowlisted = await checkAllowlistMembership(meme.id, publicKey.toBase58());
         if (!isAllowlisted) {
           if (openSlots === 0) {
             setBackingStatus(`Error: This is a TEAM ROUND — all ${totalSlots} slots are reserved for declared wallets. Public can't back.`);
             return;
           }
-          if (activeBackings >= openSlots) {
+          const publicBucketFilled = backings
+            .filter((b) => b.status !== 'withdrawn'
+              && b.slot_number != null
+              && Number(b.slot_number) <= openSlots)
+            .length;
+          if (publicBucketFilled >= openSlots) {
             setBackingStatus(`Error: All ${openSlots} open slots are filled. The remaining ${reservedSlots} are reserved for allowlisted wallets.`);
             return;
           }
