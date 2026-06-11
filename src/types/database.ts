@@ -54,6 +54,11 @@ export interface Meme {
   // legacy default; 'meteora' lights up the Meteora-flavored UI (BUY
   // button label, trade URL). Other values reserved for future routes.
   launch_platform?: 'pumpfun' | 'meteora' | 'bags' | 'bonk' | 'launchlab';
+  // Which currency this launch is quoted in. 'sol' = wrapped SOL
+  // (default, existing behavior). 'usdc' = mainnet USDC, routes the
+  // launch through the USDC-quoted Meteora DBC config. Only valid
+  // when launch_platform='meteora' for now (migration 053).
+  quote_currency?: 'sol' | 'usdc';
 
   // Platform fees
   submission_fee_paid: boolean;

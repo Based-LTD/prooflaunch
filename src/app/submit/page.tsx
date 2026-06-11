@@ -299,6 +299,10 @@ function SubmitPageInner() {
     // with "Coming soon" gating in the UI. Default preserves legacy
     // behavior for every existing submission path.
     launchPlatform: 'pumpfun' as 'pumpfun' | 'meteora' | 'bags' | 'bonk' | 'launchlab',
+    // Quote currency (migration 053). 'sol' is default. 'usdc' is only
+    // valid when launchPlatform='meteora' — the picker cross-validates
+    // so the creator can't ship an unlaunchable combo.
+    quoteCurrency: 'sol' as 'sol' | 'usdc',
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -539,6 +543,7 @@ function SubmitPageInner() {
           // so this should always be 'pumpfun' for now, but we wire
           // the round-trip end-to-end so flipping the gate is one PR.
           launch_platform: formData.launchPlatform,
+          quote_currency: formData.quoteCurrency,
           // All new launches default to OPEN. Visibility selector removed
           // from the UI 2026-05-30; the API still accepts the field so
           // legacy memes keep their stealth/spectator state until they
@@ -842,37 +847,98 @@ function SubmitPageInner() {
               </span>
             </div>
             <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {(() => {
+                // USDC quote constrains the launchpad to Meteora today —
+                // Pump.fun's BC is SOL-only at the program level, and
+                // Raydium LaunchLab doesn't expose third-party USDC
+                // configs. Pickers' enabled state reflects the current
+                // quote_currency so the creator can't ship an unlaunchable
+                // combo. Phase 1 finding documented in migration 053.
+                const isUsdc = formData.quoteCurrency === 'usdc';
+                const tiles = [
+                  { key: 'pumpfun',   label: 'PUMP.FUN',  sub: isUsdc ? 'SOL ONLY' : 'LIVE', enabled: !isUsdc },
+                  { key: 'meteora',   label: 'METEORA',   sub: 'LIVE',                       enabled: true   },
+                  { key: 'launchlab', label: 'LAUNCHLAB', sub: isUsdc ? 'SOL ONLY' : 'LIVE', enabled: !isUsdc },
+                ] as const;
+                return tiles.map((p) => {
+                  const active = formData.launchPlatform === p.key;
+                  return (
+                    <button
+                      key={p.key}
+                      type="button"
+                      disabled={!p.enabled}
+                      onClick={() => p.enabled && setFormData((d) => ({ ...d, launchPlatform: p.key }))}
+                      aria-pressed={active}
+                      className={`border px-3 py-3 flex flex-col items-start gap-1 transition-colors ${
+                        active
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                          : p.enabled
+                            ? 'border-[var(--border)] hover:border-[var(--accent)]/50'
+                            : 'border-[var(--border)] opacity-40 cursor-not-allowed'
+                      }`}
+                    >
+                      <span className={`text-sm font-mono font-semibold ${active ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
+                        {p.label}
+                      </span>
+                      <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                        {p.sub}
+                      </span>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          </section>
+
+          {/* ── QUOTE CURRENCY — backing + trading + fees denominated here ── */}
+          <section className="border border-[var(--border)] bg-[var(--card)]">
+            <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                {'// QUOTE_CURRENCY'}
+              </span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                {formData.quoteCurrency === 'usdc' ? 'METEORA ONLY' : '3 LAUNCHPADS'}
+              </span>
+            </div>
+            <div className="p-3 grid grid-cols-2 gap-2">
               {([
-                { key: 'pumpfun',   label: 'PUMP.FUN',  sub: 'LIVE', enabled: true },
-                { key: 'meteora',   label: 'METEORA',   sub: 'LIVE', enabled: true },
-                { key: 'launchlab', label: 'LAUNCHLAB', sub: 'LIVE', enabled: true },
-              ] as const).map((p) => {
-                const active = formData.launchPlatform === p.key;
+                { key: 'sol',  label: 'SOL',  sub: 'WRAPPED SOL · LEGACY DEFAULT' },
+                { key: 'usdc', label: 'USDC', sub: 'MAINNET USDC · METEORA-QUOTED' },
+              ] as const).map((c) => {
+                const active = formData.quoteCurrency === c.key;
                 return (
                   <button
-                    key={p.key}
+                    key={c.key}
                     type="button"
-                    disabled={!p.enabled}
-                    onClick={() => p.enabled && setFormData((d) => ({ ...d, launchPlatform: p.key }))}
+                    onClick={() => setFormData((d) => ({
+                      ...d,
+                      quoteCurrency: c.key,
+                      // If USDC + incompatible launchpad, auto-switch
+                      // to Meteora so the form is always self-consistent.
+                      launchPlatform: c.key === 'usdc' && d.launchPlatform !== 'meteora' ? 'meteora' : d.launchPlatform,
+                    }))}
                     aria-pressed={active}
                     className={`border px-3 py-3 flex flex-col items-start gap-1 transition-colors ${
                       active
                         ? 'border-[var(--accent)] bg-[var(--accent)]/5'
-                        : p.enabled
-                          ? 'border-[var(--border)] hover:border-[var(--accent)]/50'
-                          : 'border-[var(--border)] opacity-40 cursor-not-allowed'
+                        : 'border-[var(--border)] hover:border-[var(--accent)]/50'
                     }`}
                   >
                     <span className={`text-sm font-mono font-semibold ${active ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
-                      {p.label}
+                      {c.label}
                     </span>
                     <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                      {p.sub}
+                      {c.sub}
                     </span>
                   </button>
                 );
               })}
             </div>
+            {formData.quoteCurrency === 'usdc' && (
+              <div className="border-t border-[var(--border)] px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] bg-[var(--accent-gold)]/5">
+                &gt; Backers contribute USDC · Token launches on Meteora · Trades as USDC pair on Jupiter post-graduation
+              </div>
+            )}
           </section>
 
           {/* ── BASICS — image + name + symbol + description ── */}

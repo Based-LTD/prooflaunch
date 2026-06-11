@@ -218,6 +218,11 @@ export async function POST(request: NextRequest) {
       // hosted-checkout URL (?session=pls_xxx). The session row carries
       // the partner_id and validation context.
       partner_session_id,
+      // Quote currency (migration 053). 'sol' (default) keeps existing
+      // SOL-quoted behavior. 'usdc' routes through the USDC-quoted
+      // Meteora DBC config — Phase 2 of USDC support. Cross-validated
+      // below against launch_platform (USDC requires meteora today).
+      quote_currency = 'sol',
       // Multi-launchpad dispatch key (migration 046). The /api/launch
       // route reads this column to route through src/services/launch/
       // dispatcher. Default 'pumpfun' preserves legacy behavior for
@@ -792,6 +797,16 @@ export async function POST(request: NextRequest) {
           ['pumpfun', 'meteora', 'bags', 'bonk', 'launchlab'].includes(launch_platform)
             ? launch_platform
             : 'pumpfun',
+        // Quote currency (migration 053). 'sol' is the universal default
+        // — keeps every existing flow unchanged. 'usdc' is only accepted
+        // when paired with launch_platform='meteora' (the only launchpad
+        // with USDC config support today). Anything else gets demoted to
+        // 'sol' silently so a malformed submit doesn't strand SOL in a
+        // pool that can't actually launch.
+        quote_currency:
+          quote_currency === 'usdc' && launch_platform === 'meteora'
+            ? 'usdc'
+            : 'sol',
         // Launch Configuration v2 — fee distribution config.
         // When fee_preset is undefined we pass NULL across the board,
         // which the distribution code treats as legacy hardcoded behavior.
