@@ -120,6 +120,10 @@ export async function POST(request: NextRequest) {
       discord: meme.discord,
       website: meme.website,
       github: meme.github,
+      // Quote currency (migration 053). Defaults to 'sol' for legacy
+      // memes pre-053. Meteora adapter reads this to pick the right
+      // DBC config (SOL vs USDC quote mint).
+      quoteCurrency: (meme.quote_currency as 'sol' | 'usdc' | undefined) ?? 'sol',
       totalBackingSol: meme.current_backing_sol,
       creatorWallet: meme.creator_wallet,
       // Per-coin sub-escrow (P2 set this at submission); if null/legacy

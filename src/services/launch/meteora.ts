@@ -56,8 +56,13 @@ function decryptKeypair(encrypted: string): Keypair {
   return Keypair.fromSecretKey(bs58.decode(sk));
 }
 
-function getConfigPubkey(): PublicKey | null {
-  const cfg = process.env.METEORA_DBC_CONFIG;
+function getConfigPubkey(quoteCurrency: 'sol' | 'usdc' = 'sol'): PublicKey | null {
+  // Quote-currency aware (migration 053). USDC memes route to the
+  // separate USDC-quoted DBC config deployed by
+  // tools/meteora-create-config-usdc.mjs. SOL stays on the original
+  // METEORA_DBC_CONFIG env so legacy launches are unchanged.
+  const envKey = quoteCurrency === 'usdc' ? 'METEORA_DBC_CONFIG_USDC' : 'METEORA_DBC_CONFIG';
+  const cfg = process.env[envKey];
   if (!cfg) return null;
   try {
     return new PublicKey(cfg);
@@ -65,6 +70,12 @@ function getConfigPubkey(): PublicKey | null {
     return null;
   }
 }
+
+// Minimum SOL the pool wallet needs to land a Meteora create+buy tx
+// (rent for new accounts + tx fee). Mirrors CREATE_RESERVE_LAMPORTS
+// for SOL flows; for USDC flows we top up to this amount from escrow
+// since backers deposit USDC (not SOL) and the pool starts with 0 SOL.
+const POOL_GAS_RESERVE = CREATE_RESERVE_LAMPORTS;
 
 // Build the metadata URI that gets embedded ON-CHAIN at create time.
 // IMPORTANT: this URL is FIXED at launch — wallets, explorers, and
@@ -80,11 +91,17 @@ function metadataUriForMint(mint: PublicKey): string {
 export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
   const { config, poolEncryptedKey, poolWalletAddress, log, creatorEncryptedKey } = params;
 
-  const dbcConfig = getConfigPubkey();
+  // Quote-currency aware (migration 053). Strictly additive: SOL flows
+  // through the original METEORA_DBC_CONFIG; USDC routes to a
+  // separately-deployed METEORA_DBC_CONFIG_USDC. Defaults to 'sol' so
+  // every existing meme behaves byte-identically.
+  const quoteCurrency: 'sol' | 'usdc' = config.quoteCurrency ?? 'sol';
+  const dbcConfig = getConfigPubkey(quoteCurrency);
   if (!dbcConfig) {
+    const envName = quoteCurrency === 'usdc' ? 'METEORA_DBC_CONFIG_USDC' : 'METEORA_DBC_CONFIG';
     return {
       success: false,
-      error: 'METEORA_DBC_CONFIG env not set — run tools/meteora-create-config.mjs first',
+      error: `${envName} env not set — run tools/meteora-create-config${quoteCurrency === 'usdc' ? '-usdc' : ''}.mjs first`,
     };
   }
 
@@ -111,15 +128,80 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
       return { success: false, error: 'Pool wallet key mismatch' };
     }
 
-    const poolBal = await conn.getBalance(poolKp.publicKey);
-    if (poolBal <= 0) return { success: false, error: 'Pool wallet has no SOL' };
+    // Spend amount = quantity of quote currency the first-buy ix
+    // pulls from the pool wallet. Branch:
+    //   - SOL: `spend = (SOL balance) - CREATE_RESERVE_LAMPORTS`
+    //   - USDC: `spend = pool's USDC ATA balance` (full); reserve
+    //     stays in SOL — we top up SOL gas separately below.
+    let spend: bigint;
+    if (quoteCurrency === 'usdc') {
+      // Pool gas top-up: USDC backers deposit only USDC, so pool wallet
+      // typically holds 0 SOL. Meteora's createPool+swap tx still needs
+      // SOL for rent + tx fee. Lazy-load escrow keypair and transfer
+      // POOL_GAS_RESERVE if pool is short. Idempotent: only tops up
+      // the missing delta. SOL flow skips this entirely.
+      const solBal = await conn.getBalance(poolKp.publicKey);
+      if (solBal < POOL_GAS_RESERVE) {
+        const needed = POOL_GAS_RESERVE - solBal;
+        try {
+          const { SystemProgram, Transaction, Keypair: Kp2 } = await import('@solana/web3.js');
+          const { decryptPrivateKey: dk2 } = await import('@/lib/crypto');
+          const escrowKeyRaw = process.env.ESCROW_WALLET_PRIVATE_KEY;
+          if (!escrowKeyRaw) {
+            return {
+              success: false,
+              error: 'USDC launch: pool needs SOL gas but ESCROW_WALLET_PRIVATE_KEY env is unset',
+            };
+          }
+          const escrowKp = Kp2.fromSecretKey(bs58.decode(dk2(escrowKeyRaw)));
+          const topupTx = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: escrowKp.publicKey,
+              toPubkey: poolKp.publicKey,
+              lamports: needed,
+            }),
+          );
+          const { simulateAndSend } = await import('@/lib/rpcHelpers');
+          await simulateAndSend(conn, topupTx, [escrowKp], {
+            maxRetries: 3,
+            label: 'usdc-pool-gas-topup',
+          });
+          log('create_sent', {
+            detail: { platform: 'meteora', step: 'usdc-gas-topup', neededLamports: needed.toString() },
+          });
+        } catch (e) {
+          return {
+            success: false,
+            error: `USDC launch: pool gas top-up failed: ${e instanceof Error ? e.message : 'unknown'}`,
+          };
+        }
+      }
 
-    const spend = poolBal - CREATE_RESERVE_LAMPORTS;
-    if (spend <= 0) {
-      return { success: false, error: 'Pool balance too low for createPool + first buy' };
+      // Read pool's USDC ATA balance for the buy.
+      const { getUsdcAta } = await import('@/lib/usdc');
+      const poolAta = getUsdcAta(poolKp.publicKey);
+      let usdcRaw = BigInt(0);
+      try {
+        const bal = await conn.getTokenAccountBalance(poolAta, 'confirmed');
+        usdcRaw = BigInt(bal.value.amount);
+      } catch {
+        return { success: false, error: 'USDC launch: pool USDC ATA not found or unreadable' };
+      }
+      if (usdcRaw <= BigInt(0)) {
+        return { success: false, error: 'USDC launch: pool has no USDC for first buy' };
+      }
+      spend = usdcRaw;
+    } else {
+      const poolBal = await conn.getBalance(poolKp.publicKey);
+      if (poolBal <= 0) return { success: false, error: 'Pool wallet has no SOL' };
+      const solSpend = poolBal - CREATE_RESERVE_LAMPORTS;
+      if (solSpend <= 0) {
+        return { success: false, error: 'Pool balance too low for createPool + first buy' };
+      }
+      spend = BigInt(solSpend);
     }
 
-    log('create_sent', { detail: { platform: 'meteora', symbol: config.symbol } });
+    log('create_sent', { detail: { platform: 'meteora', symbol: config.symbol, quoteCurrency } });
     const uri = metadataUriForMint(mint);
 
     // poolCreator → sub-escrow when provided (so DBC creator-fees route
@@ -152,7 +234,8 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
         mint: mint.toBase58(),
         poolCreator: poolCreator.toBase58(),
         dbcConfig: dbcConfig.toBase58(),
-        buyLamports: spend.toString(),
+        quoteCurrency,
+        buyRaw: spend.toString(),
       },
     });
 

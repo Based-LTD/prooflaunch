@@ -270,6 +270,11 @@ export interface LaunchConfig {
   discord?: string;
   website?: string;
   github?: string;
+  // Quote currency this launch is denominated in. 'sol' (default,
+  // existing behavior). 'usdc' routes the Meteora adapter to the
+  // METEORA_DBC_CONFIG_USDC env'd config; pool wallet's USDC ATA
+  // balance is what gets spent in the first buy. Migration 053.
+  quoteCurrency?: 'sol' | 'usdc';
   totalBackingSol: number;
   creatorWallet: string;
   // Optional per-coin creator override (the "sub-escrow" pubkey
