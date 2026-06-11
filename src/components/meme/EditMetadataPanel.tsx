@@ -30,6 +30,18 @@ const TELEGRAM_PATTERN = /^https?:\/\/t\.me\/[^\s]+$/i;
 const DISCORD_PATTERN = /^https?:\/\/discord\.(gg|com)\/[^\s]+$/i;
 const GITHUB_PATTERN = /^https?:\/\/(www\.)?github\.com\/[^\s]+$/i;
 
+// Auto-prepend https:// if the user typed a bare domain like
+// "github.com/handle". Mirrors the server-side forgiveness so the
+// client validate() doesn't reject things the server would accept.
+function autoScheme(v: string, hosts: string[]): string {
+  if (/^https?:\/\//i.test(v)) return v;
+  const lower = v.toLowerCase().replace(/^www\./, '');
+  for (const h of hosts) {
+    if (lower.startsWith(h + '/') || lower === h) return 'https://' + v;
+  }
+  return v;
+}
+
 export function EditMetadataPanel({ meme, onSaved }: Props) {
   const { publicKey, signMessage } = useWallet();
   const [open, setOpen] = useState(false);
@@ -74,18 +86,29 @@ export function EditMetadataPanel({ meme, onSaved }: Props) {
     }
   };
 
+  // Normalize each URL field BEFORE validating so "github.com/foo"
+  // and "https://github.com/foo" both pass. The server also does this
+  // — we mirror here so the client doesn't reject + the canonical
+  // value stored downstream is always fully-qualified.
+  const normalized = {
+    github: github.trim() ? autoScheme(github.trim(), ['github.com']) : '',
+    twitter: twitter.trim() ? autoScheme(twitter.trim(), ['x.com', 'twitter.com']) : '',
+    telegram: telegram.trim() ? autoScheme(telegram.trim(), ['t.me']) : '',
+    discord: discord.trim() ? autoScheme(discord.trim(), ['discord.gg', 'discord.com']) : '',
+    website: website.trim()
+      ? (/^https?:\/\//i.test(website.trim())
+          ? website.trim()
+          : (/\./.test(website.trim()) ? `https://${website.trim()}` : website.trim()))
+      : '',
+  };
+
   const validate = (): string | null => {
-    const trimmed = (s: string) => s.trim();
-    const g = trimmed(github);
-    const tw = trimmed(twitter);
-    const tg = trimmed(telegram);
-    const dc = trimmed(discord);
-    const ws = trimmed(website);
-    if (g && !GITHUB_PATTERN.test(g)) return 'GitHub must be a https://github.com/... URL';
-    if (tw && !TWITTER_PATTERN.test(tw)) return 'Twitter/X must be a https://x.com/... URL';
-    if (tg && !TELEGRAM_PATTERN.test(tg)) return 'Telegram must be a https://t.me/... URL';
+    const { github: g, twitter: tw, telegram: tg, discord: dc, website: ws } = normalized;
+    if (g && !GITHUB_PATTERN.test(g)) return 'GitHub must be a github.com/... URL';
+    if (tw && !TWITTER_PATTERN.test(tw)) return 'Twitter/X must be a x.com/... or twitter.com/... URL';
+    if (tg && !TELEGRAM_PATTERN.test(tg)) return 'Telegram must be a t.me/... URL';
     if (dc && !DISCORD_PATTERN.test(dc)) return 'Discord must be a discord.gg/... or discord.com/... URL';
-    if (ws && !URL_PATTERN.test(ws)) return 'Website must start with http:// or https://';
+    if (ws && !URL_PATTERN.test(ws)) return 'Website must be a valid URL';
     if (description.length > 500) return 'Description must be 500 chars or less';
     return null;
   };
@@ -119,12 +142,16 @@ export function EditMetadataPanel({ meme, onSaved }: Props) {
         signature: sigB58,
         message: authMessage,
       };
+      // Send the NORMALIZED URLs (so the server stores `https://...`
+      // canonical form regardless of whether the user typed the scheme).
+      // For the non-URL fields (description, banner_url) the raw trimmed
+      // value is what we send.
       const fieldMap: Record<string, [string, string | null | undefined]> = {
-        github: [norm(github) ?? '', meme.github ?? null],
-        twitter: [norm(twitter) ?? '', meme.twitter ?? null],
-        telegram: [norm(telegram) ?? '', meme.telegram ?? null],
-        discord: [norm(discord) ?? '', meme.discord ?? null],
-        website: [norm(website) ?? '', meme.website ?? null],
+        github: [normalized.github, meme.github ?? null],
+        twitter: [normalized.twitter, meme.twitter ?? null],
+        telegram: [normalized.telegram, meme.telegram ?? null],
+        discord: [normalized.discord, meme.discord ?? null],
+        website: [normalized.website, meme.website ?? null],
         banner_url: [norm(bannerUrl) ?? '', meme.banner_url ?? null],
         description: [norm(description) ?? '', meme.description ?? null],
       };

@@ -43,6 +43,21 @@ const TELEGRAM_PATTERN = /^https?:\/\/t\.me\/[^\s]+$/i;
 const DISCORD_PATTERN = /^https?:\/\/discord\.(gg|com)\/[^\s]+$/i;
 const GITHUB_PATTERN = /^https?:\/\/(www\.)?github\.com\/[^\s]+$/i;
 
+// Forgiving normalization: if the value looks like a bare domain
+// (e.g. "github.com/proof", "x.com/foo") prepend `https://` so the
+// pattern matches. Saves users from form-rejection on a missing
+// scheme — the canonical stored value is always https://...
+function autoPrependScheme(v: string, hostPrefixes: string[]): string {
+  if (/^https?:\/\//i.test(v)) return v;
+  const lower = v.toLowerCase().replace(/^www\./, '');
+  for (const host of hostPrefixes) {
+    if (lower.startsWith(host.toLowerCase() + '/') || lower === host.toLowerCase()) {
+      return 'https://' + v;
+    }
+  }
+  return v;
+}
+
 // banner_url comes from /api/upload/image which returns a Supabase
 // Storage URL on the token-assets bucket. Validate by prefix instead
 // of leaving it wide-open — prevents the field from being abused to
@@ -79,42 +94,51 @@ function pickAndValidate(body: Record<string, unknown>): {
   };
 
   if ('github' in body) {
-    const v = stringOrNull(body.github);
-    if (v === undefined) return { ok: false, error: 'github must be a string' };
+    const raw = stringOrNull(body.github);
+    if (raw === undefined) return { ok: false, error: 'github must be a string' };
+    const v = raw === null ? null : autoPrependScheme(raw, ['github.com']);
     if (v !== null && !GITHUB_PATTERN.test(v)) {
-      return { ok: false, error: 'github must be a https://github.com/... URL' };
+      return { ok: false, error: 'github must be a github.com/... or https://github.com/... URL' };
     }
     update.github = v;
   }
   if ('twitter' in body) {
-    const v = stringOrNull(body.twitter);
-    if (v === undefined) return { ok: false, error: 'twitter must be a string' };
+    const raw = stringOrNull(body.twitter);
+    if (raw === undefined) return { ok: false, error: 'twitter must be a string' };
+    const v = raw === null ? null : autoPrependScheme(raw, ['x.com', 'twitter.com']);
     if (v !== null && !TWITTER_PATTERN.test(v)) {
-      return { ok: false, error: 'twitter must be a https://x.com/... or https://twitter.com/... URL' };
+      return { ok: false, error: 'twitter must be a x.com/... or twitter.com/... URL' };
     }
     update.twitter = v;
   }
   if ('telegram' in body) {
-    const v = stringOrNull(body.telegram);
-    if (v === undefined) return { ok: false, error: 'telegram must be a string' };
+    const raw = stringOrNull(body.telegram);
+    if (raw === undefined) return { ok: false, error: 'telegram must be a string' };
+    const v = raw === null ? null : autoPrependScheme(raw, ['t.me']);
     if (v !== null && !TELEGRAM_PATTERN.test(v)) {
-      return { ok: false, error: 'telegram must be a https://t.me/... URL' };
+      return { ok: false, error: 'telegram must be a t.me/... URL' };
     }
     update.telegram = v;
   }
   if ('discord' in body) {
-    const v = stringOrNull(body.discord);
-    if (v === undefined) return { ok: false, error: 'discord must be a string' };
+    const raw = stringOrNull(body.discord);
+    if (raw === undefined) return { ok: false, error: 'discord must be a string' };
+    const v = raw === null ? null : autoPrependScheme(raw, ['discord.gg', 'discord.com']);
     if (v !== null && !DISCORD_PATTERN.test(v)) {
-      return { ok: false, error: 'discord must be a https://discord.gg/... or https://discord.com/... URL' };
+      return { ok: false, error: 'discord must be a discord.gg/... or discord.com/... URL' };
     }
     update.discord = v;
   }
   if ('website' in body) {
-    const v = stringOrNull(body.website);
-    if (v === undefined) return { ok: false, error: 'website must be a string' };
+    const raw = stringOrNull(body.website);
+    if (raw === undefined) return { ok: false, error: 'website must be a string' };
+    // Website is generic — only prepend if the input has a dot and
+    // no scheme, so "myproject.com" becomes "https://myproject.com".
+    const v = raw === null
+      ? null
+      : (/^https?:\/\//i.test(raw) ? raw : (/\./.test(raw) ? `https://${raw}` : raw));
     if (v !== null && !URL_PATTERN.test(v)) {
-      return { ok: false, error: 'website must be a valid URL starting with http(s)://' };
+      return { ok: false, error: 'website must be a valid URL' };
     }
     update.website = v;
   }
