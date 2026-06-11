@@ -347,11 +347,31 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       isAllowlisted = !!allowed;
     }
-    const maxSlot = isAllowlisted ? totalSlots : openSlots;
-
+    // Slot assignment respects the open/reserved structure.
+    //
+    // Allowlisted backers PREFER reserved slots (openSlots+1..totalSlots).
+    // This keeps the OPEN bucket (1..openSlots) for the public; without
+    // it, team backers would consume open slot numbers (since they were
+    // assigned monotonically from 1) and starve public backers of room
+    // even when reserved capacity remained.
+    //
+    // Falls through to open slots only if all reserved are taken
+    // (more allowlisted backers than reserved capacity).
+    //
+    // Non-allowlisted backers are confined to 1..openSlots — unchanged.
+    // Memes with reservedSlots=0 skip the preference block entirely
+    // and walk 1..totalSlots monotonically — also unchanged.
     let slotNumber = 0;
-    for (let i = 1; i <= maxSlot; i++) {
-      if (!taken.has(i)) { slotNumber = i; break; }
+    if (isAllowlisted && reservedSlots > 0) {
+      for (let i = openSlots + 1; i <= totalSlots; i++) {
+        if (!taken.has(i)) { slotNumber = i; break; }
+      }
+    }
+    if (slotNumber === 0) {
+      const maxSlot = isAllowlisted ? totalSlots : openSlots;
+      for (let i = 1; i <= maxSlot; i++) {
+        if (!taken.has(i)) { slotNumber = i; break; }
+      }
     }
     if (slotNumber === 0) {
       const allOpenFilled = !isAllowlisted && reservedSlots > 0;
