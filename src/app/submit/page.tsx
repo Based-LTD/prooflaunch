@@ -1568,8 +1568,29 @@ function SubmitPageInner() {
               Each meme can run BURN + 4 distribute actions (one of each)
               plus UNLIMITED labeled VAULT bots. Each bot has its own
               wallet on Solscan; vaults are creator-withdrawable, all
-              other bots are sealed. Total delegation ≤ 90%. */}
-          {(() => {
+              other bots are sealed. Total delegation ≤ 90%.
+              ──
+              USDC memes: bots are temporarily hidden because the bot
+              cron + fee-distribution pipeline assumes SOL-denominated
+              fees end-to-end (Jupiter swaps, balance checks, transfers).
+              USDC parity ships in a follow-up. Until then, USDC raises
+              skip the bot stack entirely and route 100% of trading fees
+              to backers via the standard split. */}
+          {formData.quoteCurrency === 'usdc' && (
+            <div className="border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 p-4 sm:p-5">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] mb-2">
+                BUYBACK BOTS · NOT AVAILABLE FOR USDC LAUNCHES YET
+              </div>
+              <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-2xl">
+                USDC-quoted launches don&apos;t support buyback bots in this release.
+                Trading fees still flow to backers via the standard split — you just
+                won&apos;t see the bot configuration panel. Full bot parity (burn,
+                airdrops, vaults, pool feeder) ships in the next phase, gated on
+                live USDC fee-flow verification.
+              </p>
+            </div>
+          )}
+          {formData.quoteCurrency !== 'usdc' && (() => {
             const totalBotPct = formData.botStack.reduce((sum, b) => sum + b.fee_pct, 0);
             const backerPct = Math.max(0, 90 - totalBotPct);
             // UNIQUE-per-action only applies to single-instance actions.
