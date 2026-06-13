@@ -14,7 +14,6 @@ import {
   TrendingUp,
   Award,
   Activity,
-  Eye,
   Trophy,
   Signal,
   MessageSquare,
@@ -47,7 +46,6 @@ const SHIPPED = [
 
   // === BACKER MODES + SAFETY ===
   { icon: Shield, title: 'Reserved slots + TEAM ROUND', desc: 'Creators can reserve N of M slots for specific wallets without hiding the launch from public. Hybrid mode shows "X open · Y reserved" so backers see exactly what\'s available; fully-reserved (TEAM ROUND) launches get a distinct amber label. Public always sees the launch — that\'s the brand promise.' },
-  { icon: Eye, title: 'Stealth (allowlist-gated) launches', desc: 'Hide the backing UI from non-allowlisted wallets until launch. Flips fully public the moment the token launches — full transparency is automatically restored. Useful for early-stage / private team rounds where the team wants to seed quietly but commits to public reveal at launch.' },
   { icon: Shield, title: 'Per-backer cap (team-fairness)', desc: 'Optional ceiling on per-backer SOL set at submission. Applies universally (creator + team + public alike) so no wallet can out-back any other. Whales can\'t outsize your community.' },
   { icon: Trophy, title: 'Up to 24 backer slots', desc: 'Max raised from 8 → 24 backer slots per token. Verified end-to-end with a controlled 24-backer launch (atomic createPool + buy + 24 sequential distributions, all in one request under 30 seconds, zero supply leak).' },
   { icon: Shield, title: 'Refund protection', desc: '3-day backing deadline. If slots don\'t fill in the creator\'s window, every backer is automatically refunded 100% — no fee, no support tickets, no human in the loop.' },
