@@ -578,7 +578,12 @@ function SubmitPageInner() {
           // Tiered caps (migration 056). Each is optional; the backings
           // API picks the right one based on backer tier.
           max_backing_sol_creator: formData.maxBackingSolCreator > 0 ? formData.maxBackingSolCreator : null,
-          max_backing_sol_team:    formData.maxBackingSolTeam    > 0 ? formData.maxBackingSolTeam    : null,
+          // Team cap only meaningful when team wallets exist (reserved
+          // slots > 0). If the user toggled reserved slots back to 0
+          // after setting a value, drop it before persisting.
+          max_backing_sol_team:    formData.reservedSlots > 0 && formData.maxBackingSolTeam > 0
+            ? formData.maxBackingSolTeam
+            : null,
           max_backing_sol_public:  formData.maxBackingSolPublic  > 0 ? formData.maxBackingSolPublic  : null,
           backing_days: 3,
           creation_fee_signature: signature,
@@ -1384,22 +1389,28 @@ function SubmitPageInner() {
                   />
                 </div>
 
-                <div>
-                  <label className={labelClass}>Team cap ({formData.quoteCurrency === 'usdc' ? 'USDC' : 'SOL'})</label>
-                  <input
-                    type="number"
-                    name="maxBackingSolTeam"
-                    value={formData.maxBackingSolTeam}
-                    onChange={handleChange}
-                    min={0}
-                    step="any"
-                    placeholder="0 = uncapped"
-                    className={inputClass()}
-                  />
-                  <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
-                    &gt; Applies to wallets on your allowlist (reserved-slot / declared team backers).
-                  </span>
-                </div>
+                {/* Team cap only matters when team wallets actually exist
+                    on this launch. Reserved-slot count > 0 is what creates
+                    the team cohort; without it every non-creator backer
+                    is public and a team cap is meaningless. */}
+                {formData.reservedSlots > 0 && (
+                  <div>
+                    <label className={labelClass}>Team cap ({formData.quoteCurrency === 'usdc' ? 'USDC' : 'SOL'})</label>
+                    <input
+                      type="number"
+                      name="maxBackingSolTeam"
+                      value={formData.maxBackingSolTeam}
+                      onChange={handleChange}
+                      min={0}
+                      step="any"
+                      placeholder="0 = uncapped"
+                      className={inputClass()}
+                    />
+                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                      &gt; Applies to wallets on your allowlist (reserved-slot / declared team backers).
+                    </span>
+                  </div>
+                )}
 
                 <div>
                   <label className={labelClass}>Public cap ({formData.quoteCurrency === 'usdc' ? 'USDC' : 'SOL'})</label>

@@ -472,7 +472,11 @@ const BackingPanel: React.FC<BackingProps> = ({
                     Creator max <span className="text-[var(--foreground)]">{capCreator} {unit}</span>
                   </span>
                 )}
-                {capTeam !== null && (
+                {/* Team chip only shows when team wallets exist on this
+                    launch — i.e. reserved slots > 0. Otherwise every
+                    non-creator backer is public and the team cap is
+                    semantically inert. */}
+                {capTeam !== null && hasReservedSlots && (
                   <span className="border border-[var(--border)] px-2 py-1 text-[var(--muted)]">
                     Team max <span className="text-[var(--foreground)]">{capTeam} {unit}</span>
                   </span>
