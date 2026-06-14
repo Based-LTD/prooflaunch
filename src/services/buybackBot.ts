@@ -169,6 +169,10 @@ interface BotRow {
   destination_wallet: string | null;
   total_sol_spent: number | null;
   total_tokens_acted: number | null;
+  // Optional bot lifetime cutoff (migration 055). NULL = run forever.
+  // Once expired, the buyback cron skips this row and the fee-
+  // delegation path stops routing new fees to its wallet.
+  expires_at: string | null;
 }
 
 // Phase B — execute one specific bot from a meme's stack. Replaces the
@@ -180,7 +184,7 @@ export async function executeBuybackBot(
 ): Promise<BuybackResult> {
   const { data: bot, error: botErr } = await supabase
     .from('meme_bots')
-    .select('id, meme_id, action, fee_pct, bot_wallet, encrypted_bot_key, destination_wallet, total_sol_spent, total_tokens_acted')
+    .select('id, meme_id, action, fee_pct, bot_wallet, encrypted_bot_key, destination_wallet, total_sol_spent, total_tokens_acted, expires_at')
     .eq('id', botId)
     .single();
   if (botErr || !bot) return { ok: false, memeId: '', error: 'bot not found' };
@@ -196,6 +200,15 @@ export async function executeBuybackBot(
 
   if (m.status !== 'live')    return { ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, skipped: `not live (status=${m.status})` };
   if (!m.mint_address)        return { ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, error: 'mint_address missing on live meme' };
+
+  // Migration 055 — bot lifetime cutoff. Once expired the cron skips
+  // the row entirely; the fee-delegation path (distribution.ts) also
+  // stops routing new fees so the bot wallet's last balance stays put.
+  // NULL expires_at = run forever (default).
+  if (b.expires_at && Date.parse(b.expires_at) <= Date.now()) {
+    return { ok: true, botId: b.id, memeId: m.id, symbol: m.symbol, action: b.action,
+      skipped: `bot expired at ${b.expires_at}` };
+  }
 
   const action = b.action;
 

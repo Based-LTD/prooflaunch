@@ -155,6 +155,10 @@ export interface MemeBot {
   last_run_at?: string | null;
   total_sol_spent: number;
   total_tokens_acted: number;
+  // Optional bot lifetime cutoff (migration 055). NULL = forever
+  // (default). Once past, the cron skips this row and the fee-
+  // delegation path stops routing new fees to its wallet.
+  expires_at?: string | null;
   created_at: string;
 }
 

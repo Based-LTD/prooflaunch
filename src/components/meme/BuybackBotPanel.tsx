@@ -148,6 +148,7 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
           const meta = labels[bot.action];
           const active = bot.id === activeBot.id;
           const tabLabel = bot.action === 'hold' && bot.label ? bot.label : meta?.label.split(' ')[0];
+          const isExpired = !!bot.expires_at && new Date(bot.expires_at).getTime() <= Date.now();
           return (
             <button
               key={bot.id}
@@ -156,9 +157,11 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
               className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border transition-colors flex items-center gap-1 ${
                 active
                   ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                  : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/60'
+                  : isExpired
+                    ? 'border-[var(--border)] text-[var(--muted)] opacity-60 line-through'
+                    : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/60'
               }`}
-              title={meta?.label}
+              title={isExpired ? `${meta?.label} (expired)` : meta?.label}
             >
               <span aria-hidden>{meta?.emoji}</span>
               <span>{tabLabel}</span>
@@ -207,6 +210,32 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
               ? new Date(activeBot.last_run_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
               : 'pending first run'}
           </div>
+          {/* Bot lifetime (migration 055). Renders only when expires_at
+              is set on this row. Past-due → red 'EXPIRED'. Future →
+              "stops in Nd Mh" / "in N months" depending on distance. */}
+          {activeBot.expires_at && (() => {
+            const expiresMs = new Date(activeBot.expires_at).getTime();
+            const nowMs = Date.now();
+            const diffMs = expiresMs - nowMs;
+            const expired = diffMs <= 0;
+            let label: string;
+            if (expired) {
+              label = 'EXPIRED';
+            } else {
+              const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+              if (days >= 30) label = `${Math.floor(days / 30)} mo left`;
+              else if (days >= 1) label = `${days}d left`;
+              else label = `${Math.max(1, Math.floor(diffMs / (60 * 60 * 1000)))}h left`;
+            }
+            return (
+              <>
+                <div className="text-[var(--muted)]">Stops</div>
+                <div className={`text-right ${expired ? 'text-[var(--error)]' : 'text-[var(--foreground)]'}`}>
+                  {label}
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         <div className="text-[10px] font-mono text-[var(--muted)] border-t border-[var(--border)] pt-2 break-all">

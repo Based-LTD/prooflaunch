@@ -557,7 +557,12 @@ export async function POST(request: NextRequest) {
       fee_pct: number;
       label?: string | null;
       destination_wallet?: string | null;
+      // Optional bot lifetime cutoff (migration 055). null = forever.
+      expires_at?: string | null;
     }
+    // Whitelist of accepted duration_months values. Anything else is a
+    // 400. Stays in sync with BOT_DURATION_OPTIONS in submit/page.tsx.
+    const VALID_BOT_DURATIONS_MONTHS = new Set([1, 3, 6, 12]);
     const VAULT_LABEL_RE = /^[A-Za-z0-9 _\-]+$/;
     // Solana base58 pubkey — 32-44 chars, alphabet excludes 0/I/O/l.
     const BASE58_PUBKEY_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -668,7 +673,23 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        botStack.push({ action, fee_pct: feePct, label, destination_wallet });
+        // Optional bot lifetime — duration_months → expires_at (now + N months).
+        // Omitted or null → null = run forever (existing behavior).
+        let expires_at: string | null = null;
+        const durRaw = (raw as { duration_months?: unknown }).duration_months;
+        if (durRaw != null) {
+          if (typeof durRaw !== 'number' || !Number.isInteger(durRaw) || !VALID_BOT_DURATIONS_MONTHS.has(durRaw)) {
+            return NextResponse.json(
+              { error: `bot ${action}: duration_months must be one of ${[...VALID_BOT_DURATIONS_MONTHS].join(', ')} (or omit for forever)` },
+              { status: 400 },
+            );
+          }
+          const d = new Date();
+          d.setMonth(d.getMonth() + durRaw);
+          expires_at = d.toISOString();
+        }
+
+        botStack.push({ action, fee_pct: feePct, label, destination_wallet, expires_at });
         stackSum += feePct;
       }
       if (stackSum > 90) {
@@ -720,13 +741,13 @@ export async function POST(request: NextRequest) {
     // Phase B — If the caller supplied a bots[] stack, that's the source
     // of truth and we generate one keypair per bot. Otherwise, fall back
     // to the legacy single-bot shape and synthesize a 1-item stack.
-    const effectiveStack: { action: string; fee_pct: number; label?: string | null; destination_wallet?: string | null }[] = botStack.length > 0
+    const effectiveStack: { action: string; fee_pct: number; label?: string | null; destination_wallet?: string | null; expires_at?: string | null }[] = botStack.length > 0
       ? botStack
       : (buyback_bot_enabled
           ? [{ action: buyback_bot_action as string, fee_pct: Number(buyback_bot_fee_pct) }]
           : []);
 
-    const generatedBots: { action: string; fee_pct: number; label: string | null; destination_wallet: string | null; wallet: string; encryptedKey: string }[] =
+    const generatedBots: { action: string; fee_pct: number; label: string | null; destination_wallet: string | null; expires_at: string | null; wallet: string; encryptedKey: string }[] =
       effectiveStack.map((bot) => {
         const kp = Keypair.generate();
         return {
@@ -737,6 +758,8 @@ export async function POST(request: NextRequest) {
           label: bot.action === 'hold' ? (bot.label || 'Vault') : (bot.label ?? null),
           // DONATE: destination set at validation time above; immutable.
           destination_wallet: bot.destination_wallet ?? null,
+          // Optional bot lifetime cutoff (migration 055). NULL = forever.
+          expires_at: bot.expires_at ?? null,
           wallet: kp.publicKey.toBase58(),
           encryptedKey: encryptPrivateKey(bs58.encode(kp.secretKey)),
         };
@@ -855,6 +878,8 @@ export async function POST(request: NextRequest) {
         // generatedBots already enforces this shape; DB CHECKs reject anything off.
         label: bot.label,
         destination_wallet: bot.destination_wallet,
+        // Optional bot lifetime cutoff. NULL = forever (default).
+        expires_at: bot.expires_at,
       }));
       const { error: botInsertErr } = await supabase
         .from('meme_bots')

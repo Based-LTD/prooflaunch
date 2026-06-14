@@ -92,7 +92,21 @@ type BotStackItem = {
   fee_pct: number;
   label?: string;
   destination_wallet?: string;
+  // Optional bot lifetime in months. undefined = forever. The submit
+  // route converts months → an ISO timestamp before persisting to
+  // meme_bots.expires_at (migration 055). Once expired, the bot is
+  // skipped by both the buyback cron and the fee-delegation path.
+  duration_months?: number;
 };
+
+// Lifetime presets the picker offers per bot. `null` = forever.
+const BOT_DURATION_OPTIONS: Array<{ months: number | null; label: string }> = [
+  { months: null, label: 'Forever' },
+  { months: 1,    label: '1 month' },
+  { months: 3,    label: '3 months' },
+  { months: 6,    label: '6 months' },
+  { months: 12,   label: '12 months' },
+];
 
 // Single source of truth for bot-stack validation. Used both inside the
 // stack-builder UI and to gate the submit button at the form level.
@@ -592,8 +606,12 @@ function SubmitPageInner() {
           // backfill for single-bot stacks automatically.
           bots: formData.botStackEnabled
             ? formData.botStack.map((b) => {
+                // Common fields for every bot — optional duration_months
+                // is passed through unchanged. The API converts it into
+                // expires_at (now + months). Omitted → run forever.
+                const duration = typeof b.duration_months === 'number' ? { duration_months: b.duration_months } : {};
                 if (b.action === 'hold') {
-                  return { action: b.action, fee_pct: b.fee_pct, label: (b.label ?? '').trim() };
+                  return { action: b.action, fee_pct: b.fee_pct, label: (b.label ?? '').trim(), ...duration };
                 }
                 if (DONATE_ACTIONS.has(b.action)) {
                   return {
@@ -601,9 +619,10 @@ function SubmitPageInner() {
                     fee_pct: b.fee_pct,
                     destination_wallet: (b.destination_wallet ?? '').trim(),
                     label: b.label?.trim() || undefined,
+                    ...duration,
                   };
                 }
-                return { action: b.action, fee_pct: b.fee_pct };
+                return { action: b.action, fee_pct: b.fee_pct, ...duration };
               })
             : [],
         }),
@@ -1952,6 +1971,38 @@ function SubmitPageInner() {
                                   )}
                                 </div>
                               )}
+
+                              {/* Optional lifetime cutoff. Default is "Forever". Picking a
+                                  finite duration sets meme_bots.expires_at at submit
+                                  time; after that the cron skips the bot and fee
+                                  delegation stops routing fees to it. */}
+                              <div className="space-y-1.5 pt-2 border-t border-[var(--border)]">
+                                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                                  Run for
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {BOT_DURATION_OPTIONS.map((opt) => {
+                                    const active = (opt.months ?? null) === (bot.duration_months ?? null);
+                                    return (
+                                      <button
+                                        key={opt.label}
+                                        type="button"
+                                        onClick={() => updateBot(idx, opt.months === null ? { duration_months: undefined } : { duration_months: opt.months })}
+                                        className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border transition-colors ${
+                                          active
+                                            ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                                            : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/60'
+                                        }`}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <div className="text-[9px] font-mono text-[var(--muted)] italic">
+                                  After this window, the bot stops collecting new fees. Any balance already in its wallet stays put.
+                                </div>
+                              </div>
 
                               <div className="text-[10px] font-mono text-[var(--muted)] leading-snug border-t border-[var(--border)] pt-2">
                                 {meta?.desc}

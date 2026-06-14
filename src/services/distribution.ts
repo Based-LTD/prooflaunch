@@ -495,10 +495,16 @@ async function drainAndCreditFromSubEscrow(args: {
   // Each transfer is independent — if one bot's transfer fails, the
   // others still happen. Failed transfers leave SOL in escrow for the
   // next collection cycle to retry.
+  // Migration 055: expired bots are skipped here so their share of new
+  // fees flows back to backers instead of accumulating in a wallet that
+  // can't act on it. The filter is applied in SQL so the bot isn't even
+  // pulled from the DB once it's past its cutoff.
+  const nowIso = new Date().toISOString();
   const { data: bots } = await supabase
     .from('meme_bots')
-    .select('id, action, fee_pct, bot_wallet')
+    .select('id, action, fee_pct, bot_wallet, expires_at')
     .eq('meme_id', meme.id)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
     .order('slot_order', { ascending: true });
 
   type BotPayout = { id: string; action: string; pct: number; wallet: string; lamports: number; sig?: string; error?: string };
