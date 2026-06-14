@@ -66,14 +66,14 @@ export default function ClaimWalletPage() {
       try {
         // First, look up the meme without auth (public read of pool/creator wallet).
         const memeRes = await fetch(`/api/memes/${meme_id}`);
-        if (!memeRes.ok) throw new Error('Meme not found');
+        if (!memeRes.ok) throw new Error('Token not found');
         const memeData = await memeRes.json();
         const m = memeData.meme;
-        if (!m) throw new Error('Meme not found');
+        if (!m) throw new Error('Token not found');
         setMeme({ creator_wallet: m.creator_wallet, pool_wallet: m.pool_wallet, symbol: m.symbol });
 
         if (publicKey.toBase58() !== m.creator_wallet) {
-          setError(`Connected wallet ${publicKey.toBase58().slice(0, 6)}… is not the creator of this meme. Connect ${m.creator_wallet.slice(0, 6)}… instead.`);
+          setError(`Connected wallet ${publicKey.toBase58().slice(0, 6)}… is not the creator of this token. Connect ${m.creator_wallet.slice(0, 6)}… instead.`);
           setStep('error');
           return;
         }
@@ -230,7 +230,7 @@ export default function ClaimWalletPage() {
       </h1>
       {meme && (
         <div className="text-xs font-mono text-[var(--muted)]">
-          Meme: ${meme.symbol ?? '?'} · Pool: <code className="bg-[var(--background)] px-1">{meme.pool_wallet.slice(0, 8)}…{meme.pool_wallet.slice(-4)}</code>
+          Token: ${meme.symbol ?? '?'} · Pool: <code className="bg-[var(--background)] px-1">{meme.pool_wallet.slice(0, 8)}…{meme.pool_wallet.slice(-4)}</code>
         </div>
       )}
 
@@ -246,7 +246,7 @@ export default function ClaimWalletPage() {
       {/* VERIFY OWNER */}
       {step === 'verify_owner' && (
         <div className="border border-[var(--border)] p-6 space-y-4">
-          <p>Sign a message to prove ownership of this meme.</p>
+          <p>Sign a message to prove ownership of this token.</p>
           <button
             onClick={handleVerifyOwner}
             disabled={loading}
@@ -264,12 +264,12 @@ export default function ClaimWalletPage() {
             <ShieldAlert className="w-5 h-5" /> Read carefully before continuing
           </div>
           <ul className="text-sm space-y-2 list-disc list-inside">
-            <li>You are about to take <strong>full custody</strong> of this meme's pool wallet.</li>
+            <li>You are about to take <strong>full custody</strong> of this token&apos;s pool wallet.</li>
             <li>Once you claim, the platform <strong>cannot recover</strong> this key for you. Ever.</li>
             <li>You must save the key in your password manager or hardware wallet immediately after seeing it.</li>
             <li>If you lose access to <em>this wallet</em>, you also lose the pool wallet permanently.</li>
             <li>The 24-hour grace period is for support to manually reverse the claim if something went wrong. After 24h the platform-encrypted backup is destroyed.</li>
-            <li>If you only want to view the key (re-claim), that's fine — the encrypted blob stays in our DB forever and you can re-decrypt it anytime by signing the same message.</li>
+            <li>If you only want to view the key (re-claim), that&apos;s fine — the encrypted blob stays in our DB forever and you can re-decrypt it anytime by signing the same message.</li>
           </ul>
           <button
             onClick={() => setStep('decrypt')}

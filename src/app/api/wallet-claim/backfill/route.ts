@@ -52,20 +52,20 @@ export async function POST(request: NextRequest) {
       .eq('id', meme_id)
       .single();
     if (memeErr || !meme) {
-      return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Token not found' }, { status: 404 });
     }
     if (caller_wallet !== meme.creator_wallet) {
-      return NextResponse.json({ error: 'Only the creator can backfill self-custody for this meme' }, { status: 403 });
+      return NextResponse.json({ error: 'Only the creator can backfill self-custody for this token' }, { status: 403 });
     }
     if (meme.status !== 'live') {
       return NextResponse.json(
-        { error: `Backfill only applies to launched memes. Current status: ${meme.status}` },
+        { error: `Backfill only applies to launched tokens. Current status: ${meme.status}` },
         { status: 400 },
       );
     }
     if (!meme.encrypted_pool_key) {
       return NextResponse.json(
-        { error: 'No encrypted_pool_key exists for this meme. Cannot backfill — the pool wallet was either never created or has already been burned post-claim.' },
+        { error: 'No encrypted_pool_key exists for this token. Cannot backfill — the pool wallet was either never created or has already been burned post-claim.' },
         { status: 400 },
       );
     }

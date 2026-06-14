@@ -49,20 +49,20 @@ export async function POST(request: NextRequest) {
       .eq('id', meme_id)
       .single();
     if (memeErr || !meme) {
-      return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Token not found' }, { status: 404 });
     }
     if (caller_wallet !== meme.creator_wallet) {
       return NextResponse.json({ error: 'Only the creator can claim this wallet' }, { status: 403 });
     }
     if (meme.status !== 'live') {
       return NextResponse.json(
-        { error: `Meme is not launched yet (status=${meme.status}). Can only claim after launch.` },
+        { error: `Token is not launched yet (status=${meme.status}). Can only claim after launch.` },
         { status: 400 },
       );
     }
     if (!meme.creator_sealed_pool_key || !meme.creator_sealed_pool_key_verified_at) {
       return NextResponse.json(
-        { error: 'No sealed pool key exists for this meme. The launch may have predated wallet-claim support — backfill required.' },
+        { error: 'No sealed pool key exists for this token. The launch may have predated wallet-claim support — backfill required.' },
         { status: 400 },
       );
     }

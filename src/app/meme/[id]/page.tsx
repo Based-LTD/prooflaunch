@@ -223,7 +223,7 @@ export default function MemeDetailPage() {
     try {
       const poolWallet: string | undefined = (meme as { pool_wallet?: string }).pool_wallet;
       if (!poolWallet) {
-        throw new Error('This meme has no pool wallet yet — please refresh and try again.');
+        throw new Error('This token has no pool wallet yet — please refresh and try again.');
       }
 
       // Quote-currency branch (migration 053). USDC memes sign an SPL
@@ -792,6 +792,16 @@ export default function MemeDetailPage() {
                 </div>
               </DashboardCard>
             )}
+
+            {/* Keycard holder vault — sits under the backers/bots in the
+                wide left column so it's prominently visible. The two
+                panels are mutually exclusive (each returns null when
+                the other applies): backers see BackerLoungePanel
+                (public unlock view); the creator sees BackerVaultManager
+                (admin / update content). Same spatial location either
+                way so signing in as creator doesn't shuffle the layout. */}
+            <BackerLoungePanel meme={meme} isCreator={isCreator} />
+            <BackerVaultManager meme={meme} isCreator={isCreator} />
           </div>
 
           {/* RIGHT — narrow reference rail */}
@@ -845,89 +855,28 @@ export default function MemeDetailPage() {
               </DashboardCard>
             )}
 
-            {/* Lounge — small card in the grid, not full-width above. Auto-hides until a drop exists. */}
-            <BackerLoungePanel meme={meme} isCreator={isCreator} />
-
             {showRewards && (
               <DashboardCard label="YOUR REWARDS">
                 <ClaimRewards memeId={meme.id} isCreator={isCreator} isBacker={isBacker} />
               </DashboardCard>
             )}
 
-            {isCreator && (
-              <DashboardCard label="CREATOR CONTROLS">
-                <div className="space-y-3">
-                  {/* Self-custody: backfill entry for legacy launches
-                      (pre-Phase 2) where no sealed key exists yet. The
-                      creator signs the derivation message once; server
-                      seals the existing encrypted_pool_key to it. */}
-                  {isLaunched
-                    && !(meme as { creator_sealed_pool_key_verified_at?: string | null }).creator_sealed_pool_key_verified_at
-                    && process.env.NEXT_PUBLIC_WALLET_CLAIM_ENABLED === 'true' && (
-                    <SelfCustodyBackfillButton memeId={meme.id} />
-                  )}
-
-                  {/* Self-custody claim. Available once the meme is launched
-                      and we have a verified sealed key. */}
-                  {isLaunched && (meme as { creator_sealed_pool_key_verified_at?: string | null }).creator_sealed_pool_key_verified_at && (
-                    <div className="border border-[var(--accent-gold)]/60 bg-[var(--background)] p-3 space-y-2">
-                      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
-                        {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
-                          ? '// SELF_CUSTODY · CLAIMED'
-                          : '// SELF_CUSTODY · AVAILABLE'}
-                      </div>
-                      <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
-                        {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
-                          ? "You've already claimed this pool wallet. Re-decrypt anytime — your wallet's deterministic signature lets you recover the key any time."
-                          : 'Take full custody of this token\'s pool wallet. After confirmation the platform burns its encrypted backup; only your wallet can decrypt it.'}
-                      </p>
-                      <a
-                        href={`/claim/${meme.id}`}
-                        className="block w-full text-center btn-primary text-xs py-2"
-                      >
-                        {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
-                          ? '[▶] Re-Claim Wallet'
-                          : '[▶] Claim Pool Wallet'}
-                      </a>
-                    </div>
-                  )}
-                  {hasPendingBackings && (
-                    <div className="border border-[var(--warning)]/60 bg-[var(--background)] p-3 space-y-2">
-                      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
-                        {'// DISTRIBUTION_PENDING'}
-                      </div>
-                      <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
-                        Some backers are still pending. Auto-distribution retries every tick — nudge it manually here.
-                      </p>
-                      <button onClick={handleDistribute} disabled={distributing} className="btn-primary w-full text-xs py-2">
-                        {distributing ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Distributing…
-                          </span>
-                        ) : (
-                          '[▶] Retry Pending Distribution'
-                        )}
-                      </button>
-                      {distributeStatus && (
-                        <div className="p-2 text-[10px] font-mono text-center uppercase tracking-widest border border-[var(--accent)] text-[var(--accent)]">
-                          &gt; {distributeStatus}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <LaunchVisibilityPanel
-                    memeId={meme.id}
-                    creatorWallet={meme.creator_wallet}
-                    canEdit={meme.status === 'backing'}
-                    maxBackingSol={meme.max_backing_sol ?? null}
-                    reservedSlots={meme.reserved_slots ?? 0}
-                  />
-                  {meme.status === 'backing' && (
-                    <EditMetadataPanel meme={meme} onSaved={refetchMeme} />
-                  )}
-                  <BackerVaultManager meme={meme} isCreator={true} />
-                </div>
-              </DashboardCard>
+            {/* CREATOR CONTROLS stays in the right rail only when the token
+                hasn't launched yet — at that stage the card is small
+                (LaunchVisibilityPanel + EditMetadata) and fits fine alongside
+                the other rail items. After launch, the card grows (self-
+                custody + distribution retry + visibility + vault manager),
+                so it's hoisted to its own full-width row BELOW the grid. */}
+            {isCreator && !isLaunched && (
+              <CreatorControlsCard
+                meme={meme}
+                isLaunched={isLaunched}
+                hasPendingBackings={hasPendingBackings}
+                distributing={distributing}
+                distributeStatus={distributeStatus}
+                handleDistribute={handleDistribute}
+                refetchMeme={refetchMeme}
+              />
             )}
 
             {/* Chat lives in the rail too — replaces the old ABOUT card
@@ -938,6 +887,21 @@ export default function MemeDetailPage() {
             </DashboardCard>
           </div>
         </div>
+
+        {/* Post-launch creator controls — full-width row below the
+            dashboard grid. Keeps the rail uncluttered while still
+            surfacing every control prominently for the dev. */}
+        {isCreator && isLaunched && (
+          <CreatorControlsCard
+            meme={meme}
+            isLaunched={isLaunched}
+            hasPendingBackings={hasPendingBackings}
+            distributing={distributing}
+            distributeStatus={distributeStatus}
+            handleDistribute={handleDistribute}
+            refetchMeme={refetchMeme}
+          />
+        )}
 
       </div>
 
@@ -986,9 +950,97 @@ export default function MemeDetailPage() {
 }
 
 // Tiny external-link pill used in the LINKS dashboard card.
+// CREATOR CONTROLS card body. Same content regardless of where it
+// renders — wrapped by callers in either the right rail (pre-launch)
+// or a full-width row below the dashboard grid (post-launch).
+function CreatorControlsCard(props: {
+  meme: import('@/types/database').Meme;
+  isLaunched: boolean;
+  hasPendingBackings: boolean;
+  distributing: boolean;
+  distributeStatus: string | null;
+  handleDistribute: () => void | Promise<void>;
+  refetchMeme: () => void | Promise<unknown>;
+}) {
+  const { meme, isLaunched, hasPendingBackings, distributing, distributeStatus, handleDistribute, refetchMeme } = props;
+  return (
+    <DashboardCard label="CREATOR CONTROLS">
+      <div className="space-y-3">
+        {isLaunched
+          && !(meme as { creator_sealed_pool_key_verified_at?: string | null }).creator_sealed_pool_key_verified_at
+          && process.env.NEXT_PUBLIC_WALLET_CLAIM_ENABLED === 'true' && (
+          <SelfCustodyBackfillButton memeId={meme.id} />
+        )}
+
+        {isLaunched && (meme as { creator_sealed_pool_key_verified_at?: string | null }).creator_sealed_pool_key_verified_at && (
+          <div className="border border-[var(--accent-gold)]/60 bg-[var(--background)] p-3 space-y-2">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+              {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
+                ? '// SELF_CUSTODY · CLAIMED'
+                : '// SELF_CUSTODY · AVAILABLE'}
+            </div>
+            <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+              {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
+                ? "You've already claimed this pool wallet. Re-decrypt anytime — your wallet's deterministic signature lets you recover the key any time."
+                : "Take full custody of this token's pool wallet. After confirmation the platform burns its encrypted backup; only your wallet can decrypt it."}
+            </p>
+            <a
+              href={`/claim/${meme.id}`}
+              className="block w-full text-center btn-primary text-xs py-2"
+            >
+              {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
+                ? '[▶] Re-Claim Wallet'
+                : '[▶] Claim Pool Wallet'}
+            </a>
+          </div>
+        )}
+
+        {hasPendingBackings && (
+          <div className="border border-[var(--warning)]/60 bg-[var(--background)] p-3 space-y-2">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
+              {'// DISTRIBUTION_PENDING'}
+            </div>
+            <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+              Some backers are still pending. Auto-distribution retries every tick — nudge it manually here.
+            </p>
+            <button onClick={handleDistribute} disabled={distributing} className="btn-primary w-full text-xs py-2">
+              {distributing ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Distributing…
+                </span>
+              ) : (
+                '[▶] Retry Pending Distribution'
+              )}
+            </button>
+            {distributeStatus && (
+              <div className="p-2 text-[10px] font-mono text-center uppercase tracking-widest border border-[var(--accent)] text-[var(--accent)]">
+                &gt; {distributeStatus}
+              </div>
+            )}
+          </div>
+        )}
+        <LaunchVisibilityPanel
+          memeId={meme.id}
+          creatorWallet={meme.creator_wallet}
+          canEdit={meme.status === 'backing'}
+          maxBackingSol={meme.max_backing_sol ?? null}
+          reservedSlots={meme.reserved_slots ?? 0}
+        />
+        {meme.status === 'backing' && (
+          <EditMetadataPanel meme={meme} onSaved={refetchMeme} />
+        )}
+        {/* BackerVaultManager (Keycard admin) now lives in the left
+            column under the bots/backers, alongside the public
+            BackerLoungePanel — they're mutually exclusive based on
+            isCreator. Keeps layout stable across sign-in. */}
+      </div>
+    </DashboardCard>
+  );
+}
+
 // Self-custody backfill — one-click flow for legacy launches (pre-Phase
 // 2). Signs derivation message, posts to /api/wallet-claim/backfill,
-// reloads the meme. After success the regular "Claim Pool Wallet"
+// reloads the page. After success the regular "Claim Pool Wallet"
 // button appears (gated by creator_sealed_pool_key_verified_at).
 function SelfCustodyBackfillButton({ memeId }: { memeId: string }) {
   const { publicKey, signMessage } = useWallet();
@@ -1031,7 +1083,7 @@ function SelfCustodyBackfillButton({ memeId }: { memeId: string }) {
         {'// SELF_CUSTODY · NOT_YET_ENABLED'}
       </div>
       <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
-        This meme launched before self-custody support existed. Sign two messages — one to authenticate, one to derive your encryption key — and we&apos;ll re-encrypt the pool wallet to you. After that, claim is identical to a fresh launch.
+        This token launched before self-custody support existed. Sign two messages — one to authenticate, one to derive your encryption key — and we&apos;ll re-encrypt the pool wallet to you. After that, claim is identical to a fresh launch.
       </p>
       <button onClick={enable} disabled={busy} className="btn-primary w-full text-xs py-2">
         {busy ? 'Enabling…' : '[▶] Enable Self-Custody'}

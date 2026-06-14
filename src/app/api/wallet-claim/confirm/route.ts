@@ -47,14 +47,14 @@ export async function POST(request: NextRequest) {
       .eq('id', meme_id)
       .single();
     if (memeErr || !meme) {
-      return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Token not found' }, { status: 404 });
     }
     if (caller_wallet !== meme.creator_wallet) {
       return NextResponse.json({ error: 'Only the creator can claim this wallet' }, { status: 403 });
     }
     if (!meme.creator_sealed_pool_key_verified_at) {
       return NextResponse.json(
-        { error: 'No sealed pool key for this meme (verified_at NULL). Cannot confirm a claim that never started.' },
+        { error: 'No sealed pool key for this token (verified_at NULL). Cannot confirm a claim that never started.' },
         { status: 400 },
       );
     }
