@@ -137,13 +137,31 @@ export default function MemeDetailPage() {
     const quoteCurrencyEarly: 'sol' | 'usdc' = (meme as { quote_currency?: 'sol' | 'usdc' }).quote_currency ?? 'sol';
     const unitLabel = quoteCurrencyEarly === 'usdc' ? 'USDC' : 'SOL';
 
-    // Pre-check the team-fairness cap so the user doesn't sign a tx
-    // the API will reject (which would leave their funds stranded in
-    // the pool wallet because the on-chain deposit lands BEFORE the
-    // API validates).
-    const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+    // Pre-check the per-backer cap so the user doesn't sign a tx the
+    // API will reject (deposit lands BEFORE the API validates).
+    // Tiered caps (migration 056) — we determine the backer's tier
+    // exactly the same way the server does:
+    //   creator: publicKey === meme.creator_wallet
+    //   team:    on backing_allowlist for this meme
+    //   public:  everyone else
+    // Falls back to legacy max_backing_sol when no tier-specific cap.
+    let preflightTier: 'creator' | 'team' | 'public';
+    if (publicKey.toBase58() === meme.creator_wallet) {
+      preflightTier = 'creator';
+    } else {
+      const onAllowlist = await checkAllowlistMembership(meme.id, publicKey.toBase58());
+      preflightTier = onAllowlist ? 'team' : 'public';
+    }
+    const tierCapRaw =
+      preflightTier === 'creator' ? meme.max_backing_sol_creator
+      : preflightTier === 'team'  ? meme.max_backing_sol_team
+      :                             meme.max_backing_sol_public;
+    const tierCap = tierCapRaw != null ? Number(tierCapRaw) : null;
+    const legacyCap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+    const cap = tierCap ?? legacyCap;
     if (cap !== null && amountSol > cap + 1e-9) {
-      setBackingStatus(`Error: This launch has a per-backer cap of ${cap} ${unitLabel}. Your amount exceeds it.`);
+      const tierLabel = tierCap !== null ? `${preflightTier} cap` : 'per-backer cap';
+      setBackingStatus(`Error: This launch has a ${tierLabel} of ${cap} ${unitLabel}. Your amount exceeds it.`);
       return;
     }
 
@@ -309,10 +327,28 @@ export default function MemeDetailPage() {
       return;
     }
     // Pre-check cap so the confirm dialog doesn't tease an action the
-    // submit step will block (and to avoid stranded-SOL post-deposit).
-    const cap = meme?.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+    // submit step will block (and to avoid stranded funds post-deposit).
+    // Mirrors the tiered-cap logic in submitBacking (migration 056).
+    let confirmTier: 'creator' | 'team' | 'public';
+    if (publicKey?.toBase58() === meme?.creator_wallet) {
+      confirmTier = 'creator';
+    } else if (meme && publicKey) {
+      const onAllowlist = await checkAllowlistMembership(meme.id, publicKey.toBase58());
+      confirmTier = onAllowlist ? 'team' : 'public';
+    } else {
+      confirmTier = 'public';
+    }
+    const confirmTierCapRaw =
+      confirmTier === 'creator' ? meme?.max_backing_sol_creator
+      : confirmTier === 'team'  ? meme?.max_backing_sol_team
+      :                           meme?.max_backing_sol_public;
+    const confirmTierCap = confirmTierCapRaw != null ? Number(confirmTierCapRaw) : null;
+    const confirmLegacyCap = meme?.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+    const cap = confirmTierCap ?? confirmLegacyCap;
+    const confirmUnit = meme?.quote_currency === 'usdc' ? 'USDC' : 'SOL';
     if (cap !== null && amountSol > cap + 1e-9) {
-      setBackingStatus(`Error: This launch has a per-backer cap of ${cap} SOL. Your amount exceeds it.`);
+      const tierLabel = confirmTierCap !== null ? `${confirmTier} cap` : 'per-backer cap';
+      setBackingStatus(`Error: This launch has a ${tierLabel} of ${cap} ${confirmUnit}. Your amount exceeds it.`);
       return;
     }
     const myExisting = backings.find(

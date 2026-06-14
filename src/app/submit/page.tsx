@@ -297,9 +297,17 @@ function SubmitPageInner() {
     // open slots. 0 = fully open launch.
     reservedSlots: 0,
     minBackingSol: 0.1,
-    // Phase 3.5 — Optional per-backer ceiling. 0 (UI sentinel) = uncapped.
-    // When set, applies universally so no wallet can out-back any other.
+    // Migration 056 — tiered per-backer ceilings. 0 (UI sentinel) =
+    // uncapped for that tier. Creator can dial each tier independently:
+    //   maxBackingSolCreator → cap on the creator wallet
+    //   maxBackingSolTeam    → cap on allowlisted (team) backers
+    //   maxBackingSolPublic  → cap on open-bucket public backers
+    // Legacy maxBackingSol kept as a uniform fallback when none of the
+    // three tier-specific values is set.
     maxBackingSol: 0,
+    maxBackingSolCreator: 0,
+    maxBackingSolTeam: 0,
+    maxBackingSolPublic: 0,
     creatorTwitter: '',
     twitter: '',
     website: '',
@@ -567,6 +575,11 @@ function SubmitPageInner() {
           reserved_slots: formData.reservedSlots,
           min_backing_sol: formData.minBackingSol,
           max_backing_sol: formData.maxBackingSol > 0 ? formData.maxBackingSol : null,
+          // Tiered caps (migration 056). Each is optional; the backings
+          // API picks the right one based on backer tier.
+          max_backing_sol_creator: formData.maxBackingSolCreator > 0 ? formData.maxBackingSolCreator : null,
+          max_backing_sol_team:    formData.maxBackingSolTeam    > 0 ? formData.maxBackingSolTeam    : null,
+          max_backing_sol_public:  formData.maxBackingSolPublic  > 0 ? formData.maxBackingSolPublic  : null,
           backing_days: 3,
           creation_fee_signature: signature,
           creation_fee_sol: signature ? CREATION_FEE_SOL : undefined,
@@ -660,7 +673,7 @@ function SubmitPageInner() {
       ...prev,
       [name]: type === 'checkbox'
         ? checked
-        : ['totalSlots', 'minBackingSol', 'maxBackingSol', 'reservedSlots'].includes(name) ? Number(value) : value
+        : ['totalSlots', 'minBackingSol', 'maxBackingSol', 'maxBackingSolCreator', 'maxBackingSolTeam', 'maxBackingSolPublic', 'reservedSlots'].includes(name) ? Number(value) : value
     }));
   };
 
@@ -1342,29 +1355,68 @@ function SubmitPageInner() {
                 </div>
               </div>
 
-              {/* Optional per-backer maximum (Phase 3.5).
-                  When set, applies to allowlisted + public alike — every
-                  backing is bounded by the same SOL ceiling, so no whale
-                  can out-back any team member. 0 = uncapped (default).
-                  Free-form number — creators set exactly what they want
-                  (the old preset chips skipped from 2 to 5 SOL). */}
-              <div>
-                <label className={labelClass}>Maximum per backer (optional)</label>
-                <input
-                  type="number"
-                  name="maxBackingSol"
-                  value={formData.maxBackingSol}
-                  onChange={handleChange}
-                  min={0}
-                  step="any"
-                  placeholder={`Any value ≥ ${formData.minBackingSol}, or 0 for uncapped`}
-                  className={inputClass()}
-                />
-                <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
-                  &gt; {formData.maxBackingSol > 0
-                    ? `Each backing capped at ${formData.maxBackingSol} SOL — no whale can exceed it.`
-                    : 'No cap — anyone can back any amount. Set a value to enforce a per-backer ceiling.'}
-                </span>
+              {/* Tiered per-backer maximums (migration 056).
+                  Three independent optional ceilings — creator dials each
+                  tier separately. 0 in any field = uncapped for that
+                  tier. Backings API picks the right cap based on backer
+                  identity: creator, allowlisted (team), or public. */}
+              <div className="space-y-3 border border-[var(--border)] p-3">
+                <div>
+                  <div className="text-xs font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+                    Per-backer maximums (optional)
+                  </div>
+                  <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
+                    Set independent caps for the creator wallet, allowlisted (team) backers, and the public. Leave at 0 for uncapped. All three are independent — set the creator and team to the same value if you want.
+                  </p>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Creator cap ({formData.quoteCurrency === 'usdc' ? 'USDC' : 'SOL'})</label>
+                  <input
+                    type="number"
+                    name="maxBackingSolCreator"
+                    value={formData.maxBackingSolCreator}
+                    onChange={handleChange}
+                    min={0}
+                    step="any"
+                    placeholder="0 = uncapped"
+                    className={inputClass()}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Team cap ({formData.quoteCurrency === 'usdc' ? 'USDC' : 'SOL'})</label>
+                  <input
+                    type="number"
+                    name="maxBackingSolTeam"
+                    value={formData.maxBackingSolTeam}
+                    onChange={handleChange}
+                    min={0}
+                    step="any"
+                    placeholder="0 = uncapped"
+                    className={inputClass()}
+                  />
+                  <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                    &gt; Applies to wallets on your allowlist (reserved-slot / declared team backers).
+                  </span>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Public cap ({formData.quoteCurrency === 'usdc' ? 'USDC' : 'SOL'})</label>
+                  <input
+                    type="number"
+                    name="maxBackingSolPublic"
+                    value={formData.maxBackingSolPublic}
+                    onChange={handleChange}
+                    min={0}
+                    step="any"
+                    placeholder="0 = uncapped"
+                    className={inputClass()}
+                  />
+                  <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                    &gt; Applies to open-bucket public backers. Keeps whales from out-backing the team round.
+                  </span>
+                </div>
               </div>
 
               {/* Reserved slots (Phase 7).

@@ -81,6 +81,12 @@ export interface Meme {
   // NULL = uncapped. When set, applies universally (allowlisted + public)
   // so no wallet can out-back any other. Must be ≥ min_backing_sol.
   max_backing_sol?: number | null;
+  // Migration 056 — tiered backing caps. Each tier-specific cap is
+  // optional. The backings API picks the right ceiling: tier-specific
+  // → legacy max_backing_sol → uncapped.
+  max_backing_sol_creator?: number | null;
+  max_backing_sol_team?: number | null;
+  max_backing_sol_public?: number | null;
 
   // Phase 4 — Keycard backer-lounge gate (migration 033). Populated by
   // /api/keycard/sync after the meme goes live and a gate is created

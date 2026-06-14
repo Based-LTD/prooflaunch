@@ -331,6 +331,13 @@ const BackingPanel: React.FC<BackingProps> = ({
     ? openFilledForVisual >= openSlotsCount
     : filled >= openSlotsCount;
   const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+  // Tiered caps (migration 056). Each optional; null = uses legacy cap
+  // (or uncapped). Displayed in the rules chip row when at least one is
+  // set, so backers see which tier they're in before they pledge.
+  const capCreator = meme.max_backing_sol_creator != null ? Number(meme.max_backing_sol_creator) : null;
+  const capTeam    = meme.max_backing_sol_team    != null ? Number(meme.max_backing_sol_team)    : null;
+  const capPublic  = meme.max_backing_sol_public  != null ? Number(meme.max_backing_sol_public)  : null;
+  const hasTieredCaps = capCreator != null || capTeam != null || capPublic != null;
 
   // Eligibility state: 'open' | 'checking' | 'eligible' | 'not_eligible'
   const [eligibility, setEligibility] = useState<'open' | 'checking' | 'eligible' | 'not_eligible'>(
@@ -450,11 +457,33 @@ const BackingPanel: React.FC<BackingProps> = ({
           )}
         </div>
 
-        {/* Rules chip row — surfaces cap + reservation structure so
-            backers see them upfront, not as error messages. */}
-        {(cap !== null || hasReservedSlots) && (
+        {/* Rules chip row — surfaces caps + reservation structure so
+            backers see them upfront, not as error messages.
+            When tiered caps are set (migration 056), each non-NULL tier
+            renders its own chip so backers see which cap applies to
+            their cohort. The legacy uniform cap (max_backing_sol) is
+            only shown when NO tier-specific caps are set. */}
+        {(cap !== null || hasTieredCaps || hasReservedSlots) && (
           <div className="flex flex-wrap gap-2 text-[10px] font-mono uppercase tracking-widest">
-            {cap !== null && (
+            {hasTieredCaps ? (
+              <>
+                {capCreator !== null && (
+                  <span className="border border-[var(--border)] px-2 py-1 text-[var(--muted)]">
+                    Creator max <span className="text-[var(--foreground)]">{capCreator} {unit}</span>
+                  </span>
+                )}
+                {capTeam !== null && (
+                  <span className="border border-[var(--border)] px-2 py-1 text-[var(--muted)]">
+                    Team max <span className="text-[var(--foreground)]">{capTeam} {unit}</span>
+                  </span>
+                )}
+                {capPublic !== null && (
+                  <span className="border border-[var(--border)] px-2 py-1 text-[var(--muted)]">
+                    Public max <span className="text-[var(--foreground)]">{capPublic} {unit}</span>
+                  </span>
+                )}
+              </>
+            ) : cap !== null && (
               <span className="border border-[var(--border)] px-2 py-1 text-[var(--muted)]">
                 Max <span className="text-[var(--foreground)]">{cap} {unit}</span> per backer
               </span>

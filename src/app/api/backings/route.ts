@@ -300,14 +300,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Team-fairness cap.
-    const cap = meme.max_backing_sol != null ? Number(meme.max_backing_sol) : null;
+    // Determine which tier the backer belongs to BEFORE the cap check
+    // so we can pick the right ceiling (migration 056). Three tiers:
+    //   creator: backer_wallet === meme.creator_wallet
+    //   team:    on backing_allowlist for this meme
+    //   public:  everyone else
+    //
+    // Cap precedence per tier:
+    //   1. tier-specific cap (max_backing_sol_{creator|team|public}) if set
+    //   2. legacy uniform cap (max_backing_sol) if set
+    //   3. uncapped
+    let backerTier: 'creator' | 'team' | 'public';
+    if (backer_wallet === meme.creator_wallet) {
+      backerTier = 'creator';
+    } else {
+      const { data: allowed } = await supabase
+        .from('backing_allowlist')
+        .select('id')
+        .eq('meme_id', meme_id)
+        .eq('wallet', backer_wallet)
+        .maybeSingle();
+      backerTier = allowed ? 'team' : 'public';
+    }
+
+    const tierCapRaw =
+      backerTier === 'creator' ? meme.max_backing_sol_creator
+      : backerTier === 'team'  ? meme.max_backing_sol_team
+      :                          meme.max_backing_sol_public;
+    const legacyCapRaw = meme.max_backing_sol;
+    const capSource: 'tier' | 'legacy' | null =
+      tierCapRaw != null ? 'tier'
+      : legacyCapRaw != null ? 'legacy'
+      : null;
+    const cap = capSource === 'tier' ? Number(tierCapRaw)
+              : capSource === 'legacy' ? Number(legacyCapRaw)
+              : null;
+
     if (cap !== null && amount_sol > cap + 1e-9) {
+      const unit = meme.quote_currency === 'usdc' ? 'USDC' : 'SOL';
+      const tierLabel = capSource === 'tier' ? `${backerTier}-tier cap` : 'per-backer cap';
       return rejectAndRefund(
         poolForRefund, backer_wallet, amount_sol,
-        `This launch has a per-backer ceiling of ${cap} SOL (team-fairness cap). Your backing of ${amount_sol} SOL exceeds it.`,
+        `This launch has a ${tierLabel} of ${cap} ${unit}. Your backing of ${amount_sol} ${unit} exceeds it.`,
         400,
-        { max_backing_sol: cap },
+        { max_backing: cap, cap_tier: backerTier, cap_source: capSource },
       );
     }
 
@@ -337,16 +373,10 @@ export async function POST(request: NextRequest) {
     const reservedSlots = Number(meme.reserved_slots) || 0;
     const openSlots = Math.max(0, totalSlots - reservedSlots);
 
-    let isAllowlisted = true;
-    if (reservedSlots > 0) {
-      const { data: allowed } = await supabase
-        .from('backing_allowlist')
-        .select('id')
-        .eq('meme_id', meme_id)
-        .eq('wallet', backer_wallet)
-        .maybeSingle();
-      isAllowlisted = !!allowed;
-    }
+    // Reuse the tier we already computed for the cap check — creators
+    // and team-tier (allowlisted) backers are treated as allowlisted
+    // here. Public is the only non-allowlisted tier.
+    const isAllowlisted = backerTier !== 'public';
     // Slot assignment respects the open/reserved structure.
     //
     // Allowlisted backers PREFER reserved slots (openSlots+1..totalSlots).

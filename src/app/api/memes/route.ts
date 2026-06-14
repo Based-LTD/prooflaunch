@@ -202,7 +202,13 @@ export async function POST(request: NextRequest) {
       // New slot-based backing system
       total_slots,         // 2-24 backer slots
       min_backing_sol,     // Minimum SOL per backer
-      max_backing_sol,     // Optional per-backer ceiling (Phase 3.5). NULL = uncapped.
+      max_backing_sol,     // Legacy uniform per-backer ceiling. NULL = uncapped (fallback when no tier-specific cap is set).
+      // Tiered caps (migration 056). Each optional. NULL = uncapped
+      // for that tier. The backings API picks the right one based on
+      // backer identity (creator / team / public).
+      max_backing_sol_creator = null,
+      max_backing_sol_team = null,
+      max_backing_sol_public = null,
       reserved_slots = 0,  // Reserved-for-allowlist slots (Phase 7). 0 = fully open.
       // Legacy field (unused, kept for old client compatibility)
       backing_days,
@@ -411,6 +417,25 @@ export async function POST(request: NextRequest) {
           { error: 'max_backing_sol must be a number ≥ min_backing_sol' },
           { status: 400 },
         );
+      }
+    }
+    // Tiered caps (migration 056). Each independent. When set, each
+    // must be a positive number ≥ min_backing_sol. Creator has full
+    // control over the relationship between tiers — we don't enforce
+    // e.g. "creator >= team >= public" because creators may want
+    // exotic shapes.
+    for (const [name, value] of [
+      ['max_backing_sol_creator', max_backing_sol_creator],
+      ['max_backing_sol_team',    max_backing_sol_team],
+      ['max_backing_sol_public',  max_backing_sol_public],
+    ] as const) {
+      if (value !== undefined && value !== null) {
+        if (typeof value !== 'number' || value < min_backing_sol) {
+          return NextResponse.json(
+            { error: `${name} must be a number ≥ min_backing_sol (${min_backing_sol})` },
+            { status: 400 },
+          );
+        }
       }
     }
 
@@ -796,6 +821,11 @@ export async function POST(request: NextRequest) {
         reserved_slots: reservedSlotsNum,
         min_backing_sol,
         max_backing_sol: (typeof max_backing_sol === 'number') ? max_backing_sol : null,
+        // Tiered caps (migration 056). Each persisted only when the
+        // submitter provided a positive number; NULL otherwise.
+        max_backing_sol_creator: (typeof max_backing_sol_creator === 'number') ? max_backing_sol_creator : null,
+        max_backing_sol_team:    (typeof max_backing_sol_team    === 'number') ? max_backing_sol_team    : null,
+        max_backing_sol_public:  (typeof max_backing_sol_public  === 'number') ? max_backing_sol_public  : null,
         backing_goal_sol: min_backing_sol * total_slots, // Minimum possible raise (for compatibility)
         backing_deadline: deadline.toISOString(),
         status: 'backing', // Start in backing phase
