@@ -398,6 +398,22 @@ export default function MemeDetailPage() {
       const sigBytes = await signMessage(new TextEncoder().encode(authMessage));
       const sigB58 = bs58.encode(sigBytes);
 
+      // Self-custody enrollment (feature flag). A second deterministic
+      // signature establishes the encryption key the platform will use
+      // to seal the pool wallet's private key to the creator. The
+      // creator can later sign the same message to recover the key.
+      // Feature-gated so SOL/USDC launches before flag flip are
+      // byte-identical to today.
+      let derivationSigB58: string | undefined;
+      const walletClaimEnabled = process.env.NEXT_PUBLIC_WALLET_CLAIM_ENABLED === 'true'
+        || process.env.NEXT_PUBLIC_WALLET_CLAIM_ENABLED === '1';
+      if (walletClaimEnabled) {
+        setLaunchStatus('Sign to enable self-custody of your dev wallet...');
+        const derivationMessage = 'prooflaunch-decrypt-derivation-v1';
+        const derivationSigBytes = await signMessage(new TextEncoder().encode(derivationMessage));
+        derivationSigB58 = bs58.encode(derivationSigBytes);
+      }
+
       setLaunchStatus('Initiating launch...');
       const res = await fetch('/api/launch', {
         method: 'POST',
@@ -407,6 +423,7 @@ export default function MemeDetailPage() {
           caller_wallet: publicKey.toBase58(),
           signature: sigB58,
           message: authMessage,
+          ...(derivationSigB58 ? { derivation_signature: derivationSigB58 } : {}),
         }),
       });
       const data = await res.json();
@@ -840,6 +857,40 @@ export default function MemeDetailPage() {
             {isCreator && (
               <DashboardCard label="CREATOR CONTROLS">
                 <div className="space-y-3">
+                  {/* Self-custody: backfill entry for legacy launches
+                      (pre-Phase 2) where no sealed key exists yet. The
+                      creator signs the derivation message once; server
+                      seals the existing encrypted_pool_key to it. */}
+                  {isLaunched
+                    && !(meme as { creator_sealed_pool_key_verified_at?: string | null }).creator_sealed_pool_key_verified_at
+                    && process.env.NEXT_PUBLIC_WALLET_CLAIM_ENABLED === 'true' && (
+                    <SelfCustodyBackfillButton memeId={meme.id} />
+                  )}
+
+                  {/* Self-custody claim. Available once the meme is launched
+                      and we have a verified sealed key. */}
+                  {isLaunched && (meme as { creator_sealed_pool_key_verified_at?: string | null }).creator_sealed_pool_key_verified_at && (
+                    <div className="border border-[var(--accent-gold)]/60 bg-[var(--background)] p-3 space-y-2">
+                      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+                        {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
+                          ? '// SELF_CUSTODY · CLAIMED'
+                          : '// SELF_CUSTODY · AVAILABLE'}
+                      </div>
+                      <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                        {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
+                          ? "You've already claimed this pool wallet. Re-decrypt anytime — your wallet's deterministic signature lets you recover the key any time."
+                          : 'Take full custody of this token\'s pool wallet. After confirmation the platform burns its encrypted backup; only your wallet can decrypt it.'}
+                      </p>
+                      <a
+                        href={`/claim/${meme.id}`}
+                        className="block w-full text-center btn-primary text-xs py-2"
+                      >
+                        {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed
+                          ? '[▶] Re-Claim Wallet'
+                          : '[▶] Claim Pool Wallet'}
+                      </a>
+                    </div>
+                  )}
                   {hasPendingBackings && (
                     <div className="border border-[var(--warning)]/60 bg-[var(--background)] p-3 space-y-2">
                       <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning)]">
@@ -935,6 +986,65 @@ export default function MemeDetailPage() {
 }
 
 // Tiny external-link pill used in the LINKS dashboard card.
+// Self-custody backfill — one-click flow for legacy launches (pre-Phase
+// 2). Signs derivation message, posts to /api/wallet-claim/backfill,
+// reloads the meme. After success the regular "Claim Pool Wallet"
+// button appears (gated by creator_sealed_pool_key_verified_at).
+function SelfCustodyBackfillButton({ memeId }: { memeId: string }) {
+  const { publicKey, signMessage } = useWallet();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const enable = async () => {
+    if (!publicKey || !signMessage || busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const ts = Date.now();
+      const authMessage = `claim-backfill:${memeId}:${publicKey.toBase58()}:${ts}`;
+      const authSig = await signMessage(new TextEncoder().encode(authMessage));
+      const derivationSig = await signMessage(new TextEncoder().encode('prooflaunch-decrypt-derivation-v1'));
+      const res = await fetch('/api/wallet-claim/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meme_id: memeId,
+          caller_wallet: publicKey.toBase58(),
+          signature: bs58.encode(authSig),
+          message: authMessage,
+          derivation_signature: bs58.encode(derivationSig),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Backfill failed');
+      setMsg('Self-custody enabled. Refresh the page to see the claim button.');
+    } catch (e) {
+      setMsg(`Error: ${e instanceof Error ? e.message : 'unknown'}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="border border-[var(--border)] bg-[var(--background)] p-3 space-y-2">
+      <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+        {'// SELF_CUSTODY · NOT_YET_ENABLED'}
+      </div>
+      <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+        This meme launched before self-custody support existed. Sign two messages — one to authenticate, one to derive your encryption key — and we&apos;ll re-encrypt the pool wallet to you. After that, claim is identical to a fresh launch.
+      </p>
+      <button onClick={enable} disabled={busy} className="btn-primary w-full text-xs py-2">
+        {busy ? 'Enabling…' : '[▶] Enable Self-Custody'}
+      </button>
+      {msg && (
+        <div className="text-[10px] font-mono leading-snug">
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExternalChip({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a

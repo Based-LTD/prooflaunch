@@ -75,7 +75,7 @@ export async function GET(
     // encrypted_buyback_bot_key, or keycard_admin_url to this select.
     const { data: poolFields } = await supabase
       .from('memes')
-      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address, fee_distribution_mode, fee_preset, fee_backer_pct, fee_holder_rewards_pct, fee_platform_pct, fee_burn_pct, fee_charity_pct, fee_charity_wallet, buyback_bot_enabled, buyback_bot_action, buyback_bot_wallet, buyback_bot_fee_pct, buyback_bot_last_run_at, buyback_bot_total_sol_spent, buyback_bot_total_tokens_acted, max_backing_sol, reserved_slots, keycard_gate_id, keycard_gate_url, keycard_synced_at, github, banner_url, launch_platform, launchlab_pool_address, dbc_pool_address, quote_currency')
+      .select('pool_wallet, pool_token_balance, creator_subescrow_pubkey, mint_address, fee_distribution_mode, fee_preset, fee_backer_pct, fee_holder_rewards_pct, fee_platform_pct, fee_burn_pct, fee_charity_pct, fee_charity_wallet, buyback_bot_enabled, buyback_bot_action, buyback_bot_wallet, buyback_bot_fee_pct, buyback_bot_last_run_at, buyback_bot_total_sol_spent, buyback_bot_total_tokens_acted, max_backing_sol, reserved_slots, keycard_gate_id, keycard_gate_url, keycard_synced_at, github, banner_url, launch_platform, launchlab_pool_address, dbc_pool_address, quote_currency, pool_wallet_claimed, pool_wallet_claimed_at, creator_sealed_pool_key_verified_at')
       .eq('id', id)
       .single();
 
@@ -279,6 +279,10 @@ export async function GET(
         // memes so the client's branching logic falls through to the
         // existing SOL backing path without explicit checks.
         quote_currency: poolFields?.quote_currency ?? 'sol',
+        // Wallet claim status — Phase 3 self-custody flow.
+        pool_wallet_claimed: !!poolFields?.pool_wallet_claimed,
+        pool_wallet_claimed_at: poolFields?.pool_wallet_claimed_at ?? null,
+        creator_sealed_pool_key_verified_at: poolFields?.creator_sealed_pool_key_verified_at ?? null,
         vault_lamports: vaultLamports,
         backings: enrichedBackings,
       },

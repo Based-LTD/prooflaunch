@@ -76,6 +76,17 @@ export const MemeIdentityBar: React.FC<Props> = ({
             <span className={`shrink-0 text-[9px] font-mono uppercase tracking-widest border px-1.5 py-0.5 ${statusBadge.cls}`}>
               {statusBadge.label}
             </span>
+            {/* Dev self-custody badge — shown once creator has confirmed
+                claim of the pool wallet. Public signal that the dev has
+                full control. */}
+            {(meme as { pool_wallet_claimed?: boolean }).pool_wallet_claimed && (
+              <span
+                className="shrink-0 text-[9px] font-mono uppercase tracking-widest border border-[var(--accent-gold)] text-[var(--accent-gold)] bg-[var(--accent-gold)]/5 px-1.5 py-0.5"
+                title="The creator has taken self-custody of this token's pool wallet. The platform no longer holds the keys."
+              >
+                🔒 DEV SELF-CUSTODY
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mt-1">
             <span>by</span>

@@ -63,3 +63,5 @@ meteora-prod-e2e.*.json
 # the wallets and delete the file when done; NEVER commit.
 usdc-e2e-keys.*.json
 *-e2e-keys.*.json
+usdc-bot-key.*.json
+*-bot-key.*.json
