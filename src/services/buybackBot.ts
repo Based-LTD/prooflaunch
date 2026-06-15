@@ -326,10 +326,27 @@ export async function executeBuybackBot(
     const { quoteInputMint } = await import('@/lib/quoteAsset');
     const inputMint = quoteInputMint(qc);
     const quoteUrl = `${JUP_QUOTE_URL}?inputMint=${inputMint}&outputMint=${m.mint_address}&amount=${usableLamports}&slippageBps=${SLIPPAGE_BPS}`;
-    const qres = await fetch(quoteUrl);
-    if (!qres.ok) throw new Error(`jupiter quote ${qres.status}: ${await qres.text()}`);
-    const quote = await qres.json();
-    if (quote.error) throw new Error(`jupiter quote: ${quote.error}`);
+    // Jupiter's index lags reality for ~30-60min after a fresh pump.fun
+    // launch — it intermittently returns TOKEN_NOT_TRADABLE for a token
+    // it can actually route through the bonding curve. Retry that
+    // specific error a few times before failing the bot; other errors
+    // (network, server) propagate immediately as before.
+    let quote: { error?: string; contextSlot?: number; context_slot?: number; [k: string]: unknown } | null = null;
+    const MAX_QUOTE_ATTEMPTS = 4;
+    for (let attempt = 1; attempt <= MAX_QUOTE_ATTEMPTS; attempt++) {
+      const qres = await fetch(quoteUrl);
+      const bodyText = await qres.text();
+      if (qres.ok) {
+        quote = JSON.parse(bodyText);
+        if (quote && !quote.error) break;
+      }
+      const transient = /TOKEN_NOT_TRADABLE|not tradable/i.test(bodyText);
+      if (!transient || attempt === MAX_QUOTE_ATTEMPTS) {
+        throw new Error(`jupiter quote ${qres.status}: ${bodyText}`);
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    if (!quote) throw new Error('jupiter quote: no quote returned');
     // SOL-031: reject the quote if its contextSlot lags the current slot.
     // Stale routes ship worse fills or trigger slippage failures at swap time.
     await assertQuoteFresh(conn, quote);

@@ -43,7 +43,12 @@ function selfOrigin(request: NextRequest): string {
 // Dispatch one fire-and-forget worker invocation. Each child gets its
 // own 60s budget. We pass the cron secret as the Bearer token so the
 // child's `authorizeCron()` accepts it.
-async function dispatchBot(origin: string, botId: string): Promise<{ botId: string; dispatched: boolean; error?: string }> {
+//
+// Returns the actual HTTP outcome so callers in `after()` can log
+// failures — a silent dispatcher led to a ~30min debugging tangent on
+// 2026-06-15 when a CRON_SECRET drift caused every child to 401 while
+// the parent kept reporting "dispatched: N". Always log non-ok results.
+async function dispatchBot(origin: string, botId: string): Promise<{ botId: string; dispatched: boolean; status?: number; error?: string }> {
   const secret = requireCronSecret();
   try {
     const res = await fetch(`${origin}/api/buyback/process`, {
@@ -54,10 +59,33 @@ async function dispatchBot(origin: string, botId: string): Promise<{ botId: stri
       },
       body: JSON.stringify({ bot_id: botId }),
     });
-    return { botId, dispatched: res.ok };
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`[buyback/process] dispatch FAILED bot=${botId} status=${res.status} body=${body.slice(0, 300)}`);
+      return { botId, dispatched: false, status: res.status, error: body.slice(0, 300) };
+    }
+    return { botId, dispatched: true, status: res.status };
   } catch (e) {
-    return { botId, dispatched: false, error: e instanceof Error ? e.message : String(e) };
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[buyback/process] dispatch THREW bot=${botId} error=${msg}`);
+    return { botId, dispatched: false, error: msg };
   }
+}
+
+// Run a batch of dispatches and summarize. Used inside `after()` so the
+// per-bot HTTP outcomes show up in logs even though the parent response
+// has already been sent.
+async function runDispatches(origin: string, botIds: string[], context: string): Promise<void> {
+  const CONCURRENCY = 10;
+  const results: Array<{ botId: string; dispatched: boolean; status?: number; error?: string }> = [];
+  for (let i = 0; i < botIds.length; i += CONCURRENCY) {
+    const slice = botIds.slice(i, i + CONCURRENCY);
+    const batch = await Promise.all(slice.map((id) => dispatchBot(origin, id)));
+    results.push(...batch);
+  }
+  const ok = results.filter((r) => r.dispatched).length;
+  const failed = results.length - ok;
+  console.log(`[buyback/process] ${context}: dispatched=${ok}/${results.length} failed=${failed}`);
 }
 
 export async function GET(request: NextRequest) {
@@ -86,24 +114,17 @@ export async function GET(request: NextRequest) {
 
     // Fan out via `after()` — Next.js' supported way to keep async work
     // alive past the response. Each dispatch is independent; one failing
-    // doesn't cascade. The coordinator returns ~immediately.
-    after(async () => {
-      // Parallelize the dispatches but bound concurrency so we don't
-      // hit Vercel's per-deployment concurrent-invocation limit at high
-      // scale. 10 at a time is a safe default; each child finishes in
-      // 5-15s typically.
-      const CONCURRENCY = 10;
-      for (let i = 0; i < botIds.length; i += CONCURRENCY) {
-        const slice = botIds.slice(i, i + CONCURRENCY);
-        await Promise.all(slice.map((id) => dispatchBot(origin, id)));
-      }
-    });
+    // doesn't cascade. The coordinator returns ~immediately, so we can
+    // only report what we QUEUED — not what succeeded. Failures land in
+    // Vercel logs via dispatchBot's console.error.
+    after(() => runDispatches(origin, botIds, 'GET fan-out'));
 
     return NextResponse.json({
       success: true,
-      dispatched: botIds.length,
+      queued: botIds.length,
       bots: botIds,
       mode: 'fanout',
+      note: 'queued is fire-and-forget; check logs for per-bot dispatch outcomes',
     });
   } catch (e) {
     console.error('[buyback/process] top-level error:', e);
@@ -144,14 +165,13 @@ export async function POST(request: NextRequest) {
     }
     const botIds = bots.map((b) => b.id as string);
     const origin = selfOrigin(request);
-    after(async () => {
-      const CONCURRENCY = 10;
-      for (let i = 0; i < botIds.length; i += CONCURRENCY) {
-        const slice = botIds.slice(i, i + CONCURRENCY);
-        await Promise.all(slice.map((id) => dispatchBot(origin, id)));
-      }
+    after(() => runDispatches(origin, botIds, `POST meme=${memeId}`));
+    return NextResponse.json({
+      memeId,
+      queued: botIds.length,
+      bots: botIds,
+      note: 'queued is fire-and-forget; check logs for per-bot dispatch outcomes',
     });
-    return NextResponse.json({ memeId, dispatched: botIds.length, bots: botIds });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'unknown error' },
