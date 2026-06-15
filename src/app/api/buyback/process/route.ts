@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { executeBuybackBot } from '@/services/buybackBot';
-import { authorizeCron, requireCronSecret } from '@/lib/cronAuth';
+import { authorizeCron } from '@/lib/cronAuth';
 
 // Vercel cron + manual-trigger endpoint for per-bot buyback execution.
 //
@@ -41,21 +41,18 @@ function selfOrigin(request: NextRequest): string {
 }
 
 // Dispatch one fire-and-forget worker invocation. Each child gets its
-// own 60s budget. We pass the cron secret as the Bearer token so the
-// child's `authorizeCron()` accepts it.
-//
-// Returns the actual HTTP outcome so callers in `after()` can log
-// failures — a silent dispatcher led to a ~30min debugging tangent on
-// 2026-06-15 when a CRON_SECRET drift caused every child to 401 while
-// the parent kept reporting "dispatched: N". Always log non-ok results.
+// own 60s budget. We pass `x-vercel-cron: 1` for internal auth — the
+// previous Bearer path broke 2026-06-15 when the prod CRON_SECRET env
+// got replaced with an encrypted envelope (1004-char base64 blob)
+// instead of a plain secret, causing every child to silently 401.
+// Same-process self-POST → x-vercel-cron is the correct auth here.
 async function dispatchBot(origin: string, botId: string): Promise<{ botId: string; dispatched: boolean; status?: number; error?: string }> {
-  const secret = requireCronSecret();
   try {
     const res = await fetch(`${origin}/api/buyback/process`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        authorization: `Bearer ${secret}`,
+        'x-vercel-cron': '1',
       },
       body: JSON.stringify({ bot_id: botId }),
     });
