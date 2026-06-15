@@ -50,15 +50,41 @@ jobs:
             -H "x-vercel-cron: 1" --max-time 110 \
             -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 800
 
-      - name: buyback/process (every 5 min, offset by ~2 min from fees)
+      - name: buyback/process (enumerate live bots and fire each directly)
         run: |
-          # Vercel schedule is `2-57/5` — fire on :02 :07 :12 .... Since GH
-          # cron is locked to `*/5` (no offset mid-job), we just always fire
-          # after fees in the same tick; cycle is small enough that the 30s
-          # delay doesn't matter.
-          curl -sS -X GET "https://prooflaunch.fun/api/buyback/process" \
-            -H "x-vercel-cron: 1" --max-time 110 \
-            -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 1200
+          # The deployed app's fan-out via after()+self-POST is silently
+          # broken (2026-06-15) — bots queued but never executed. Workaround:
+          # GET the bot list, then POST each bot_id externally. Direct POST
+          # path works reliably via x-vercel-cron header.
+          set -e
+          echo "--- step 1: enumerate live bots ---"
+          RAW=$(curl -sS -X GET "https://prooflaunch.fun/api/buyback/process" \
+            -H "x-vercel-cron: 1" --max-time 30)
+          echo "$RAW" | head -c 600; echo
+          BOT_IDS=$(echo "$RAW" | python3 -c "import json,sys;print(' '.join(json.load(sys.stdin).get('bots',[])))")
+          if [ -z "$BOT_IDS" ]; then
+            echo "no live bots — nothing to do"
+            exit 0
+          fi
+          COUNT=$(echo "$BOT_IDS" | wc -w | tr -d ' ')
+          echo "--- step 2: firing $COUNT bots in parallel (max 5 concurrent) ---"
+          # Bound concurrency to 5 to avoid blasting Vercel; each bot
+          # finishes in 5-30s typically.
+          printf '%s\n' $BOT_IDS | xargs -P 5 -I {} sh -c '
+            res=$(curl -sS -X POST "https://prooflaunch.fun/api/buyback/process" \
+              -H "x-vercel-cron: 1" -H "Content-Type: application/json" \
+              -d "{\"bot_id\":\"{}\"}" --max-time 120 || echo "{\"ok\":false,\"error\":\"curl_failed\"}")
+            ok=$(echo "$res" | python3 -c "import json,sys;print(json.load(sys.stdin).get(\"ok\",False))")
+            action=$(echo "$res" | python3 -c "import json,sys;print(json.load(sys.stdin).get(\"action\",\"?\"))")
+            symbol=$(echo "$res" | python3 -c "import json,sys;print(json.load(sys.stdin).get(\"symbol\",\"?\"))")
+            if [ "$ok" = "True" ]; then
+              echo "OK  {} [$symbol/$action]"
+            else
+              err=$(echo "$res" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get(\"error\",\"?\")[:120])")
+              echo "ERR {} [$symbol/$action]: $err"
+            fi
+          '
+          echo "--- buyback fan-out complete ---"
 
       - name: reconcile (every 15 min — only on :00, :15, :30, :45)
         if: ${{ steps.now.outputs.minute_mod_5 == '0' }}
