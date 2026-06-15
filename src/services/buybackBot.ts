@@ -67,7 +67,17 @@ const SLIPPAGE_BPS = 2000;                     // 20% — meme tokens are thin
 const MAX_RECIPIENTS_PER_TICK = 100;
 // Per-recipient minimum so we don't burn 5k lamports of gas to send
 // somebody 100 lamports of dust.
-const MIN_SOL_RECIPIENT_LAMPORTS = 50_000;     // 0.00005 SOL minimum
+// Per-recipient floor. Solana rejects transfers that leave the
+// destination account below rent-exempt minimum (890,880 lamports for
+// a 0-byte system account). If the destination doesn't yet exist on
+// chain, the transfer must fund it past rent-exempt or the whole tx
+// fails (InsufficientFundsForRent) — taking the entire batch (typically
+// 18 recipients) down with it. Pre-2026-06-15 this was 50_000 which
+// fell well below rent-exempt; partial bot runs were the visible
+// symptom. 1_000_000 (0.001 SOL) sits comfortably above rent-exempt +
+// the tx fee floor; recipients whose share is smaller get skipped as
+// dust (the value would have been less than the tx fee anyway).
+const MIN_SOL_RECIPIENT_LAMPORTS = 1_000_000;  // 0.001 SOL (rent-exempt 890_880 + buffer)
 const MIN_TOKEN_RECIPIENT_RAW = BigInt(1);
 
 // Wallets explicitly EXCLUDED from holder distributions. AMM pools, BC
