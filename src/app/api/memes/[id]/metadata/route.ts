@@ -32,9 +32,13 @@ import { verifySignedAuthMessage } from '@/lib/crypto';
  *
  * Restrictions:
  *   - Only the creator can call this
- *   - Meme must be in `backing` status (post-launch metadata is
- *     fixed on-chain anyway — editing the DB row wouldn't change
- *     what wallets/explorers fetched at launch time)
+ *
+ * Post-launch note: name, symbol, image_url are baked into on-chain
+ * pump.fun / meteora metadata at launch and are explicitly NOT in this
+ * endpoint. The fields it does allow (description, socials, banner_url)
+ * are display-only DB fields that pump.fun + Dex Screener style
+ * launchpads keep editable for the token's lifetime. We follow the
+ * same pattern.
  */
 
 const URL_PATTERN = /^https?:\/\/[^\s]+$/;
@@ -209,13 +213,10 @@ export async function PATCH(
     if (meme.creator_wallet !== caller_wallet) {
       return NextResponse.json({ error: 'Only the meme creator can edit metadata' }, { status: 403 });
     }
-
-    if (meme.status !== 'backing') {
-      return NextResponse.json(
-        { error: `Metadata can only be edited during the backing phase (current status: ${meme.status})` },
-        { status: 400 },
-      );
-    }
+    // Status gate intentionally removed — these are display-only DB
+    // fields, not on-chain metadata. Creators can refine description,
+    // socials and banner for the lifetime of the launch (matches Dex
+    // Screener / pump.fun / Birdeye pattern).
 
     const { error: updateErr, data: updated } = await supabase
       .from('memes')

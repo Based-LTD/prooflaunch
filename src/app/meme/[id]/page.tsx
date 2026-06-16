@@ -1062,9 +1062,7 @@ function CreatorControlsCard(props: {
           maxBackingSol={meme.max_backing_sol ?? null}
           reservedSlots={meme.reserved_slots ?? 0}
         />
-        {meme.status === 'backing' && (
-          <EditMetadataPanel meme={meme} onSaved={refetchMeme} />
-        )}
+        <EditMetadataPanel meme={meme} onSaved={refetchMeme} />
         {/* BackerVaultManager (Keycard admin) now lives in the left
             column under the bots/backers, alongside the public
             BackerLoungePanel — they're mutually exclusive based on

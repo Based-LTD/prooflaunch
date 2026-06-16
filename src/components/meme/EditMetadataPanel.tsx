@@ -1,9 +1,11 @@
 'use client';
 
-// Creator-only inline editor for soft meme metadata while a launch is
-// still in `backing` status. Reuses the same URL-shape rules as the
-// /submit form and the /api/memes/[id]/metadata PATCH endpoint so
-// surface-level validation matches what the server enforces.
+// Creator-only inline editor for soft meme metadata. Available for the
+// lifetime of a launch (backing, funded, live) — same pattern Dex
+// Screener / pump.fun use for description + socials + banner. Reuses
+// the same URL-shape rules as the /submit form and the
+// /api/memes/[id]/metadata PATCH endpoint so surface-level validation
+// matches what the server enforces.
 //
 // Editable: socials (X / TG / DC / Web / GitHub) + description +
 // banner. Token name/symbol/icon are explicitly NOT editable from
@@ -205,7 +207,7 @@ export function EditMetadataPanel({ meme, onSaved }: Props) {
       </div>
 
       <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
-        Edit while in backing phase. Name / symbol / icon are locked.
+        Edit description, socials, and banner anytime. Name / symbol / icon are locked at launch.
       </p>
 
       <div className="space-y-2">
