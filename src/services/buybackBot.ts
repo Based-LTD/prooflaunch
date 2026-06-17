@@ -13,6 +13,12 @@ import {
   getMint,
 } from '@solana/spl-token';
 import bs58 from 'bs58';
+import BN from 'bn.js';
+import {
+  PumpAmmSdk,
+  OnlinePumpAmmSdk,
+  canonicalPumpPoolPda,
+} from '@pump-fun/pump-swap-sdk';
 import { decryptPrivateKey } from '@/lib/crypto';
 import { KNOWN_PDA_PROGRAMS } from '@/lib/holderFilter';
 import { simulateAndSend, adaptivePriorityFeeIx, assertQuoteFresh } from '@/lib/rpcHelpers';
@@ -185,6 +191,55 @@ interface BotRow {
   expires_at: string | null;
 }
 
+// Direct PumpSwap AMM swap (SOL → token) — Jupiter-independent.
+//
+// Used as a fallback when Jupiter's quote or swap endpoints return
+// NO_ROUTES_FOUND / MARKET_NOT_FOUND, which happens for 5min-multi-hour
+// windows after a token graduates from pump.fun's bonding curve to
+// PumpSwap. Jupiter's quote and swap sub-services warm up at different
+// rates and can be stuck for the same `ammKey` for a long time.
+// PumpSwap-direct knows the pool by deterministic PDA, builds the buy
+// instructions itself, and signs/sends — no aggregator hop.
+//
+// Returns the swap tx signature on success, or { error } if the pool
+// doesn't exist (token still on bonding curve) or the swap simulates
+// invalid (price moved past slippage, etc.).
+async function swapViaPumpSwap(
+  conn: Connection,
+  botKp: Keypair,
+  mintAddress: string,
+  lamports: number,
+): Promise<{ ok: true; sig: string } | { ok: false; error: string }> {
+  try {
+    const mint = new PublicKey(mintAddress);
+    const poolKey = canonicalPumpPoolPda(mint);
+    const poolInfo = await conn.getAccountInfo(poolKey);
+    if (!poolInfo) {
+      return { ok: false, error: 'pumpswap pool not found (token not graduated yet)' };
+    }
+    const onlineSdk = new OnlinePumpAmmSdk(conn);
+    const offlineSdk = new PumpAmmSdk();
+    const state = await onlineSdk.swapSolanaState(poolKey, botKp.publicKey);
+    // SLIPPAGE_BPS is expressed in basis points; PumpSwap SDK takes a
+    // 0..1 fraction. 2000 bps → 0.20.
+    const slippage = SLIPPAGE_BPS / 10_000;
+    const ixs = await offlineSdk.buyQuoteInput(state, new BN(lamports), slippage);
+    const tx = new Transaction();
+    tx.add(
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000_000 }),
+      ...ixs,
+    );
+    tx.feePayer = botKp.publicKey;
+    tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
+    const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: 'pumpswap-buy' });
+    await conn.confirmTransaction(sig, 'confirmed');
+    return { ok: true, sig };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 // Phase B — execute one specific bot from a meme's stack. Replaces the
 // single-bot-per-meme executor; each row in meme_bots gets its own
 // independent run, wallet, audit trail.
@@ -331,7 +386,12 @@ export async function executeBuybackBot(
   let actualTokensRaw: bigint;
   let tokenProgramId: PublicKey;
   let tokenDecimals: number;
-  let swapTx: string;
+  // Initialized inside the try block (Jupiter path) or the catch block
+  // (PumpSwap fallback path). Either way the success path assigns it
+  // before downstream code uses it; we explicitly type as
+  // string | undefined so TS can flow-check the "did the swap happen"
+  // null guard below.
+  let swapTx: string | undefined;
   try {
     const { quoteInputMint } = await import('@/lib/quoteAsset');
     const inputMint = quoteInputMint(qc);
@@ -413,15 +473,59 @@ export async function executeBuybackBot(
     const ataBal = await conn.getTokenAccountBalance(ata);
     actualTokensRaw = BigInt(ataBal.value.amount);
     if (actualTokensRaw === BigInt(0)) throw new Error('swap confirmed but ATA balance is 0');
-  } catch (e) {
-    await supabase.from('meme_buybacks').insert({
-      meme_id: m.id, bot_id: b.id, action, sol_spent_lamports: usableLamports.toString(),
-      tokens_bought_raw: '0', tokens_acted_raw: '0',
-      status: 'failed', error: `swap: ${e instanceof Error ? e.message : String(e)}`,
-    });
-    await supabase.from('meme_bots').update({ last_run_at: new Date().toISOString() }).eq('id', b.id);
-    return { ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, action, error: `swap failed: ${e instanceof Error ? e.message : String(e)}` };
+  } catch (jupiterErr) {
+    const errMsg = jupiterErr instanceof Error ? jupiterErr.message : String(jupiterErr);
+    // PumpSwap direct fallback. If Jupiter exhausted retries on a
+    // route/market lookup error AND we're on the SOL quote path AND
+    // the token has a PumpSwap pool (graduated), swap directly. This
+    // makes graduated tokens immune to Jupiter index outages.
+    const jupiterStuck = /NO_ROUTES_FOUND|MARKET_NOT_FOUND|No routes found|Market .* not found/i.test(errMsg);
+    let fallbackErr: string | null = null;
+    if (jupiterStuck && qc === 'sol') {
+      console.log(`[bot ${b.id}] Jupiter exhausted (${errMsg.slice(0, 100)}). Trying PumpSwap direct.`);
+      const fb = await swapViaPumpSwap(conn, botKp, m.mint_address, usableLamports);
+      if (fb.ok) {
+        swapTx = fb.sig;
+        // Re-read mint info + ATA balance after the successful direct swap.
+        try {
+          const mintPub = new PublicKey(m.mint_address);
+          const mintAcc = await conn.getAccountInfo(mintPub);
+          if (!mintAcc) throw new Error('mint account not found after swap');
+          tokenProgramId = mintAcc.owner.equals(TOKEN_2022_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+          const mintInfo = await getMint(conn, mintPub, 'confirmed', tokenProgramId);
+          tokenDecimals = mintInfo.decimals;
+          const ata = getAssociatedTokenAddressSync(mintPub, botKp.publicKey, false, tokenProgramId);
+          const ataBal = await conn.getTokenAccountBalance(ata);
+          actualTokensRaw = BigInt(ataBal.value.amount);
+          if (actualTokensRaw === BigInt(0)) throw new Error('pumpswap swap confirmed but ATA balance is 0');
+        } catch (postSwapErr) {
+          fallbackErr = `pumpswap post-swap: ${postSwapErr instanceof Error ? postSwapErr.message : String(postSwapErr)}`;
+        }
+      } else {
+        fallbackErr = `pumpswap fallback: ${fb.error}`;
+      }
+    }
+    // Bail if either the swap itself failed OR the post-swap state
+    // read failed. Otherwise the four typed locals would be partially
+    // assigned and downstream burn/distribute logic would crash.
+    if (!swapTx || fallbackErr) {
+      const finalErr = fallbackErr ? `jupiter: ${errMsg.slice(0, 200)} | ${fallbackErr.slice(0, 200)}` : `jupiter: ${errMsg}`;
+      await supabase.from('meme_buybacks').insert({
+        meme_id: m.id, bot_id: b.id, action, sol_spent_lamports: usableLamports.toString(),
+        tokens_bought_raw: '0', tokens_acted_raw: '0',
+        status: 'failed', error: `swap: ${finalErr}`,
+      });
+      await supabase.from('meme_bots').update({ last_run_at: new Date().toISOString() }).eq('id', b.id);
+      return { ok: false, botId: b.id, memeId: m.id, symbol: m.symbol, action, error: `swap failed: ${finalErr}` };
+    }
   }
+  // After the catch block: TS can't prove the locals are assigned via
+  // the fallback path. We just returned if anything's missing, so a
+  // non-null assertion is safe here.
+  actualTokensRaw = actualTokensRaw!;
+  tokenProgramId = tokenProgramId!;
+  tokenDecimals = tokenDecimals!;
+  swapTx = swapTx!;
 
   // Dispatch the action on the bought tokens.
   if (action === 'burn') {
