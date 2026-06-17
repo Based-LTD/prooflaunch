@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const memeId = searchParams.get('meme_id');
-    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '5', 10), 1), 50);
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '5', 10), 1), 100);
     if (!memeId) return NextResponse.json({ error: 'meme_id required' }, { status: 400 });
 
     // Failed runs are usually transient platform issues (Jupiter index

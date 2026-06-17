@@ -106,9 +106,11 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
     let cancelled = false;
     (async () => {
       try {
-        // Pull more rows when there are multiple bots so each bot can
-        // show a couple of its own recent runs.
-        const limit = Math.min(5 * Math.max(1, bots.length), 30);
+        // Pull deep enough to cover several days of activity per bot —
+        // a multi-bot stack can churn 20+ rows/day, and with `failed`
+        // rows now filtered out the headline burns (which the brand
+        // story relies on) need to remain visible across the tabs.
+        const limit = 50;
         const r = await fetch(`/api/buyback/recent?meme_id=${meme.id}&limit=${limit}`);
         if (!r.ok) { setLoading(false); return; }
         const j = await r.json();
@@ -275,7 +277,7 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
             <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
               Recent runs
             </div>
-            {botRuns.slice(0, 5).map((r, i) => {
+            {botRuns.slice(0, 10).map((r, i) => {
               const sol = Number(r.sol_spent_lamports) / 1e9;
               const tx = r.action_tx || r.swap_tx;
               return (
