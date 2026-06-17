@@ -3,9 +3,24 @@ import { distributeFromPool, refundFromPool } from './pumpfun';
 import { createLaunchLogger, type LaunchLogger } from '@/lib/launchLog';
 import { Connection, PublicKey, Keypair, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { OnlinePumpSdk } from '@pump-fun/pump-sdk';
+import {
+  getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotentInstruction,
+  createCloseAccountInstruction,
+  TOKEN_PROGRAM_ID,
+  NATIVE_MINT,
+} from '@solana/spl-token';
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
 import { simulateAndSend } from '@/lib/rpcHelpers';
+
+// PumpSwap AMM program. Used both for fee-collection from graduated
+// tokens' creator vault and for the LP-feed bot action elsewhere.
+const PUMP_AMM_PROGRAM_ID = new PublicKey('pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA');
+// Rent-exempt for a 0-byte account, used to subtract rent from the
+// PumpSwap creator_vault auth PDA's native SOL balance when figuring
+// out how much is actually drainable.
+const RENT_EXEMPT_SYSTEM_ACCOUNT_LAMPORTS = 890_880;
 import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 
 // Shared, idempotent pooled-token distribution.
@@ -317,8 +332,30 @@ export async function collectAndCreditFees(
   const subBalancePre = await conn.getBalance(subKp.publicKey);
   const ORPHANED_FLOOR = COLLECT_THRESHOLD_LAMPORTS; // same threshold
 
-  if (vaultLamports < COLLECT_THRESHOLD_LAMPORTS && subBalancePre < ORPHANED_FLOOR) {
-    return { ok: true, skipped: `vault ${vaultLamports} lamports below threshold ${COLLECT_THRESHOLD_LAMPORTS}` };
+  // Probe the AMM-side surfaces and sub-escrow's wSOL ATA so the early
+  // exit considers ALL drainable lamports, not just BC vault + native
+  // SOL on sub-escrow. Without this, a graduated token whose BC vault
+  // is empty would short-circuit here even when its AMM vault holds
+  // SOL — exactly the bug that let GO's PumpSwap fees pile up to ~4 SOL.
+  const [ammAuth] = PublicKey.findProgramAddressSync(
+    [Buffer.from('creator_vault'), subKp.publicKey.toBuffer()],
+    PUMP_AMM_PROGRAM_ID,
+  );
+  const ammWsolAtaProbe = getAssociatedTokenAddressSync(NATIVE_MINT, ammAuth, true);
+  const subWsolAtaProbe = getAssociatedTokenAddressSync(NATIVE_MINT, subKp.publicKey, true);
+  const [ammAuthBalProbe, ammWsolInfoProbe, subWsolInfoProbe] = await Promise.all([
+    conn.getBalance(ammAuth),
+    conn.getAccountInfo(ammWsolAtaProbe),
+    conn.getAccountInfo(subWsolAtaProbe),
+  ]);
+  const ammAuthFeesProbe = Math.max(0, ammAuthBalProbe - RENT_EXEMPT_SYSTEM_ACCOUNT_LAMPORTS);
+  const ammWsolBalProbe = ammWsolInfoProbe ? Number(ammWsolInfoProbe.data.readBigUInt64LE(64)) : 0;
+  const subWsolBalProbe = subWsolInfoProbe ? Number(subWsolInfoProbe.data.readBigUInt64LE(64)) : 0;
+  const ammDrainableProbe = ammAuthFeesProbe + ammWsolBalProbe;
+  const totalDrainable = vaultLamports + subBalancePre + ammDrainableProbe + subWsolBalProbe;
+
+  if (totalDrainable < COLLECT_THRESHOLD_LAMPORTS) {
+    return { ok: true, skipped: `total drainable ${totalDrainable} lamports across all surfaces below threshold ${COLLECT_THRESHOLD_LAMPORTS}` };
   }
 
   // Step A: collect_creator_fee — ONLY if there's something in the vault.
@@ -340,6 +377,79 @@ export async function collectAndCreditFees(
     }
   } else {
     log('reconcile_recovered', { detail: { stage: 'recovery_drain', subBalancePre, vaultLamports, note: 'orphaned sub-escrow SOL from prior run, draining without re-collect' } });
+  }
+
+  // Step A2: PumpSwap creator vault collect. Tokens that graduated from
+  // pump.fun's bonding curve continue earning creator-fees, but the new
+  // fees flow to a SEPARATE vault under the PumpSwap AMM program. Until
+  // 2026-06-16 we never collected from this — GO's first day produced
+  // ~4.3 SOL that piled up here and on the sub-escrow's wSOL ATA before
+  // a one-shot script recovered it. This step prevents that drift from
+  // ever recurring. The SDK call drains both the auth-PDA native SOL
+  // and the auth-PDA-owned wSOL ATA in one tx, into the sub-escrow's
+  // wSOL ATA (which the close step below unwraps to native SOL).
+  let ammCollectSig: string | null = null;
+  let ammCollectedLamports = 0;
+  try {
+    const { OnlinePumpAmmSdk, PumpAmmSdk } = await import('@pump-fun/pump-swap-sdk');
+    const ammSdk = new OnlinePumpAmmSdk(conn);
+    const offlineAmmSdk = new PumpAmmSdk();
+
+    const [ammAuth] = PublicKey.findProgramAddressSync(
+      [Buffer.from('creator_vault'), subKp.publicKey.toBuffer()],
+      PUMP_AMM_PROGRAM_ID,
+    );
+    const ammWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, ammAuth, true);
+    const [ammAuthBal, ammWsolInfo] = await Promise.all([
+      conn.getBalance(ammAuth),
+      conn.getAccountInfo(ammWsolAta),
+    ]);
+    const ammAuthFees = Math.max(0, ammAuthBal - RENT_EXEMPT_SYSTEM_ACCOUNT_LAMPORTS);
+    const ammWsolBal = ammWsolInfo ? Number(ammWsolInfo.data.readBigUInt64LE(64)) : 0;
+    ammCollectedLamports = ammAuthFees + ammWsolBal;
+
+    if (ammCollectedLamports >= COLLECT_THRESHOLD_LAMPORTS) {
+      const subWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, subKp.publicKey, true);
+      const state = await ammSdk.collectCoinCreatorFeeSolanaState(subKp.publicKey, subWsolAta);
+      const collectIxs = await offlineAmmSdk.collectCoinCreatorFee(state, escrow.publicKey);
+      const tx = new Transaction();
+      tx.add(createAssociatedTokenAccountIdempotentInstruction(
+        escrow.publicKey, subWsolAta, subKp.publicKey, NATIVE_MINT, TOKEN_PROGRAM_ID,
+      ));
+      tx.add(...collectIxs);
+      tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+      tx.feePayer = escrow.publicKey;
+      ammCollectSig = await simulateAndSend(conn, tx, [escrow], { label: 'pump-amm-creator-collect' });
+      await conn.confirmTransaction(ammCollectSig, 'confirmed');
+      log('reconcile_recovered', { detail: { stage: 'pump_amm_collect', sig: ammCollectSig, ammCollectedLamports } });
+    }
+  } catch (e) {
+    // Don't fail the whole pipeline — BC collect may have succeeded and
+    // we want that SOL to flow through. The next cron tick retries the
+    // AMM collect.
+    log('reconcile_error', { detail: { stage: 'pump_amm_collect_failed', err: e instanceof Error ? e.message : String(e) } });
+  }
+
+  // Step A3: Close sub-escrow's wSOL ATA. Catches wrapped SOL left over
+  // from BOTH the BC collect and the AMM collect just done. Without this,
+  // wSOL accumulates on the sub-escrow's ATA forever — the drain below
+  // reads native-SOL balance and is blind to wSOL. (How we found this:
+  // 2.5 SOL of orphaned wSOL on GO's sub-escrow 2026-06-16.)
+  try {
+    const subWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, subKp.publicKey, true);
+    const subWsolInfo = await conn.getAccountInfo(subWsolAta);
+    if (subWsolInfo) {
+      const closeTx = new Transaction().add(
+        createCloseAccountInstruction(subWsolAta, subKp.publicKey, subKp.publicKey, [], TOKEN_PROGRAM_ID),
+      );
+      closeTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+      closeTx.feePayer = escrow.publicKey;
+      const closeSig = await simulateAndSend(conn, closeTx, [escrow, subKp], { label: 'close-sub-wsol' });
+      await conn.confirmTransaction(closeSig, 'confirmed');
+      log('reconcile_recovered', { detail: { stage: 'close_sub_wsol_ata', sig: closeSig } });
+    }
+  } catch (e) {
+    log('reconcile_error', { detail: { stage: 'close_sub_wsol_failed', err: e instanceof Error ? e.message : String(e) } });
   }
 
   // Steps B + C — drain sub-escrow + credit backers / bots — are entirely
