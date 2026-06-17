@@ -281,11 +281,20 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
               const sol = Number(r.sol_spent_lamports) / 1e9;
               const tx = r.action_tx || r.swap_tx;
               return (
-                <div key={i} className="text-[11px] font-mono flex items-center justify-between gap-2">
-                  <span className="text-[var(--muted)]">
+                // Fixed-width grid so date / amount / status / tx-link
+                // columns align across rows. flex+justify-between was
+                // collapsing each cell to content width, making rows look
+                // ragged whenever status length or date format varied.
+                <div
+                  key={i}
+                  className="text-[11px] font-mono grid grid-cols-[minmax(0,1fr)_5.5rem_5rem_1.5rem] items-center gap-2"
+                >
+                  <span className="text-[var(--muted)] truncate">
                     {new Date(r.executed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
                   </span>
-                  <span className="text-[var(--foreground)]">{sol.toFixed(4)} {qc === 'usdc' ? 'USDC' : 'SOL'}</span>
+                  <span className="text-[var(--foreground)] text-right tabular-nums">
+                    {sol.toFixed(4)} {qc === 'usdc' ? 'USDC' : 'SOL'}
+                  </span>
                   <span className={
                     r.status === 'completed' ? 'text-[var(--success)]'
                     : r.status === 'partial' ? 'text-[var(--accent-gold)]'
@@ -293,15 +302,17 @@ export function BuybackBotPanel({ meme }: { meme: Meme }) {
                   }>
                     {r.status}
                   </span>
-                  {tx && (
-                    <a
-                      href={`https://solscan.io/tx/${tx}`}
-                      target="_blank" rel="noreferrer"
-                      className="text-[var(--accent)] hover:underline"
-                    >
-                      tx
-                    </a>
-                  )}
+                  <span className="text-right">
+                    {tx && (
+                      <a
+                        href={`https://solscan.io/tx/${tx}`}
+                        target="_blank" rel="noreferrer"
+                        className="text-[var(--accent)] hover:underline"
+                      >
+                        tx
+                      </a>
+                    )}
+                  </span>
                 </div>
               );
             })}
