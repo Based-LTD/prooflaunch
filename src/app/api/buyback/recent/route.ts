@@ -15,16 +15,25 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '5', 10), 1), 50);
     if (!memeId) return NextResponse.json({ error: 'meme_id required' }, { status: 400 });
 
+    // Failed runs are usually transient platform issues (Jupiter index
+    // gaps right after a token bonds, RPC timeouts during congestion
+    // etc.) — not creator dishonesty. The public "Recent runs" panel
+    // hides them by default so a flaky upstream doesn't look like the
+    // launch is broken. Pass ?include_failed=1 for admin/debug views.
+    const includeFailed = searchParams.get('include_failed') === '1';
+
     const supabase = createServerClient();
     // bot_id is included so the panel can group runs per bot in a stack.
     // NULL for legacy (pre-Phase-B) single-bot rows — the panel falls
     // back to per-meme totals in that case.
-    const { data, error } = await supabase
+    let q = supabase
       .from('meme_buybacks')
       .select('executed_at, action, status, sol_spent_lamports, tokens_acted_raw, swap_tx, action_tx, bot_id')
       .eq('meme_id', memeId)
       .order('executed_at', { ascending: false })
       .limit(limit);
+    if (!includeFailed) q = q.in('status', ['completed', 'partial']);
+    const { data, error } = await q;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     return NextResponse.json({ rows: data || [] });

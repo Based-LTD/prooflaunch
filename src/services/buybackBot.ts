@@ -336,11 +336,15 @@ export async function executeBuybackBot(
     const { quoteInputMint } = await import('@/lib/quoteAsset');
     const inputMint = quoteInputMint(qc);
     const quoteUrl = `${JUP_QUOTE_URL}?inputMint=${inputMint}&outputMint=${m.mint_address}&amount=${usableLamports}&slippageBps=${SLIPPAGE_BPS}`;
-    // Jupiter's index lags reality for ~30-60min after a fresh pump.fun
-    // launch — it intermittently returns TOKEN_NOT_TRADABLE for a token
-    // it can actually route through the bonding curve. Retry that
-    // specific error a few times before failing the bot; other errors
-    // (network, server) propagate immediately as before.
+    // Jupiter's index lags reality at two known points in a token's
+    // lifecycle:
+    //   - For ~30-60min after launch (token on bonding curve)
+    //     → intermittent TOKEN_NOT_TRADABLE
+    //   - For ~5-30min after bond (token moves curve → PumpSwap AMM)
+    //     → NO_ROUTES_FOUND and MARKET_NOT_FOUND while jup's quote
+    //       and swap sub-services warm up at different rates
+    // Retry these transient classes a few times before failing the
+    // bot; other errors (network, server, slippage) propagate.
     let quote: { error?: string; contextSlot?: number; context_slot?: number; [k: string]: unknown } | null = null;
     const MAX_QUOTE_ATTEMPTS = 4;
     for (let attempt = 1; attempt <= MAX_QUOTE_ATTEMPTS; attempt++) {
@@ -350,7 +354,7 @@ export async function executeBuybackBot(
         quote = JSON.parse(bodyText);
         if (quote && !quote.error) break;
       }
-      const transient = /TOKEN_NOT_TRADABLE|not tradable/i.test(bodyText);
+      const transient = /TOKEN_NOT_TRADABLE|not tradable|NO_ROUTES_FOUND|No routes found/i.test(bodyText);
       if (!transient || attempt === MAX_QUOTE_ATTEMPTS) {
         throw new Error(`jupiter quote ${qres.status}: ${bodyText}`);
       }
@@ -361,19 +365,34 @@ export async function executeBuybackBot(
     // Stale routes ship worse fills or trigger slippage failures at swap time.
     await assertQuoteFresh(conn, quote);
 
-    const sres = await fetch(JUP_SWAP_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        quoteResponse: quote,
-        userPublicKey: botKp.publicKey.toBase58(),
-        wrapAndUnwrapSol: true,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: 'auto',
-      }),
-    });
-    if (!sres.ok) throw new Error(`jupiter swap ${sres.status}: ${await sres.text()}`);
-    const { swapTransaction } = await sres.json();
+    // Post-bond gap: Jupiter's quote endpoint and swap endpoint warm
+    // up at different rates for a freshly-bonded AMM market. Quote may
+    // succeed while swap returns MARKET_NOT_FOUND for the very same
+    // ammKey. Retry the swap step too for the same transient classes.
+    let swapBody: string | null = null;
+    const MAX_SWAP_ATTEMPTS = 4;
+    for (let attempt = 1; attempt <= MAX_SWAP_ATTEMPTS; attempt++) {
+      const sres = await fetch(JUP_SWAP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteResponse: quote,
+          userPublicKey: botKp.publicKey.toBase58(),
+          wrapAndUnwrapSol: true,
+          dynamicComputeUnitLimit: true,
+          prioritizationFeeLamports: 'auto',
+        }),
+      });
+      swapBody = await sres.text();
+      if (sres.ok) break;
+      const transient = /MARKET_NOT_FOUND|Market .* not found|NO_ROUTES_FOUND/i.test(swapBody);
+      if (!transient || attempt === MAX_SWAP_ATTEMPTS) {
+        throw new Error(`jupiter swap ${sres.status}: ${swapBody}`);
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    if (!swapBody) throw new Error('jupiter swap: no body returned');
+    const { swapTransaction } = JSON.parse(swapBody);
     const txBuf = Buffer.from(swapTransaction, 'base64');
     const swapVtx = VersionedTransaction.deserialize(txBuf);
     swapVtx.sign([botKp]);
