@@ -44,6 +44,14 @@ export interface SimulateAndSendOptions extends SendOptions {
   // reason this flag exists is to keep ALL sends going through one
   // helper for consistent retry semantics.
   skipSimulate?: boolean;
+  // Opt OUT of the post-send confirm + on-chain err check. Default is
+  // confirm-and-check, which is what every caller should want — without
+  // it, a tx that lands in a slot with a program revert silently looks
+  // like success. (Real bug, found 2026-06-17 on GO when a PumpSwap
+  // ExceededSlippage revert was logged as a successful HOLD run.)
+  skipConfirm?: boolean;
+  // Commitment for the post-send confirm. Default 'confirmed'.
+  confirmCommitment?: 'processed' | 'confirmed' | 'finalized';
 }
 
 export class SimulateRevertError extends Error {
@@ -57,6 +65,16 @@ export class SimulateRevertError extends Error {
   }
 }
 
+export class OnChainRevertError extends Error {
+  constructor(public label: string, public signature: string, public txErr: unknown) {
+    super(
+      `on-chain revert${label ? ` [${label}]` : ''} sig=${signature}: ` +
+      JSON.stringify(txErr),
+    );
+    this.name = 'OnChainRevertError';
+  }
+}
+
 // Single helper for both legacy + versioned txns. Simulates first,
 // throws SimulateRevertError on failure, otherwise sends. Returns the
 // signature.
@@ -66,7 +84,7 @@ export async function simulateAndSend(
   signers?: Signer[],
   opts: SimulateAndSendOptions = {},
 ): Promise<string> {
-  const { label, skipSimulate, ...sendOpts } = opts;
+  const { label, skipSimulate, skipConfirm, confirmCommitment, ...sendOpts } = opts;
 
   if (!skipSimulate) {
     // Sign first so simulate sees the same byte sequence we'll send.
@@ -88,10 +106,24 @@ export async function simulateAndSend(
   }
 
   // For VersionedTransaction, signers arg is ignored by sendTransaction.
-  if (tx instanceof VersionedTransaction) {
-    return conn.sendTransaction(tx, sendOpts);
+  const sig = tx instanceof VersionedTransaction
+    ? await conn.sendTransaction(tx, sendOpts)
+    : await conn.sendTransaction(tx, signers ?? [], sendOpts);
+
+  // Post-send confirm + on-chain err check. Default-on; callers can opt
+  // out with skipConfirm: true (e.g. fire-and-forget batches that audit
+  // confirmations elsewhere). conn.confirmTransaction resolves when the
+  // tx LANDS in a slot — including with a program revert. Without the
+  // err check, a slippage revert or any other runtime failure would
+  // look like a successful send, leading to phantom-success rows in
+  // downstream bookkeeping.
+  if (!skipConfirm) {
+    const conf = await conn.confirmTransaction(sig, confirmCommitment ?? 'confirmed');
+    if (conf.value.err) {
+      throw new OnChainRevertError(label ?? '', sig, conf.value.err);
+    }
   }
-  return conn.sendTransaction(tx, signers ?? [], sendOpts);
+  return sig;
 }
 
 // ── SOL-030 ────────────────────────────────────────────────────────

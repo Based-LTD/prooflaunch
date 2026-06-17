@@ -233,7 +233,13 @@ async function swapViaPumpSwap(
     tx.feePayer = botKp.publicKey;
     tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
     const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: 'pumpswap-buy' });
-    await conn.confirmTransaction(sig, 'confirmed');
+    const conf = await conn.confirmTransaction(sig, 'confirmed');
+    // `confirmTransaction` resolves when the tx LANDS in a slot, even
+    // when the program reverted. The error lives in conf.value.err.
+    // Without this check, slippage failures on the swap (PumpSwap error
+    // 6004 ExceededSlippage etc.) would report ok=true with a sig that
+    // moved zero tokens. Caller logs a phantom-success row.
+    if (conf.value.err) throw new Error(`pumpswap buy tx reverted: ${JSON.stringify(conf.value.err)}`);
     return { ok: true, sig };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -706,7 +712,8 @@ async function executeSolDistribute(
       tx.feePayer = botKp.publicKey;
       // SOL-029: simulate before send.
       const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `distribute_${qc}:${i}` });
-      await conn.confirmTransaction(sig, 'confirmed');
+      const conf = await conn.confirmTransaction(sig, 'confirmed');
+      if (conf.value.err) throw new Error(`distribute_${qc} batch ${i} reverted: ${JSON.stringify(conf.value.err)}`);
       sigs.push(sig);
       actualSent += txTotal;
       // Count actual transfers, not raw ix count (USDC has 2 ix per recipient).
@@ -793,7 +800,8 @@ async function executeTokenDistribute(
       tx.feePayer = botKp.publicKey;
       // SOL-029: simulate before send.
       const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `distribute_tokens:${i}` });
-      await conn.confirmTransaction(sig, 'confirmed');
+      const conf = await conn.confirmTransaction(sig, 'confirmed');
+      if (conf.value.err) throw new Error(`distribute_tokens batch ${i} reverted: ${JSON.stringify(conf.value.err)}`);
       sigs.push(sig);
     } catch (e) {
       errors.push(`batch ${i}: ${e instanceof Error ? e.message : String(e)}`);
@@ -1198,7 +1206,8 @@ async function tryRecoverStrandedTokens(
       tx.feePayer = botKp.publicKey;
       // SOL-029: simulate before send.
       const sig = await simulateAndSend(conn, tx, [botKp], { maxRetries: 3, label: `recovery-distribute:${i}` });
-      await conn.confirmTransaction(sig, 'confirmed');
+      const conf = await conn.confirmTransaction(sig, 'confirmed');
+      if (conf.value.err) throw new Error(`recovery-distribute batch ${i} reverted: ${JSON.stringify(conf.value.err)}`);
       sigs.push(sig);
     } catch (e) {
       errors.push(`batch ${i}: ${e instanceof Error ? e.message : String(e)}`);
