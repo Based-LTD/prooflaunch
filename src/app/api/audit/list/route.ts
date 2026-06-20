@@ -19,6 +19,16 @@ export const maxDuration = 60;
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const LIVE_LIMIT = 25;
 
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 export async function GET() {
   try {
     const supabase = createServerClient();
@@ -30,7 +40,7 @@ export async function GET() {
       .order('launched_at', { ascending: false })
       .limit(LIVE_LIMIT);
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
     }
 
     const conn = new Connection(RPC_URL, 'confirmed');
@@ -69,24 +79,27 @@ export async function GET() {
     const totalPhantoms = auditableReports.reduce((s, r) => s + r.summary.rows_phantom, 0);
     const totalRowsVerified = auditableReports.reduce((s, r) => s + r.summary.rows_verified, 0);
 
-    return NextResponse.json({
-      ran_at: new Date().toISOString(),
-      aggregate: {
-        total_memes: totalMemes,
-        auditable: auditableReports.length,
-        clean: cleanCount,
-        warn: warnCount,
-        critical: criticalCount,
-        na: naCount,
-        rows_verified: totalRowsVerified,
-        phantoms_total: totalPhantoms,
+    return NextResponse.json(
+      {
+        ran_at: new Date().toISOString(),
+        aggregate: {
+          total_memes: totalMemes,
+          auditable: auditableReports.length,
+          clean: cleanCount,
+          warn: warnCount,
+          critical: criticalCount,
+          na: naCount,
+          rows_verified: totalRowsVerified,
+          phantoms_total: totalPhantoms,
+        },
+        reports,
       },
-      reports,
-    });
+      { headers: { ...CORS_HEADERS, 'Cache-Control': 'public, max-age=60' } },
+    );
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'unknown error' },
-      { status: 500 },
+      { status: 500, headers: CORS_HEADERS },
     );
   }
 }
