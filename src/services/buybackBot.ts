@@ -389,9 +389,22 @@ export async function executeBuybackBot(
   // ── Swap branch (burn / hold / token-distribute) ──────────────────
   // Jupiter input mint switches to USDC for USDC memes; swap math is
   // identical (input raw → output raw token).
+  //
+  // tokensBoughtThisRun (delta) vs actualTokensRaw (snapshot):
+  //   - actualTokensRaw = ATA balance AFTER swap. Used by BURN — burns
+  //     whatever's in the wallet, including any leftover from a prior
+  //     failed-downstream run. Safety-net behavior preserved on purpose.
+  //   - tokensBoughtThisRun = (post - pre) ATA balance = strictly the
+  //     swap delta. Used by HOLD + token-distribute so the DB row's
+  //     tokens_acted_raw column is a per-run delta (not a snapshot of
+  //     cumulative holdings). Fixes the audit drift surfaced 2026-06-19:
+  //     meme_bots.total_tokens_acted summed snapshots, wildly inflating.
   let actualTokensRaw: bigint;
+  let tokensBoughtThisRun: bigint;
   let tokenProgramId: PublicKey;
   let tokenDecimals: number;
+  // Hoisted so the PumpSwap fallback block in the catch can see it.
+  let preSwapBal: bigint = BigInt(0);
   // Initialized inside the try block (Jupiter path) or the catch block
   // (PumpSwap fallback path). Either way the success path assigns it
   // before downstream code uses it; we explicitly type as
@@ -402,6 +415,17 @@ export async function executeBuybackBot(
     const { quoteInputMint } = await import('@/lib/quoteAsset');
     const inputMint = quoteInputMint(qc);
     const quoteUrl = `${JUP_QUOTE_URL}?inputMint=${inputMint}&outputMint=${m.mint_address}&amount=${usableLamports}&slippageBps=${SLIPPAGE_BPS}`;
+    // Pre-swap ATA snapshot so we can compute the delta after the swap.
+    // Errors here (e.g. ATA not yet created) collapse to 0 — first-ever
+    // run on a token will have no pre-balance.
+    const mintPubEarly = new PublicKey(m.mint_address);
+    const mintAccEarly = await conn.getAccountInfo(mintPubEarly);
+    const tokenProgEarly = mintAccEarly?.owner.equals(TOKEN_2022_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+    const ataEarly = getAssociatedTokenAddressSync(mintPubEarly, botKp.publicKey, false, tokenProgEarly);
+    try {
+      const preInfo = await conn.getTokenAccountBalance(ataEarly);
+      preSwapBal = BigInt(preInfo.value.amount);
+    } catch { /* ATA missing — treat as 0 */ }
     // Jupiter's index lags reality at two known points in a token's
     // lifecycle:
     //   - For ~30-60min after launch (token on bonding curve)
@@ -478,7 +502,9 @@ export async function executeBuybackBot(
     const ata = getAssociatedTokenAddressSync(mintPub, botKp.publicKey, false, tokenProgramId);
     const ataBal = await conn.getTokenAccountBalance(ata);
     actualTokensRaw = BigInt(ataBal.value.amount);
+    tokensBoughtThisRun = actualTokensRaw - preSwapBal;
     if (actualTokensRaw === BigInt(0)) throw new Error('swap confirmed but ATA balance is 0');
+    if (tokensBoughtThisRun <= BigInt(0)) throw new Error('swap confirmed but no new tokens added (post-balance ≤ pre-balance)');
   } catch (jupiterErr) {
     const errMsg = jupiterErr instanceof Error ? jupiterErr.message : String(jupiterErr);
     // PumpSwap direct fallback. If Jupiter exhausted retries on a
@@ -503,7 +529,9 @@ export async function executeBuybackBot(
           const ata = getAssociatedTokenAddressSync(mintPub, botKp.publicKey, false, tokenProgramId);
           const ataBal = await conn.getTokenAccountBalance(ata);
           actualTokensRaw = BigInt(ataBal.value.amount);
+          tokensBoughtThisRun = actualTokensRaw - preSwapBal;
           if (actualTokensRaw === BigInt(0)) throw new Error('pumpswap swap confirmed but ATA balance is 0');
+          if (tokensBoughtThisRun <= BigInt(0)) throw new Error('pumpswap swap confirmed but no new tokens added');
         } catch (postSwapErr) {
           fallbackErr = `pumpswap post-swap: ${postSwapErr instanceof Error ? postSwapErr.message : String(postSwapErr)}`;
         }
@@ -529,16 +557,22 @@ export async function executeBuybackBot(
   // the fallback path. We just returned if anything's missing, so a
   // non-null assertion is safe here.
   actualTokensRaw = actualTokensRaw!;
+  tokensBoughtThisRun = tokensBoughtThisRun!;
   tokenProgramId = tokenProgramId!;
   tokenDecimals = tokenDecimals!;
   swapTx = swapTx!;
 
   // Dispatch the action on the bought tokens.
+  // BURN gets the snapshot (burns everything in wallet, including any
+  // leftover from a prior failed downstream — safety net).
+  // HOLD + token-distribute get the per-run delta so the DB column
+  // tracks "what was acted on this run" instead of a cumulative
+  // snapshot (which created phantom totals on lifetime sums).
   if (action === 'burn') {
     return executeBurn(supabase, m, b, botKp, conn, action, actualTokensRaw, tokenProgramId, tokenDecimals, usableLamports, swapTx);
   }
   if (action === 'hold') {
-    return executeHold(supabase, m, b, actualTokensRaw, action, usableLamports, swapTx);
+    return executeHold(supabase, m, b, tokensBoughtThisRun, action, usableLamports, swapTx);
   }
   if (action === 'donate_tokens') {
     return executeDonateTokens(supabase, m, b, botKp, conn, actualTokensRaw, tokenProgramId, tokenDecimals, usableLamports, swapTx);
