@@ -20,6 +20,7 @@ const navLinks = [
   { href: '/', label: 'Proving' },
   { href: '/submit', label: 'Submit' },
   { href: '/launched', label: 'Launched' },
+  { href: '/proof', label: 'Audit' },
   { href: '/portfolio', label: 'Portfolio' },
   { href: '/docs', label: 'Docs' },
   { href: '/roadmap', label: 'Roadmap' },

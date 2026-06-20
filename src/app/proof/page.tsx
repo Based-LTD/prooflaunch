@@ -13,6 +13,28 @@ interface AuditFinding {
   severity: 'CRITICAL' | 'warn' | 'info';
   area: string;
   msg: string;
+  tx_sig?: string;
+  wallet?: string;
+}
+
+interface BotReceipt {
+  action: string;
+  bot_wallet: string;
+  fee_pct: number;
+  label: string | null;
+  on_chain_sol_balance: number;
+  on_chain_token_balance: string;
+  db_total_sol_spent: number;
+  db_total_tokens_acted: string;
+}
+
+interface RecentAction {
+  executed_at: string;
+  action: string;
+  status: string;
+  sol_spent_lamports: number;
+  tokens_acted_raw: string;
+  tx_sig: string;
 }
 
 interface AuditSummary {
@@ -25,6 +47,7 @@ interface AuditSummary {
   bot_count: number;
   backer_count: number;
   total_claimable_sol: number;
+  decimals: number;
 }
 
 interface AuditRow {
@@ -35,6 +58,8 @@ interface AuditRow {
   status: 'clean' | 'warn' | 'CRITICAL' | 'na';
   ran_at: string;
   findings: AuditFinding[];
+  bots: BotReceipt[];
+  recent_actions: RecentAction[];
   summary: AuditSummary;
   current_backing_sol?: number | null;
   launched_at?: string | null;
@@ -92,6 +117,31 @@ function timeAgo(iso: string): string {
   if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h ago`;
   return `${Math.round(ms / 86_400_000)}d ago`;
 }
+
+function shortAddr(s: string): string {
+  if (!s || s.length < 12) return s;
+  return `${s.slice(0, 6)}…${s.slice(-4)}`;
+}
+
+function fmtTokens(raw: string, decimals: number): string {
+  try {
+    return (Number(BigInt(raw)) / Math.pow(10, decimals)).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  } catch {
+    return raw;
+  }
+}
+
+const ACTION_GLYPH: Record<string, string> = {
+  burn: 'BURN',
+  hold: 'HOLD',
+  distribute_sol_holders: 'DIST→HOLDERS',
+  distribute_sol_backers: 'DIST→BACKERS',
+  distribute_tokens_holders: 'TOKEN→HOLDERS',
+  distribute_tokens_backers: 'TOKEN→BACKERS',
+  donate_sol: 'DONATE_SOL',
+  donate_tokens: 'DONATE_TOKEN',
+};
+const actionLabel = (a: string) => ACTION_GLYPH[a] ?? a.toUpperCase();
 
 export default function ProofPage() {
   const [data, setData] = useState<ListResponse | null>(null);
@@ -280,6 +330,21 @@ export default function ProofPage() {
 
                       {r.status !== 'na' && (
                         <>
+                      {/* Mint address + on-chain links */}
+                      {r.mint_address && (
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono">
+                          <span className="text-[var(--muted)] uppercase tracking-widest">Mint:</span>
+                          <a
+                            href={`https://solscan.io/token/${r.mint_address}`}
+                            target="_blank" rel="noreferrer"
+                            className="text-[var(--accent)] hover:underline inline-flex items-center gap-1"
+                          >
+                            {shortAddr(r.mint_address)}
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
+                      )}
+
                       {/* Sub-summary metrics */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px] font-mono">
                         <div>
@@ -304,6 +369,122 @@ export default function ProofPage() {
                         </div>
                       </div>
 
+                      {/* Burn ledger (only if there is one) */}
+                      {Number(r.summary.burn_on_chain) > 0 && (
+                        <div className="text-[11px] font-mono border border-[var(--border)]/60 bg-[var(--bg)]/40 p-3 space-y-1">
+                          <div className="text-[9px] uppercase tracking-widest text-[var(--muted)] mb-1">
+                            // BURN_LEDGER
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                            <div className="text-[var(--muted)]">on-chain supply drop:</div>
+                            <div className="tabular-nums text-right">
+                              {fmtTokens(r.summary.burn_on_chain, r.summary.decimals)} {r.symbol}
+                            </div>
+                            <div className="text-[var(--muted)]">DB burn-deltas sum:</div>
+                            <div className="tabular-nums text-right">
+                              {fmtTokens(r.summary.burn_db_sum, r.summary.decimals)} {r.symbol}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bot receipts */}
+                      {r.bots.length > 0 && (
+                        <div className="border border-[var(--border)]/60 bg-[var(--bg)]/40">
+                          <div className="text-[9px] uppercase tracking-widest text-[var(--muted)] px-3 py-2 border-b border-[var(--border)]/60">
+                            // BOT_WALLETS [{r.bots.length}]
+                          </div>
+                          <div className="divide-y divide-[var(--border)]/40">
+                            {r.bots.map((b) => (
+                              <div key={b.bot_wallet} className="px-3 py-2 text-[11px] font-mono">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold">{actionLabel(b.action)}</span>
+                                    <span className="text-[var(--muted)]">{b.fee_pct}%</span>
+                                    {b.label && <span className="text-[var(--accent)]">{b.label}</span>}
+                                  </div>
+                                  <a
+                                    href={`https://solscan.io/account/${b.bot_wallet}`}
+                                    target="_blank" rel="noreferrer"
+                                    className="text-[var(--accent)] hover:underline inline-flex items-center gap-1 text-[10px]"
+                                  >
+                                    {shortAddr(b.bot_wallet)}
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-[var(--muted)]">
+                                  <div>
+                                    <span className="opacity-60">on-chain SOL: </span>
+                                    <span className="text-[var(--foreground)] tabular-nums">
+                                      {(b.on_chain_sol_balance / 1e9).toFixed(4)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="opacity-60">on-chain {r.symbol}: </span>
+                                    <span className="text-[var(--foreground)] tabular-nums">
+                                      {fmtTokens(b.on_chain_token_balance, r.summary.decimals)}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="opacity-60">DB spent: </span>
+                                    <span className="text-[var(--foreground)] tabular-nums">
+                                      {b.db_total_sol_spent.toFixed(4)} SOL
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="opacity-60">DB acted: </span>
+                                    <span className="text-[var(--foreground)] tabular-nums">
+                                      {fmtTokens(b.db_total_tokens_acted, r.summary.decimals)} {r.symbol}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Recent on-chain actions */}
+                      {r.recent_actions.length > 0 && (
+                        <div className="border border-[var(--border)]/60 bg-[var(--bg)]/40">
+                          <div className="text-[9px] uppercase tracking-widest text-[var(--muted)] px-3 py-2 border-b border-[var(--border)]/60">
+                            // RECENT_RECEIPTS [{r.recent_actions.length}]
+                          </div>
+                          <div className="divide-y divide-[var(--border)]/40">
+                            {r.recent_actions.map((a) => {
+                              const sol = (a.sol_spent_lamports / 1e9).toFixed(4);
+                              const tok = a.tokens_acted_raw && a.tokens_acted_raw !== '0'
+                                ? fmtTokens(a.tokens_acted_raw, r.summary.decimals)
+                                : null;
+                              return (
+                                <div
+                                  key={a.tx_sig}
+                                  className="px-3 py-1.5 text-[10px] font-mono grid grid-cols-[minmax(0,1fr)_5rem_minmax(0,1fr)_3.5rem] items-center gap-2"
+                                >
+                                  <span className="text-[var(--muted)] truncate">
+                                    {new Date(a.executed_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                                  </span>
+                                  <span className="font-semibold text-[var(--accent)] truncate">
+                                    {actionLabel(a.action)}
+                                  </span>
+                                  <span className="tabular-nums text-right truncate">
+                                    {sol} SOL{tok ? ` · ${tok} ${r.symbol}` : ''}
+                                  </span>
+                                  <a
+                                    href={`https://solscan.io/tx/${a.tx_sig}`}
+                                    target="_blank" rel="noreferrer"
+                                    className="text-[var(--accent)] hover:underline text-right inline-flex items-center justify-end gap-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    tx <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Findings list */}
                       {r.findings.length === 0 ? (
                         <div className="text-[11px] font-mono text-[var(--success)] py-2">
@@ -320,8 +501,34 @@ export default function ProofPage() {
                                 : 'border-[var(--muted)] text-[var(--muted)]'
                               }`}
                             >
-                              <span className="uppercase tracking-wider text-[9px] opacity-70">[{f.severity}/{f.area}]</span>{' '}
-                              {f.msg}
+                              <div>
+                                <span className="uppercase tracking-wider text-[9px] opacity-70">[{f.severity}/{f.area}]</span>{' '}
+                                {f.msg}
+                              </div>
+                              {(f.tx_sig || f.wallet) && (
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                                  {f.tx_sig && (
+                                    <a
+                                      href={`https://solscan.io/tx/${f.tx_sig}`}
+                                      target="_blank" rel="noreferrer"
+                                      className="text-[var(--accent)] hover:underline inline-flex items-center gap-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      verify tx <ExternalLink className="w-2.5 h-2.5" />
+                                    </a>
+                                  )}
+                                  {f.wallet && (
+                                    <a
+                                      href={`https://solscan.io/account/${f.wallet}`}
+                                      target="_blank" rel="noreferrer"
+                                      className="text-[var(--accent)] hover:underline inline-flex items-center gap-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      wallet {shortAddr(f.wallet)} <ExternalLink className="w-2.5 h-2.5" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

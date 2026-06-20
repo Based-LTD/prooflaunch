@@ -41,6 +41,31 @@ export interface Finding {
   severity: Severity;
   area: string;
   msg: string;
+  // Optional structured links so the UI can render Solscan-linked
+  // chips instead of just inline text. tx_sig links to the tx the
+  // finding is talking about; wallet links to the address involved.
+  tx_sig?: string;
+  wallet?: string;
+}
+
+export interface BotReceipt {
+  action: string;
+  bot_wallet: string;
+  fee_pct: number;
+  label: string | null;
+  on_chain_sol_balance: number;     // lamports
+  on_chain_token_balance: string;   // raw, string for BigInt
+  db_total_sol_spent: number;       // SOL
+  db_total_tokens_acted: string;    // raw, string for BigInt
+}
+
+export interface RecentAction {
+  executed_at: string;
+  action: string;
+  status: string;
+  sol_spent_lamports: number;
+  tokens_acted_raw: string;
+  tx_sig: string;
 }
 
 export interface AuditReport {
@@ -51,6 +76,10 @@ export interface AuditReport {
   status: AuditStatus;
   ran_at: string;            // ISO timestamp
   findings: Finding[];
+  // Structured receipts the UI can render with Solscan-linked chips.
+  // Empty arrays for 'na' memes.
+  bots: BotReceipt[];
+  recent_actions: RecentAction[];
   summary: {
     rows_verified: number;
     rows_phantom: number;
@@ -61,6 +90,7 @@ export interface AuditReport {
     bot_count: number;
     backer_count: number;
     total_claimable_sol: number;
+    decimals: number;
   };
 }
 
@@ -90,6 +120,8 @@ export async function runAudit(
   const m = meme as MemeRow;
 
   const findings: Finding[] = [];
+  const botReceipts: BotReceipt[] = [];
+  const recentActions: RecentAction[] = [];
   const summary: AuditReport['summary'] = {
     rows_verified: 0,
     rows_phantom: 0,
@@ -100,6 +132,7 @@ export async function runAudit(
     bot_count: 0,
     backer_count: 0,
     total_claimable_sol: 0,
+    decimals: 6,
   };
 
   // ── Mint info ─────────────────────────────────────────────────────
@@ -117,6 +150,7 @@ export async function runAudit(
       }
     } catch { /* unlaunched or RPC hiccup — handled below */ }
   }
+  summary.decimals = decimals;
 
   // ── A. PHANTOM-SUCCESS SCAN ──────────────────────────────────────
   const { data: buybacks } = await supabase
@@ -143,7 +177,8 @@ export async function runAudit(
         const sol = (Number(r.sol_spent_lamports) / LAMPORTS_PER_SOL).toFixed(4);
         findings.push({
           severity: 'CRITICAL', area: 'A',
-          msg: `PHANTOM: DB says ${r.status}, on-chain reverted. action=${r.action} spent=${sol} SOL tx=${sig} err=${JSON.stringify(tx.meta.err)}`,
+          msg: `PHANTOM: DB says ${r.status}, on-chain reverted. action=${r.action} spent=${sol} SOL err=${JSON.stringify(tx.meta.err)}`,
+          tx_sig: sig,
         });
       }
     } catch (e) {
@@ -157,8 +192,9 @@ export async function runAudit(
   // ── B. BOT WALLET RECONCILIATION ─────────────────────────────────
   const { data: bots } = await supabase
     .from('meme_bots')
-    .select('id, action, fee_pct, bot_wallet, total_sol_spent, total_tokens_acted')
-    .eq('meme_id', m.id);
+    .select('id, action, fee_pct, bot_wallet, label, total_sol_spent, total_tokens_acted')
+    .eq('meme_id', m.id)
+    .order('slot_order', { ascending: true });
   summary.bot_count = bots?.length || 0;
 
   // Early-exit for no-bot memes: the rest of the audit would all be
@@ -182,6 +218,8 @@ export async function runAudit(
       status: 'na',
       ran_at: new Date().toISOString(),
       findings: [],
+      bots: [],
+      recent_actions: [],
       summary,
     };
   }
@@ -189,6 +227,7 @@ export async function runAudit(
   for (const b of bots || []) {
     try {
       const wal = new PublicKey(b.bot_wallet);
+      const walSol = await conn.getBalance(wal);
       const tokenAta = m.mint_address
         ? getAssociatedTokenAddressSync(new PublicKey(m.mint_address), wal, false, tokenProgramId)
         : null;
@@ -197,12 +236,23 @@ export async function runAudit(
         const info = await conn.getAccountInfo(tokenAta);
         if (info) tokenBal = info.data.readBigUInt64LE(64);
       }
+      botReceipts.push({
+        action: b.action,
+        bot_wallet: b.bot_wallet,
+        fee_pct: Number(b.fee_pct),
+        label: b.label ?? null,
+        on_chain_sol_balance: walSol,
+        on_chain_token_balance: tokenBal.toString(),
+        db_total_sol_spent: Number(b.total_sol_spent || 0),
+        db_total_tokens_acted: (b.total_tokens_acted || '0').toString(),
+      });
       if (b.action === 'hold') {
         const dbSnapshot = BigInt(b.total_tokens_acted || 0);
         if (dbSnapshot !== tokenBal) {
           findings.push({
             severity: 'warn', area: 'B',
             msg: `HOLD bot DB tokens (${dbSnapshot.toString()}) ≠ on-chain ATA (${tokenBal.toString()}).`,
+            wallet: b.bot_wallet,
           });
         }
       } else if (b.action === 'burn' && tokenBal !== BigInt(0)) {
@@ -210,6 +260,7 @@ export async function runAudit(
         findings.push({
           severity: 'warn', area: 'B',
           msg: `BURN bot wallet still holds ${decTok} ${m.symbol} tokens (expected 0 after burn).`,
+          wallet: b.bot_wallet,
         });
       }
     } catch (e) {
@@ -218,6 +269,21 @@ export async function runAudit(
         msg: `bot ${b.action} balance read failed: ${e instanceof Error ? e.message.slice(0, 80) : 'unknown'}`,
       });
     }
+  }
+
+  // Pull the latest N successful actions to render as receipts on the page
+  for (const r of buybacks || []) {
+    if (recentActions.length >= 10) break;
+    const sig = r.action_tx || r.swap_tx;
+    if (!sig) continue;
+    recentActions.push({
+      executed_at: r.executed_at,
+      action: r.action,
+      status: r.status,
+      sol_spent_lamports: Number(r.sol_spent_lamports || 0),
+      tokens_acted_raw: (r.tokens_acted_raw || '0').toString(),
+      tx_sig: sig,
+    });
   }
 
   // ── C. UNCOLLECTED FEE SURFACES ──────────────────────────────────
@@ -325,6 +391,8 @@ export async function runAudit(
     status,
     ran_at: new Date().toISOString(),
     findings,
+    bots: botReceipts,
+    recent_actions: recentActions,
     summary,
   };
 }
