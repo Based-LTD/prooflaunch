@@ -298,7 +298,7 @@ export async function collectAndCreditFees(
 ): Promise<CollectAndCreditResult> {
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct, buyback_bot_enabled, buyback_bot_fee_pct, buyback_bot_wallet, quote_currency')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct, buyback_bot_enabled, buyback_bot_fee_pct, buyback_bot_wallet, quote_currency, partner_id')
     .eq('id', memeId)
     .single();
   if (memeErr || !meme) return { ok: false, error: 'meme not found' };
@@ -477,6 +477,9 @@ interface MemeForCredit {
   // 'sol' (default for legacy + pump.fun) uses lamports + SystemProgram.transfer.
   // 'usdc' reads the sub-escrow's USDC ATA + SPL TransferChecked.
   quote_currency?: 'sol' | 'usdc' | null;
+  // Non-null = partner-originated launch; distribution sub-splits the
+  // platform fee per partners.rev_share_bps. NULL = direct launch.
+  partner_id?: string | null;
 }
 
 async function drainAndCreditFromSubEscrow(args: {
@@ -656,6 +659,88 @@ async function drainAndCreditFromSubEscrow(args: {
     } catch (e) {
       p.error = e instanceof Error ? e.message : String(e);
       log('reconcile_error', { ok: false, detail: { stage: 'bot_fee_delegation', botId: p.id, action: p.action, err: p.error, lamports: p.lamports, quote: qc } });
+    }
+  }
+
+  // ── Partner rev-share payout ──────────────────────────────────────
+  // If this meme was originated via a partner API integration (Pump
+  // Tracks etc.), the platform 10% gets sub-split per the partner's
+  // rev_share_bps. Default config when a partner is set but bps is 0
+  // is "no rev share" — the platform retains 100% of its slice.
+  //
+  // We INSERT a 'pending' partner_payouts row before the transfer so
+  // the ledger always reflects intent, then UPDATE to 'sent' on
+  // confirm or 'failed' on error. This way a mid-flight crash never
+  // loses track of a payout.
+  //
+  // The platform retains (platformLamports - partnerShareLamports).
+  // Both stay in escrow as platform revenue when no partner is set
+  // (existing behavior preserved).
+  let partnerShareLamports = 0;
+  if (meme.partner_id && qc === 'sol' && platformLamports > 0) {
+    const { data: partner } = await supabase
+      .from('partners')
+      .select('id, partner_wallet, rev_share_bps, enabled')
+      .eq('id', meme.partner_id)
+      .maybeSingle();
+    if (partner && partner.enabled && partner.partner_wallet && partner.rev_share_bps > 0) {
+      partnerShareLamports = Math.floor(platformLamports * partner.rev_share_bps / 10_000);
+      if (partnerShareLamports > 0) {
+        const { data: payoutRow } = await supabase
+          .from('partner_payouts')
+          .insert({
+            partner_id: partner.id,
+            meme_id: meme.id,
+            drain_sig: drainSig,
+            payout_wallet: partner.partner_wallet,
+            amount_lamports: partnerShareLamports,
+            rev_share_bps: partner.rev_share_bps,
+            platform_lamports_at_payout: platformLamports,
+            status: 'pending',
+          })
+          .select('id')
+          .single();
+        try {
+          const tx = new Transaction();
+          tx.add(SystemProgram.transfer({
+            fromPubkey: escrow.publicKey,
+            toPubkey: new PublicKey(partner.partner_wallet),
+            lamports: partnerShareLamports,
+          }));
+          tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
+          tx.feePayer = escrow.publicKey;
+          const partnerSig = await simulateAndSend(conn, tx, [escrow], { label: `partner-payout:${partner.id}` });
+          // simulateAndSend now confirms + throws on revert (2026-06-17 fix).
+          await supabase
+            .from('partner_payouts')
+            .update({ status: 'sent', transfer_sig: partnerSig, confirmed_at: new Date().toISOString() })
+            .eq('id', payoutRow?.id);
+          await supabase.rpc('increment_partner_fee', {
+            p_meme_id: meme.id,
+            p_amount: partnerShareLamports,
+          }).then(async (rpcResult) => {
+            // Fallback: if the RPC doesn't exist yet (V0), do it manually.
+            if (rpcResult.error) {
+              const { data: cur } = await supabase
+                .from('memes').select('partner_fee_lamports').eq('id', meme.id).single();
+              await supabase.from('memes').update({
+                partner_fee_lamports: Number(cur?.partner_fee_lamports || 0) + partnerShareLamports,
+              }).eq('id', meme.id);
+            }
+          });
+          log('reconcile_recovered', { detail: { stage: 'partner_payout', partnerId: partner.id, sig: partnerSig, lamports: partnerShareLamports, bps: partner.rev_share_bps } });
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          await supabase
+            .from('partner_payouts')
+            .update({ status: 'failed', error: errMsg.slice(0, 500) })
+            .eq('id', payoutRow?.id);
+          log('reconcile_error', { ok: false, detail: { stage: 'partner_payout_failed', partnerId: partner.id, err: errMsg, lamports: partnerShareLamports } });
+          // Don't bail the whole drain — backer credits still happen.
+          // The pending ledger row records the failure for follow-up.
+          partnerShareLamports = 0;
+        }
+      }
     }
   }
 
