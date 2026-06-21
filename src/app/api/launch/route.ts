@@ -213,6 +213,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`Pooled launch complete: ${result.tokensReceived} tokens in pool ${meme.pool_wallet}`);
 
+    // Fire launch.live webhook for partner-attributed launches.
+    // Best-effort, non-blocking — the launch is already complete on-chain.
+    const { firePartnerEvent } = await import('@/lib/partnerWebhooks');
+    void firePartnerEvent(supabase, { type: 'launch.live', meme_id });
+
     // ── Self-custody enrollment (feature flag) ──────────────────────
     // After the launch tx confirms, seal the pool wallet's secret key
     // to an X25519 pubkey derived from the creator's deterministic

@@ -1017,6 +1017,16 @@ export async function POST(request: NextRequest) {
       if (sessUpdateErr) {
         console.warn('Partner session update failed (meme still created):', sessUpdateErr.message);
       }
+
+      // Fire session.submitted webhook. Best-effort, non-blocking — if
+      // the partner's webhook URL is down we still 201 the user.
+      const { firePartnerEvent } = await import('@/lib/partnerWebhooks');
+      void firePartnerEvent(supabase, {
+        type: 'session.submitted',
+        meme_id: data.id,
+        partner_id: partnerSessionRow.partner_id,
+        partner_session_id: partnerSessionRow.id,
+      });
     }
 
     return NextResponse.json({ meme: data }, { status: 201 });

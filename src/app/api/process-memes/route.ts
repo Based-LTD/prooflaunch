@@ -155,6 +155,9 @@ async function runProcessor() {
             .from('memes')
             .update({ status: 'failed' })
             .eq('id', meme.id);
+          // Notify partner if attributed.
+          const { firePartnerEvent } = await import('@/lib/partnerWebhooks');
+          void firePartnerEvent(supabase, { type: 'launch.failed', meme_id: meme.id });
 
           results.refunded.push(meme.id);
         }
@@ -165,6 +168,8 @@ async function runProcessor() {
           .from('memes')
           .update({ status: 'failed' })
           .eq('id', meme.id);
+        const { firePartnerEvent } = await import('@/lib/partnerWebhooks');
+        void firePartnerEvent(supabase, { type: 'launch.failed', meme_id: meme.id });
 
         results.refunded.push(meme.id);
         console.log(`Marked meme ${meme.id} as failed (manual refunds required)`);

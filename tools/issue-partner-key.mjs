@@ -61,9 +61,13 @@ if (!['live', 'test'].includes(environment)) {
   console.error('[issue-partner-key] --env must be "live" or "test"');
   process.exit(1);
 }
+// rev_share_bps is interpreted as % of the platform fee in distribution.ts
+// (since 2026-06-20). 5000 = 50% (the standard partner split).
+// 10000 = 100% (partner takes the entire platform slice). 0 = attribution
+// only, no SOL. Range [0, 10000].
 const revShareBps = flags['rev-share-bps'] ? parseInt(flags['rev-share-bps'], 10) : 0;
-if (!Number.isInteger(revShareBps) || revShareBps < 0 || revShareBps > 500) {
-  console.error('[issue-partner-key] --rev-share-bps must be an integer 0–500 (basis points)');
+if (!Number.isInteger(revShareBps) || revShareBps < 0 || revShareBps > 10000) {
+  console.error('[issue-partner-key] --rev-share-bps must be an integer 0–10000 (% of platform fee in bps; 5000 = 50%)');
   process.exit(1);
 }
 const partnerWallet = flags.wallet || null;
@@ -117,7 +121,7 @@ console.log('Partner ID:        ', data.id);
 console.log('Slug:              ', data.slug);
 console.log('Display name:      ', data.display_name);
 console.log('Environment:       ', data.environment);
-console.log('Rev-share:         ', `${data.rev_share_bps} bps (${(data.rev_share_bps / 100).toFixed(2)}% absolute on the platform's 5%)`);
+console.log('Rev-share:         ', `${data.rev_share_bps} bps (${(data.rev_share_bps / 100).toFixed(2)}% of the platform fee)`);
 console.log('Partner wallet:    ', data.partner_wallet || '(none — no rev-share routing)');
 console.log('Default webhook:   ', data.default_webhook_url || '(none — partner can supply per-session)');
 console.log('');
