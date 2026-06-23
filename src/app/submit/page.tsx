@@ -187,8 +187,8 @@ const FEE_PRESETS: Record<'standard', {
 }> = {
   standard: {
     label: 'STANDARD',
-    tagline: '90% to backers, 10% to platform. The default.',
-    backer: 90, holder: 0, platform: 10, burn: 0, charity: 0,
+    tagline: '90% to backers, 5% to $PROOF holders, 5% to platform. The default.',
+    backer: 90, holder: 5, platform: 5, burn: 0, charity: 0,
   },
 };
 
@@ -322,14 +322,14 @@ function SubmitPageInner() {
     // auto-added by the API.
     allowlistText: '',
     // Launch Configuration v2 — fee distribution preset + percentages.
-    // Default 'standard' = 90 backer / 10 platform (matches what the
-    // existing non-legacy distribution code does today). Other destinations
-    // (holder rewards / burn / charity) require infrastructure shipping
-    // in Phase 3; UI hides those fields until they actually work.
+    // Default 'standard' = 90 backer / 5 $PROOF holder rewards / 5 platform.
+    // Matches FEE_PRESETS.standard above and the original roadmap commitment
+    // that the platform fee is split with $PROOF stakers. (Pre-2026-06-23
+    // builds shipped 90/0/10 — a real drift the team accepts and is fixing.)
     feePreset: 'standard' as 'standard' | 'community_first' | 'deflationary' | 'charity_aligned' | 'custom',
     feeBackerPct: 90,
-    feeHolderRewardsPct: 0,
-    feePlatformPct: 10,
+    feeHolderRewardsPct: 5,
+    feePlatformPct: 5,
     feeBurnPct: 0,
     feeCharityPct: 0,
     feeCharityWallet: '',

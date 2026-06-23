@@ -298,7 +298,7 @@ export async function collectAndCreditFees(
 ): Promise<CollectAndCreditResult> {
   const { data: meme, error: memeErr } = await supabase
     .from('memes')
-    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_platform_pct, buyback_bot_enabled, buyback_bot_fee_pct, buyback_bot_wallet, quote_currency, partner_id')
+    .select('id, status, creator_subescrow_pubkey, encrypted_creator_subescrow_key, mint_address, fee_distribution_mode, fee_backer_pct, fee_holder_rewards_pct, fee_platform_pct, buyback_bot_enabled, buyback_bot_fee_pct, buyback_bot_wallet, quote_currency, partner_id')
     .eq('id', memeId)
     .single();
   if (memeErr || !meme) return { ok: false, error: 'meme not found' };
@@ -473,6 +473,11 @@ interface MemeForCredit {
   mint_address?: string | null;
   fee_distribution_mode?: string | null;
   fee_backer_pct?: number | null;
+  // Configured holder-rewards / platform split. NULL on legacy memes →
+  // treated as 0/10 by the splitter so behavior is unchanged. Standard
+  // preset (post-2026-06-23) sets these to 5/5.
+  fee_holder_rewards_pct?: number | null;
+  fee_platform_pct?: number | null;
   // Quote currency drives the drain + bot-delegation transfer paths.
   // 'sol' (default for legacy + pump.fun) uses lamports + SystemProgram.transfer.
   // 'usdc' reads the sub-escrow's USDC ATA + SPL TransferChecked.
@@ -631,7 +636,21 @@ async function drainAndCreditFromSubEscrow(args: {
   }
 
   const backerPoolLamports = rawBackerPoolLamports - totalBotShareLamports;
-  const platformLamports = collectedLamports - backerPoolLamports - totalBotShareLamports;
+  // Non-backer/non-bot residue is split between $PROOF holder rewards and
+  // the platform per the meme's configured ratio. Pre-2026-06-23 behavior:
+  // fee_holder_rewards_pct defaulted to 0 → 100% retained as platform. Per
+  // the standing roadmap commitment, the 'standard' preset now defaults
+  // to 5/5 (holder/platform) — see src/app/submit/page.tsx FEE_PRESETS.
+  // Memes launched under the legacy 90/0/10 default still split 0/10 here,
+  // so this is fully backward-compatible.
+  const nonBackerLamports = collectedLamports - backerPoolLamports - totalBotShareLamports;
+  const holderPct = Number(meme.fee_holder_rewards_pct ?? 0);
+  const platformPct = Number(meme.fee_platform_pct ?? 10);
+  const nonBackerPctTotal = holderPct + platformPct;
+  const holderRewardsConfigLamports = nonBackerPctTotal > 0
+    ? Math.floor(nonBackerLamports * holderPct / nonBackerPctTotal)
+    : 0;
+  const platformLamports = nonBackerLamports - holderRewardsConfigLamports;
 
   // Transfer each bot its share. We use one tx per bot for clean
   // per-bot tx receipts (auditable on Solscan). Total bot count is
@@ -878,6 +897,37 @@ async function drainAndCreditFromSubEscrow(args: {
       } catch (e) {
         log('reconcile_error', { ok: false, detail: { stage: 'freed_to_holder_rewards', err: e instanceof Error ? e.message : String(e), lamports: freedToHolderRewardsLam, quote: qc } });
         // Non-fatal: funds stay in escrow, can be swept manually next cycle
+      }
+    }
+  }
+
+  // ── Send the configured holder-rewards portion to HOLDER_REWARDS_WALLET ──
+  // Distinct from the "freed dumper" transfer above: that one fires only in
+  // hold_weighted mode when a dumper forfeits. THIS one fires every cycle
+  // based on the meme's fee_holder_rewards_pct. With the new 'standard'
+  // 5/5 preset, $PROOF stakers actually earn from every fee drain instead
+  // of only from forfeitures. Configured portion was already netted out of
+  // platformLamports above, so this is a transfer, not a new deduction.
+  let holderRewardsConfigSig: string | undefined;
+  if (holderRewardsConfigLamports > 0) {
+    const holderRewardsAddr = process.env.HOLDER_REWARDS_WALLET_ADDRESS;
+    if (holderRewardsAddr) {
+      try {
+        const tx = new Transaction();
+        for (const ix of buildQuoteTransferIxs({
+          from: escrow.publicKey,
+          to: new PublicKey(holderRewardsAddr),
+          amountRaw: BigInt(holderRewardsConfigLamports),
+          qc,
+          payer: escrow.publicKey,
+        })) tx.add(ix);
+        tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+        tx.feePayer = escrow.publicKey;
+        holderRewardsConfigSig = await simulateAndSend(conn, tx, [escrow], { label: 'configured-holder-rewards' });
+        await conn.confirmTransaction(holderRewardsConfigSig, 'confirmed');
+        log('reconcile_recovered', { detail: { stage: 'configured_holder_rewards', sig: holderRewardsConfigSig, lamports: holderRewardsConfigLamports, holderPct, quote: qc } });
+      } catch (e) {
+        log('reconcile_error', { ok: false, detail: { stage: 'configured_holder_rewards', err: e instanceof Error ? e.message : String(e), lamports: holderRewardsConfigLamports, quote: qc } });
       }
     }
   }
