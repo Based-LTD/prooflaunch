@@ -178,22 +178,21 @@ async function createFeeShareConfig(args: {
 }
 
 // 3. Sign + send each fee-share tx in sequence. They're returned as
-// base58-encoded VersionedTransactions; we deserialize, sign with both
-// the pool wallet (payer) and the sub-escrow (whose pubkey appears in
-// the claimers and must consent to receiving fees), and send.
+// base58-encoded VersionedTransactions; only the pool wallet (the
+// payer/signer in the tx's static accounts) signs. Sub-escrow is just
+// a recipient pubkey in the claimers array and is NOT a tx signer —
+// trying to add it as a signer triggers 'Cannot sign with non signer
+// key' (validated 2026-06-23 against the live API).
 async function sendFeeShareTransactions(args: {
   conn: Connection;
   transactions: BagsFeeShareTxBundle[];
   poolKp: Keypair;
-  subEscrowKp: Keypair;
 }): Promise<string[]> {
   const sigs: string[] = [];
   for (const bundle of args.transactions) {
     const raw = bs58.decode(bundle.transaction);
     const vtx = VersionedTransaction.deserialize(raw);
-    // Sign with both — Bags's instruction set requires both keypairs
-    // since the sub-escrow is being registered as a fee recipient.
-    vtx.sign([args.poolKp, args.subEscrowKp]);
+    vtx.sign([args.poolKp]);
     const sig = await args.conn.sendTransaction(vtx, { skipPreflight: false });
     await args.conn.confirmTransaction({ signature: sig, ...bundle.blockhash }, 'confirmed');
     sigs.push(sig);
@@ -334,7 +333,6 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
         conn,
         transactions: feeShare.transactions,
         poolKp,
-        subEscrowKp,
       });
       log('create_confirmed', { detail: { stage: 'bags_fee_share_txs', sigs: cfgSigs } });
     }
