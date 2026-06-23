@@ -37,6 +37,13 @@ import {
   VersionedTransaction,
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
+import {
+  getAssociatedTokenAddressSync,
+  getAccount,
+  TokenAccountNotFoundError,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+} from '@solana/spl-token';
 import bs58 from 'bs58';
 import { decryptPrivateKey } from '@/lib/crypto';
 import type { LaunchOutcome, LaunchParams } from './types';
@@ -351,7 +358,41 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     }
     log('create_confirmed', { signature: launchSig, detail: { stage: 'bags_launch_tx' } });
 
-    // Step 5b (best-effort): fetch the DBC pool key for downstream fee
+    // Step 5b: poll the pool wallet's ATA of the new mint until the
+    // initial-buy tokens become visible. The launch route checks
+    // result.tokensReceived to decide whether to mark the meme live, so
+    // this can't be skipped. Detect the token program from the mint
+    // account because Bags tokens may use Token-2022 or legacy SPL
+    // depending on the DBC config.
+    const mintAcct = await conn.getAccountInfo(new PublicKey(info.tokenMint));
+    const tokenProgramId = mintAcct?.owner.equals(TOKEN_2022_PROGRAM_ID)
+      ? TOKEN_2022_PROGRAM_ID
+      : TOKEN_PROGRAM_ID;
+    const poolAta = getAssociatedTokenAddressSync(
+      new PublicKey(info.tokenMint), poolKp.publicKey, false, tokenProgramId,
+    );
+    let tokensReceived: number | undefined;
+    const POLL_DEADLINE = Date.now() + 15_000;
+    while (Date.now() < POLL_DEADLINE) {
+      try {
+        const acct = await getAccount(conn, poolAta, 'confirmed', tokenProgramId);
+        if (acct.amount > BigInt(0)) {
+          tokensReceived = Number(acct.amount);
+          break;
+        }
+      } catch (e) {
+        if (!(e instanceof TokenAccountNotFoundError)) throw e;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    if (tokensReceived === undefined) {
+      log('reconcile_error', {
+        ok: false,
+        detail: { stage: 'bags_pool_balance_read_timeout', poolAta: poolAta.toBase58() },
+      });
+    }
+
+    // Step 5c (best-effort): fetch the DBC pool key for downstream fee
     // collection. Failure here doesn't undo the launch — the cron can
     // re-derive or fetch it later.
     const dbcPoolKey = await fetchPoolKey(info.tokenMint);
@@ -361,6 +402,7 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
       mintAddress: info.tokenMint,
       createSignature: launchSig,
       poolWallet: poolKp.publicKey.toBase58(),
+      tokensReceived,
       // Bags tokens trade on Meteora DBC, so we surface the pool key in
       // the same field the existing meteora.ts adapter uses. The
       // existing fee cron (services/fees/meteora-dbc.ts) handles them
