@@ -652,6 +652,35 @@ async function drainAndCreditFromSubEscrow(args: {
     : 0;
   const platformLamports = nonBackerLamports - holderRewardsConfigLamports;
 
+  // Pay $PROOF holder rewards UP FRONT — before any bot/partner/backer
+  // paths or early-exit returns. The 5%-to-stakers-forever obligation
+  // is independent of whether the meme has backers, dumpers, or partners;
+  // it's a token-holder yield obligation paid out of the platform cut.
+  // Fires once per drain cycle even if downstream credit paths early-exit.
+  let holderRewardsConfigSig: string | undefined;
+  if (holderRewardsConfigLamports > 0) {
+    const holderRewardsAddr = process.env.HOLDER_REWARDS_WALLET_ADDRESS;
+    if (holderRewardsAddr) {
+      try {
+        const tx = new Transaction();
+        for (const ix of buildQuoteTransferIxs({
+          from: escrow.publicKey,
+          to: new PublicKey(holderRewardsAddr),
+          amountRaw: BigInt(holderRewardsConfigLamports),
+          qc,
+          payer: escrow.publicKey,
+        })) tx.add(ix);
+        tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+        tx.feePayer = escrow.publicKey;
+        holderRewardsConfigSig = await simulateAndSend(conn, tx, [escrow], { label: 'configured-holder-rewards' });
+        await conn.confirmTransaction(holderRewardsConfigSig, 'confirmed');
+        log('reconcile_recovered', { detail: { stage: 'configured_holder_rewards', sig: holderRewardsConfigSig, lamports: holderRewardsConfigLamports, holderPct, quote: qc } });
+      } catch (e) {
+        log('reconcile_error', { ok: false, detail: { stage: 'configured_holder_rewards', err: e instanceof Error ? e.message : String(e), lamports: holderRewardsConfigLamports, quote: qc } });
+      }
+    }
+  }
+
   // Transfer each bot its share. We use one tx per bot for clean
   // per-bot tx receipts (auditable on Solscan). Total bot count is
   // capped at 6 by UNIQUE (meme_id, action) so this loop is bounded.
@@ -901,36 +930,9 @@ async function drainAndCreditFromSubEscrow(args: {
     }
   }
 
-  // ── Send the configured holder-rewards portion to HOLDER_REWARDS_WALLET ──
-  // Distinct from the "freed dumper" transfer above: that one fires only in
-  // hold_weighted mode when a dumper forfeits. THIS one fires every cycle
-  // based on the meme's fee_holder_rewards_pct. With the new 'standard'
-  // 5/5 preset, $PROOF stakers actually earn from every fee drain instead
-  // of only from forfeitures. Configured portion was already netted out of
-  // platformLamports above, so this is a transfer, not a new deduction.
-  let holderRewardsConfigSig: string | undefined;
-  if (holderRewardsConfigLamports > 0) {
-    const holderRewardsAddr = process.env.HOLDER_REWARDS_WALLET_ADDRESS;
-    if (holderRewardsAddr) {
-      try {
-        const tx = new Transaction();
-        for (const ix of buildQuoteTransferIxs({
-          from: escrow.publicKey,
-          to: new PublicKey(holderRewardsAddr),
-          amountRaw: BigInt(holderRewardsConfigLamports),
-          qc,
-          payer: escrow.publicKey,
-        })) tx.add(ix);
-        tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-        tx.feePayer = escrow.publicKey;
-        holderRewardsConfigSig = await simulateAndSend(conn, tx, [escrow], { label: 'configured-holder-rewards' });
-        await conn.confirmTransaction(holderRewardsConfigSig, 'confirmed');
-        log('reconcile_recovered', { detail: { stage: 'configured_holder_rewards', sig: holderRewardsConfigSig, lamports: holderRewardsConfigLamports, holderPct, quote: qc } });
-      } catch (e) {
-        log('reconcile_error', { ok: false, detail: { stage: 'configured_holder_rewards', err: e instanceof Error ? e.message : String(e), lamports: holderRewardsConfigLamports, quote: qc } });
-      }
-    }
-  }
+  // (The configured-holder-rewards transfer used to live here — moved up
+  // above the no-backings early-exit so PROOF stakers get paid even when
+  // a meme drains fees but has no distributed backers.)
 
   // ── Credit backers in DB ────────────────────────────────────────────
   // Column name is claimable_fees_sol but the stored value is in the
