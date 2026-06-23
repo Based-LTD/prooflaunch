@@ -204,7 +204,12 @@ export async function POST(request: NextRequest) {
       launched_at: new Date().toISOString(),
       pool_token_balance: result.tokensReceived,
     };
-    if (platform === 'meteora' && result.dbcPoolAddress) {
+    // Bags tokens launch onto Meteora DBC pools under the hood, so the
+    // Bags adapter populates dbcPoolAddress on its LaunchOutcome the
+    // same way the Meteora adapter does. Persisting it under the same
+    // column lets the existing Meteora fee-collection cron drain Bags
+    // launches with zero new code.
+    if ((platform === 'meteora' || platform === 'bags') && result.dbcPoolAddress) {
       liveUpdate.dbc_pool_address = result.dbcPoolAddress;
     }
     await supabase.from('memes').update(liveUpdate).eq('id', meme_id);

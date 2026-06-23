@@ -163,7 +163,11 @@ async function processFees() {
     // Default to 'pumpfun' for any row where launch_platform is NULL
     // (defense in depth — DB default already enforces this, but we
     // never want a bad column value to bypass platform routing).
-    const platform = m.launch_platform === 'meteora' ? 'meteora' : 'pumpfun';
+    // 'bags' tokens launch on Meteora DBC pools, so route them through
+    // the Meteora collection path. The bags-launched meme has its
+    // dbc_pool_address populated at launch time so the Meteora fee
+    // collector treats it identically to a native Meteora launch.
+    const platform = (m.launch_platform === 'meteora' || m.launch_platform === 'bags') ? 'meteora' : 'pumpfun';
     try {
       if (platform === 'meteora') {
         const r = await collectMeteoraFeesForCron(supabase, m.id);

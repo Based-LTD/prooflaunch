@@ -919,6 +919,7 @@ function SubmitPageInner() {
                   { key: 'pumpfun',   label: 'PUMP.FUN',  sub: isUsdc ? 'SOL ONLY' : 'LIVE', enabled: !isUsdc },
                   { key: 'meteora',   label: 'METEORA',   sub: 'LIVE',                       enabled: true   },
                   { key: 'launchlab', label: 'LAUNCHLAB', sub: isUsdc ? 'SOL ONLY' : 'LIVE', enabled: !isUsdc },
+                  { key: 'bags',      label: 'BAGS',      sub: isUsdc ? 'SOL ONLY' : 'LIVE', enabled: !isUsdc },
                 ] as const;
                 return tiles.map((p) => {
                   const active = formData.launchPlatform === p.key;
