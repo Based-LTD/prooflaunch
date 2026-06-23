@@ -949,6 +949,24 @@ function SubmitPageInner() {
                 });
               })()}
             </div>
+            {formData.launchPlatform === 'bags' && (
+              <div className="border-t border-[var(--border)] bg-[var(--accent)]/5 px-4 py-3 text-[11px] font-mono leading-relaxed text-[var(--muted)]">
+                <span className="text-[var(--accent)] font-semibold">SPACEX MODE:</span>{' '}
+                Bags runs "SpaceX Mode" by default — only ~4% of total supply circulates at
+                launch, with the remaining ~96% held in Bags's custody wallet for vesting /
+                future unlocks. Backers receive their pro-rata share of the trading float, not
+                of total supply. Starting market cap typically lands in the $20-50k range due
+                to the small float.{' '}
+                <a
+                  href="https://docs.bags.fm"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--accent)] underline"
+                >
+                  Learn more →
+                </a>
+              </div>
+            )}
           </section>
 
           {/* ── QUOTE CURRENCY — backing + trading + fees denominated here ── */}
