@@ -32,6 +32,8 @@ import {
   Connection,
   Keypair,
   PublicKey,
+  SystemProgram,
+  Transaction,
   VersionedTransaction,
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
@@ -42,11 +44,12 @@ import type { LaunchOutcome, LaunchParams } from './types';
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const BAGS_API_BASE = 'https://public-api-v2.bags.fm/api/v1';
 
-// Reserve for: token-info creation rent + fee-share config rent + launch
+// Reserve for: sub-escrow pre-fund (1.5M lamports, see SUB_ESCROW_PREFUND
+// below) + token-info creation rent + fee-share config rent + launch
 // rent + tx fees. Bags's flow ships multiple txs from the pool wallet
 // before the actual first-buy lands, so this is a bit fatter than the
 // Meteora adapter's 0.05 SOL. Tightenable empirically once we have
-// devnet data; conservative for first launch safety.
+// production data; conservative for first launch safety.
 const CREATE_RESERVE_LAMPORTS = 80_000_000; // 0.08 SOL
 
 // Per Bags's fee-share rule, the launch wallet (creator) must appear in
@@ -54,6 +57,17 @@ const CREATE_RESERVE_LAMPORTS = 80_000_000; // 0.08 SOL
 // to the sub-escrow.
 const POOL_WALLET_BPS = 1;
 const SUB_ESCROW_BPS = 9999;
+
+// Bags's POST /fee-share/config does an on-chain account lookup against
+// every claimer pubkey. Our fresh sub-escrow keypairs have no on-chain
+// footprint at launch time (they only become real when fees start
+// accruing later), which makes Bags's API return 500. Workaround:
+// pre-fund the sub-escrow with rent-exempt minimum from the pool wallet
+// BEFORE calling fee-share/config. The dust gets swept during the first
+// fee drain cycle, so net cost per launch is just rent + tx fee
+// (~0.0016 SOL). Validated empirically against the live Bags API
+// 2026-06-23.
+const SUB_ESCROW_PREFUND_LAMPORTS = 1_500_000; // 0.0015 SOL
 
 function decryptKeypair(encrypted: string): Keypair {
   return Keypair.fromSecretKey(bs58.decode(decryptPrivateKey(encrypted)));
@@ -266,6 +280,23 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
   const initialBuyLamports = poolBalance - CREATE_RESERVE_LAMPORTS;
 
   try {
+    // Step 0: pre-fund the sub-escrow so Bags's account lookup in
+    // fee-share/config succeeds. See SUB_ESCROW_PREFUND_LAMPORTS comment.
+    const subBalPre = await conn.getBalance(subEscrowKp.publicKey);
+    if (subBalPre < SUB_ESCROW_PREFUND_LAMPORTS) {
+      log('create_sent', { detail: { stage: 'bags_sub_prefund', amount: SUB_ESCROW_PREFUND_LAMPORTS } });
+      const fundTx = new Transaction().add(SystemProgram.transfer({
+        fromPubkey: poolKp.publicKey,
+        toPubkey: subEscrowKp.publicKey,
+        lamports: SUB_ESCROW_PREFUND_LAMPORTS - subBalPre,
+      }));
+      fundTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+      fundTx.feePayer = poolKp.publicKey;
+      const fundSig = await conn.sendTransaction(fundTx, [poolKp]);
+      await conn.confirmTransaction(fundSig, 'confirmed');
+      log('create_confirmed', { detail: { stage: 'bags_sub_prefund', sig: fundSig } });
+    }
+
     // Step 1: token info + metadata
     log('create_sent', { detail: { stage: 'bags_token_info', initialBuyLamports } });
     const info = await createTokenInfo(config);
