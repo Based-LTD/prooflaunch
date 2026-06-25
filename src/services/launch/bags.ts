@@ -369,8 +369,17 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     const poolAta = getAssociatedTokenAddressSync(
       new PublicKey(info.tokenMint), poolKp.publicKey, false, tokenProgramId,
     );
+    // The launch tx already confirmed above, so the pool ATA MUST exist
+    // and hold tokens — this poll is just waiting for our RPC node to
+    // catch up. Extending the deadline (60s) is far cheaper than the
+    // alternative: returning undefined → route bouncing the meme back
+    // to 'funded' → meme stuck in a state where DB says funded but mint
+    // is live on chain and the creator can't retry. If the poll DOES
+    // still time out after 60s, return success:false so the route's
+    // existing failure path runs (reverts to 'funded' cleanly) instead
+    // of getting wedged at undefined.
     let tokensReceived: number | undefined;
-    const POLL_DEADLINE = Date.now() + 15_000;
+    const POLL_DEADLINE = Date.now() + 60_000;
     while (Date.now() < POLL_DEADLINE) {
       try {
         const acct = await getAccount(conn, poolAta, 'confirmed', tokenProgramId);
@@ -386,8 +395,22 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
     if (tokensReceived === undefined) {
       log('reconcile_error', {
         ok: false,
-        detail: { stage: 'bags_pool_balance_read_timeout', poolAta: poolAta.toBase58() },
+        detail: { stage: 'bags_pool_balance_read_timeout_60s', poolAta: poolAta.toBase58(), launchSig },
       });
+      // The launch landed on chain (launchSig confirmed). The pool ATA
+      // poll exhausted 60s without seeing a balance. Refuse to return
+      // success:true with undefined tokensReceived — the route would
+      // bounce status to 'funded' but the mint is irretrievably live.
+      // Instead, return success:false with the on-chain reference so an
+      // operator can manually reconcile via launch_events.
+      return {
+        success: false,
+        error: `Bags launch tx ${launchSig} confirmed on chain but pool ATA balance poll timed out after 60s. Manual reconcile required: mint=${info.tokenMint}, poolAta=${poolAta.toBase58()}`,
+        mintAddress: info.tokenMint,
+        createSignature: launchSig,
+        poolWallet: poolKp.publicKey.toBase58(),
+        bagsFeeShareAuthority: feeShare.feeShareAuthority,
+      };
     }
 
     // Step 5c (best-effort): fetch the DBC pool key for downstream fee

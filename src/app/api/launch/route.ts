@@ -110,8 +110,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update status to launching
-    await supabase.from('memes').update({ status: 'launching' }).eq('id', meme_id);
+    // Atomically claim the launch slot. A non-atomic check-then-update
+    // could let two concurrent /api/launch requests both pass the
+    // 'funded' gate and both kick off the platform adapter — risking a
+    // double on-chain create+buy. The WHERE clause on status='funded'
+    // means only ONE concurrent request flips it; the other gets 0
+    // affected rows and exits cleanly. The rate limiter helps but isn't
+    // airtight on its own (clock boundaries, etc.).
+    const { data: claimed, error: claimErr } = await supabase
+      .from('memes')
+      .update({ status: 'launching' })
+      .eq('id', meme_id)
+      .eq('status', 'funded')
+      .select('id');
+    if (claimErr) {
+      return NextResponse.json({ error: `failed to claim launch: ${claimErr.message}` }, { status: 500 });
+    }
+    if (!claimed || claimed.length === 0) {
+      return NextResponse.json(
+        { error: 'Launch already in progress for this meme' },
+        { status: 409 },
+      );
+    }
 
     const config: LaunchConfig = {
       name: meme.name,

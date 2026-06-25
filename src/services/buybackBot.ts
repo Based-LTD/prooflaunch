@@ -717,30 +717,71 @@ async function executeSolDistribute(
   const transfersPerTx = qc === 'usdc' ? 6 : 18;
   const minRecipientRaw = qc === 'usdc' ? 1000 : MIN_SOL_RECIPIENT_LAMPORTS;
 
+  // CARRY-FORWARD (migration 059): load each candidate's prior pending
+  // balance. Previously, recipients whose per-run share fell below the
+  // dust floor were silently discarded, and the same small handful of
+  // top-weight wallets received SOL every cycle while everyone else
+  // got nothing. Now their share is accumulated in the bot-pending
+  // table until it crosses floor, then paid out — every holder gets
+  // paid eventually, in proportion to their weight, averaged over
+  // however many runs it takes. Same pattern as the daily PROOF
+  // airdrop (src/app/api/airdrop/daily/route.ts).
+  const wallets = recipients.list.map(r => r.wallet);
+  const { data: priorPendingRows } = await supabase
+    .from('meme_bot_pending_balances')
+    .select('wallet, pending_lamports, total_accrued_lamports, total_paid_lamports, payout_count')
+    .eq('bot_id', b.id)
+    .in('wallet', wallets);
+  const priorPending = new Map<string, {
+    pending: number; totalAccrued: number; totalPaid: number; payoutCount: number;
+  }>();
+  for (const r of priorPendingRows || []) {
+    priorPending.set(r.wallet, {
+      pending: Number(r.pending_lamports || 0),
+      totalAccrued: Number(r.total_accrued_lamports || 0),
+      totalPaid: Number(r.total_paid_lamports || 0),
+      payoutCount: Number(r.payout_count || 0),
+    });
+  }
+
+  // Split candidates into pay-now vs carry-forward.
+  type Bucket = {
+    wallet: string; shareThisRun: number; accumulated: number; payingNow: boolean;
+  };
+  const buckets: Bucket[] = recipients.list.map(r => {
+    const shareThisRun = Math.floor((usableLamports * r.weight) / totalWeight);
+    if (shareThisRun === 0) {
+      // weight too low to even produce a non-zero share — skip, no row needed
+      return { wallet: r.wallet, shareThisRun: 0, accumulated: 0, payingNow: false };
+    }
+    const accumulated = (priorPending.get(r.wallet)?.pending || 0) + shareThisRun;
+    return { wallet: r.wallet, shareThisRun, accumulated, payingNow: accumulated >= minRecipientRaw };
+  }).filter(bk => bk.shareThisRun > 0);
+
+  const payouts = buckets.filter(bk => bk.payingNow);
+  const carryForwards = buckets.filter(bk => !bk.payingNow);
+
   const sigs: string[] = [];
   let actualSent = 0;
   let credited = 0;
   const errors: string[] = [];
+  const successfullyPaid = new Set<string>();
 
-  for (let i = 0; i < recipients.list.length; i += transfersPerTx) {
-    const batch = recipients.list.slice(i, i + transfersPerTx);
+  for (let i = 0; i < payouts.length; i += transfersPerTx) {
+    const batch = payouts.slice(i, i + transfersPerTx);
     const tx = new Transaction();
     let txTotal = 0;
-    let batchHasAny = false;
-    for (const r of batch) {
-      const share = Math.floor((usableLamports * r.weight) / totalWeight);
-      if (share < minRecipientRaw) continue; // skip dust
+    for (const p of batch) {
+      // Pay the FULL accumulated amount (prior carry-forward + this run's share)
       for (const ix of buildQuoteTransferIxs({
         from: botKp.publicKey,
-        to: new PublicKey(r.wallet),
-        amountRaw: BigInt(share),
+        to: new PublicKey(p.wallet),
+        amountRaw: BigInt(p.accumulated),
         qc,
         payer: botKp.publicKey, // bot wallet pays ATA-create rent on USDC path
       })) tx.add(ix);
-      txTotal += share;
-      batchHasAny = true;
+      txTotal += p.accumulated;
     }
-    if (!batchHasAny) continue;
     try {
       tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
       tx.feePayer = botKp.publicKey;
@@ -750,12 +791,67 @@ async function executeSolDistribute(
       if (conf.value.err) throw new Error(`distribute_${qc} batch ${i} reverted: ${JSON.stringify(conf.value.err)}`);
       sigs.push(sig);
       actualSent += txTotal;
-      // Count actual transfers, not raw ix count (USDC has 2 ix per recipient).
-      credited += batch.filter((r) => Math.floor((usableLamports * r.weight) / totalWeight) >= minRecipientRaw).length;
+      credited += batch.length;
+      for (const p of batch) successfullyPaid.add(p.wallet);
     } catch (e) {
       errors.push(`batch starting at ${i}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+
+  // Update pending balances:
+  //  - Successfully paid → reset pending to 0, bump payout_count + total_paid
+  //  - Pay attempt that failed in its batch → KEEP accumulated as pending,
+  //    so next run retries (we already counted accruedThisRun in totalAccrued)
+  //  - Carry-forward → just update pending to accumulated
+  // total_accrued_lamports always grows by shareThisRun regardless of
+  // outcome — it tracks lifetime "fair share earned," not "actually paid."
+  const now = new Date().toISOString();
+  type Upsert = {
+    bot_id: string; wallet: string; pending_lamports: number; last_updated: string;
+    total_accrued_lamports: number; total_paid_lamports: number; payout_count: number;
+  };
+  const upserts: Upsert[] = [];
+  for (const bk of buckets) {
+    const prior = priorPending.get(bk.wallet) || { pending: 0, totalAccrued: 0, totalPaid: 0, payoutCount: 0 };
+    if (bk.payingNow && successfullyPaid.has(bk.wallet)) {
+      upserts.push({
+        bot_id: b.id, wallet: bk.wallet,
+        pending_lamports: 0,
+        last_updated: now,
+        total_accrued_lamports: prior.totalAccrued + bk.shareThisRun,
+        total_paid_lamports: prior.totalPaid + bk.accumulated,
+        payout_count: prior.payoutCount + 1,
+      });
+    } else {
+      // either intentional carry-forward, or batch failed mid-flight
+      upserts.push({
+        bot_id: b.id, wallet: bk.wallet,
+        pending_lamports: bk.accumulated,
+        last_updated: now,
+        total_accrued_lamports: prior.totalAccrued + bk.shareThisRun,
+        total_paid_lamports: prior.totalPaid,
+        payout_count: prior.payoutCount,
+      });
+    }
+  }
+  if (upserts.length > 0) {
+    const { error: pendingErr } = await supabase
+      .from('meme_bot_pending_balances')
+      .upsert(upserts, { onConflict: 'bot_id,wallet' });
+    if (pendingErr) {
+      // Don't fail the whole run — payouts already broadcast. Just log
+      // and let the next run re-derive from on-chain state if needed.
+      errors.push(`pending balance upsert: ${pendingErr.message}`);
+    }
+  }
+
+  const carryNote = carryForwards.length > 0
+    ? `${carryForwards.length} carry-forward (accumulating)`
+    : undefined;
+  const errorNote = errors.length > 0
+    ? `partial: ${errors.length} batch failures (${errors[0]})`
+    : undefined;
+  const notes = [errorNote, carryNote].filter(Boolean).join(' · ') || undefined;
 
   return finalize(
     supabase, m, b, action,
@@ -766,7 +862,7 @@ async function executeSolDistribute(
     undefined,  // single action_tx
     sigs.length > 0 ? sigs : undefined,
     credited,
-    errors.length > 0 ? `partial: ${errors.length} batch failures (${errors[0]})` : undefined,
+    notes,
   );
 }
 

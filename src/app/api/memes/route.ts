@@ -348,6 +348,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Symbol uniqueness check — case-insensitive, ignores failed rows
+    // so a creator whose first submit failed can retry under the same
+    // symbol. The DB also has a partial unique index as the final
+    // backstop (migration 058), but this check gives the user a clean
+    // 409 with a useful error instead of a generic constraint-violation
+    // 500. Critical for KOL pushes: prevents an impersonator from
+    // squatting the artist's symbol before the artist gets a chance to
+    // submit. Enum has no 'cancelled' today — single 'failed' exclusion
+    // matches the DB index's WHERE clause.
+    const { data: symbolHit } = await supabase
+      .from('memes')
+      .select('id, creator_wallet, status')
+      .ilike('symbol', symbol)
+      .neq('status', 'failed')
+      .maybeSingle();
+    if (symbolHit) {
+      const isOwn = symbolHit.creator_wallet === creator_wallet;
+      return NextResponse.json(
+        {
+          error: isOwn
+            ? `You already have a token with symbol "${symbol}" in state "${symbolHit.status}". Cancel or finish it before submitting another.`
+            : `Symbol "${symbol}" is already taken by another active launch. Pick a different symbol.`,
+        },
+        { status: 409 },
+      );
+    }
+
     // Check for free-submission perk: holding >= threshold PROOF waives the
     // 0.02 SOL creation fee. Fail-closed: any RPC issue → fee required as
     // normal.
