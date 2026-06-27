@@ -32,6 +32,12 @@ export function FeeDistributionBadge({ meme }: { meme: Meme }) {
     { label: 'Charity',  value: meme.fee_charity_pct ?? 0,        color: 'var(--success)' },
   ].filter((s) => s.value > 0);
 
+  // Backer + holder distribution surfaces are paused pending legal
+  // review of the active-claim mechanism. Fees still accrue per these
+  // ratios on-chain; only the actual outbound transfer is paused.
+  // See /roadmap for resumption paths.
+  const hasPausedSurface = (meme.fee_backer_pct ?? 0) > 0 || (meme.fee_holder_rewards_pct ?? 0) > 0;
+
   return (
     <div className="border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -47,6 +53,13 @@ export function FeeDistributionBadge({ meme }: { meme: Meme }) {
           set at launch · immutable
         </div>
       </div>
+
+      {hasPausedSurface && (
+        <div className="border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 px-3 py-2 text-[11px] font-mono leading-relaxed text-[var(--foreground)]/85">
+          <span className="text-[var(--accent-gold)] font-semibold">DISTRIBUTION PAUSED</span> —
+          Backer + holder shares continue to accrue on every trade. Active claim mechanism rolls out per <a href="/roadmap" className="text-[var(--accent)] underline">roadmap</a>. Creator share remains directly claimable.
+        </div>
+      )}
 
       {/* Visual split bar */}
       <div className="flex h-3 border border-[var(--border)] overflow-hidden">

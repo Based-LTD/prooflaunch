@@ -128,7 +128,14 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
     );
   }
 
-  const hasClaimable = rewards && rewards.total_claimable > 0;
+  const backerClaimable = rewards?.backer_rewards.claimable ?? 0;
+  const creatorClaimable = rewards?.creator_rewards.claimable ?? 0;
+  // Backer claims are paused pending the active-claim mechanism. Only
+  // the creator portion is actually claimable until that lands. The API
+  // also enforces this server-side; the UI just renders the matching
+  // state so the button doesn't pretend it'll succeed.
+  const claimableNow = creatorClaimable;
+  const accruingPaused = backerClaimable;
   const hasClaimed = rewards && rewards.total_claimed > 0;
 
   return (
@@ -140,32 +147,37 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
 
       {rewards && (
         <div className="space-y-2">
-          {/* Backer rewards */}
-          {isBacker && rewards.backer_rewards.claimable > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-[var(--muted)]">Backer share:</span>
-              <span className="font-medium text-[var(--success)]">
-                {rewards.backer_rewards.claimable.toFixed(6)} SOL
-              </span>
+          {/* Backer rewards — accruing, distribution paused */}
+          {isBacker && accruingPaused > 0 && (
+            <div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--muted)]">Backer share (accruing):</span>
+                <span className="font-medium text-[var(--accent-gold)]">
+                  {accruingPaused.toFixed(6)} SOL
+                </span>
+              </div>
+              <p className="text-[10px] text-[var(--muted)] mt-1">
+                Claim mechanism paused pending legal review. Balance continues to accrue. See <a href="/roadmap" className="underline">roadmap</a>.
+              </p>
             </div>
           )}
 
-          {/* Creator rewards */}
-          {isCreator && rewards.creator_rewards.claimable > 0 && (
+          {/* Creator rewards — claimable */}
+          {isCreator && creatorClaimable > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-[var(--muted)]">Creator fee:</span>
               <span className="font-medium text-[var(--success)]">
-                {rewards.creator_rewards.claimable.toFixed(6)} SOL
+                {creatorClaimable.toFixed(6)} SOL
               </span>
             </div>
           )}
 
-          {/* Total claimable */}
-          {hasClaimable && (
+          {/* Total claimable now (creator only while backer is paused) */}
+          {claimableNow > 0 && (
             <div className="flex justify-between text-sm pt-2 border-t border-[var(--border)]">
-              <span className="font-medium">Total claimable:</span>
+              <span className="font-medium">Claimable now:</span>
               <span className="font-bold text-[var(--success)]">
-                {rewards.total_claimable.toFixed(6)} SOL
+                {claimableNow.toFixed(6)} SOL
               </span>
             </div>
           )}
@@ -181,14 +193,14 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
       )}
 
       {/* No rewards message */}
-      {!hasClaimable && !hasClaimed && (
+      {claimableNow === 0 && accruingPaused === 0 && !hasClaimed && (
         <p className="text-sm text-[var(--muted)]">
-          No rewards yet. Rewards accrue from trading fees when this token is traded on pump.fun.
+          No rewards yet. Rewards accrue from trading fees when this token is traded.
         </p>
       )}
 
-      {/* Claim button */}
-      {hasClaimable && (
+      {/* Claim button — only when creator portion is actually claimable */}
+      {claimableNow > 0 && (
         <button
           onClick={handleClaim}
           disabled={claiming}
@@ -200,7 +212,7 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
               Claiming...
             </span>
           ) : (
-            `Claim ${rewards?.total_claimable.toFixed(4)} SOL`
+            `Claim ${claimableNow.toFixed(4)} SOL`
           )}
         </button>
       )}

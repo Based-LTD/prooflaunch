@@ -162,6 +162,12 @@ export async function POST(request: NextRequest) {
       backer_wallet,
       amount_sol,
       deposit_tx, // tx that sent amount_sol from backer -> meme's pool wallet
+      // attestation field accepted but no longer required — backers are
+      // now framed as active community participants (proof-of-work claim
+      // mechanism on /roadmap), not passive investors. The 'I am not a
+      // U.S. person' gate doesn't fit that frame and was removed from
+      // the confirm dialog 2026-06-27. Migration 060's columns remain
+      // for forensic continuity but accept null going forward.
     } = body;
 
     // Validation
@@ -424,6 +430,13 @@ export async function POST(request: NextRequest) {
 
     // Create the backing (pooled model — no per-backer burner; the
     // backer's SOL is already in the meme's pool wallet, verified above)
+    // Capture client country from Vercel's geo header for forensic
+    // continuity only (we know where backings came from over time even
+    // though we no longer gate). The IP middleware doesn't gate this
+    // path either now — backing is open globally; only fee CLAIMING is
+    // gated, and only when claims resume under the future mechanism.
+    const requestCountry = request.headers.get('x-vercel-ip-country') || null;
+
     const { data, error } = await supabase
       .from('backings')
       .insert({
@@ -433,6 +446,7 @@ export async function POST(request: NextRequest) {
         deposit_tx,
         status: 'confirmed',
         slot_number: slotNumber,
+        attested_from_country: requestCountry,
       })
       .select()
       .single();

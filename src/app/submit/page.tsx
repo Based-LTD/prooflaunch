@@ -30,10 +30,24 @@ interface BotActionMeta {
 // see 'SOL → HOLDERS' / 'DONATE SOL'; USDC memes see 'USDC → HOLDERS' /
 // 'DONATE USDC'. The action enum stays the same so the DB schema and
 // downstream code don't need to know the difference.
+// Bot actions PAUSED 2026-06-27 pending legal review. Any action that
+// distributes value to outside wallets (token holders or backers) is a
+// securities-flavored surface for a US-resident operator and is hidden
+// from the picker for new launches. The bot dispatch layer
+// (services/buybackBot.ts) also skips these actions at runtime so any
+// already-attached bots from prior launches no-op cleanly. To resume:
+// drop from this set, re-enable in buybackBot.ts, push, announce.
+const PAUSED_BOT_ACTIONS_FOR_LEGAL_REVIEW: ReadonlySet<BotActionT> = new Set([
+  'distribute_tokens_holders',
+  'distribute_tokens_backers',
+  'distribute_sol_holders',
+  'distribute_sol_backers',
+]);
+
 function botActionsForQuote(qc: 'sol' | 'usdc'): BotActionMeta[] {
   const Q = qc === 'usdc' ? 'USDC' : 'SOL';
   const ql = qc === 'usdc' ? 'USDC' : 'SOL';
-  return [
+  const all: BotActionMeta[] = [
     { value: 'burn',                       label: 'BURN',                short: 'Burn',                tag: 'Deflationary', emoji: '🔥', desc: `Swap delegated ${Q} → token then burnChecked the result. Every cycle permanently removes supply from the circulating set.` },
     { value: 'hold',                       label: 'HOLD',                short: 'Vault',               tag: 'Treasury',     emoji: '🏦', desc: `Swap delegated ${Q} → token and HOLD the tokens in a labeled vault wallet. Creator-withdrawable; supports unlimited labeled vaults (Marketing, DAO, Liquidity).` },
     { value: 'distribute_tokens_holders',  label: 'TOKENS → HOLDERS',    short: 'Tokens→Holders',      tag: 'Loyalty',      emoji: '🪙', desc: `Swap delegated ${Q} → token, airdrop pro-rata to current holders. Every cycle deepens the loyalty ladder.` },
@@ -44,6 +58,7 @@ function botActionsForQuote(qc: 'sol' | 'usdc'): BotActionMeta[] {
     { value: 'donate_tokens',              label: 'DONATE TOKENS',       short: 'Donate Tokens',       tag: 'Commitment',   emoji: '🎀', desc: `Buy tokens, send them to a fixed destination wallet. Same immutable-address commitment as DONATE ${ql}.` },
     { value: 'feed_lp',                    label: 'POOL FEEDER',         short: 'Pool Feeder',         tag: 'Liquidity',    emoji: '🌊', desc: `Deepen the LP after graduation. Bot swaps half ${Q} into tokens, deposits both as locked liquidity, owns the LP position forever. Activates the moment the token graduates from the bonding curve to a full AMM pool.` },
   ];
+  return all.filter((a) => !PAUSED_BOT_ACTIONS_FOR_LEGAL_REVIEW.has(a.value));
 }
 
 // Default action list (SOL) — used by validation helpers that don't have

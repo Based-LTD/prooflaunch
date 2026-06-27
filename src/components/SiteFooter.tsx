@@ -31,6 +31,23 @@ export function SiteFooter() {
           </div>
         </div>
 
+        {/* Distribution-pause disclosure — persistent + site-wide so users
+            encounter it before reaching a claim surface. Replaces the
+            earlier geo-restriction line as of 2026-06-27 when all
+            distribution surfaces moved to paused/accruing-only state
+            pending legal review of the active-claim mechanism. */}
+        <div className="text-[10px] sm:text-[11px] font-mono leading-relaxed text-[var(--foreground)]/80 border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 px-3 py-2">
+          <span className="text-[var(--accent-gold)] font-semibold">DISTRIBUTIONS PAUSED —</span>{' '}
+          Backer trading-fee shares, $PROOF holder airdrops, and per-token holder bots continue to accrue but are not currently distributed. Active claim mechanism in development; see roadmap.{' '}
+          <Link href="/roadmap" className="text-[var(--accent)] hover:underline">
+            Roadmap →
+          </Link>
+          {' · '}
+          <Link href="/legal" className="text-[var(--accent)] hover:underline">
+            Terms →
+          </Link>
+        </div>
+
         <div className="text-[10px] sm:text-[11px] font-mono leading-relaxed text-[var(--muted)]/85 border border-[var(--border)] bg-[var(--card)]/40 p-3">
           <span className="text-[var(--accent-gold)] font-semibold">PARTICIPATION DISCLAIMER —</span>{' '}
           Proof Launch is an experimental, community-driven protocol. Nothing here is

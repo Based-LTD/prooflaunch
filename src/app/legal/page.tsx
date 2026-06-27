@@ -21,7 +21,7 @@ export default function LegalPage() {
           Participation Disclaimer
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)] font-mono">
-          Last updated: 2026-06-06 · Interim disclaimer pending review with counsel.
+          Last updated: 2026-06-27 · Interim disclaimer pending review with counsel.
         </p>
       </header>
 
@@ -83,21 +83,73 @@ export default function LegalPage() {
         </ul>
       </Section>
 
-      <Section title="Your Responsibility for Legal Compliance">
+      <Section title="Current Distribution Posture (Updated 2026-06-27)">
         <p>
-          It is your sole responsibility to determine whether use of this protocol
-          is permitted under the laws of your jurisdiction, and to comply with all
-          applicable laws, including but not limited to securities, tax, anti-money-
-          laundering, and sanctions regulations.
+          <strong>The following trading-fee distribution surfaces are currently
+          paused</strong> while the protocol&apos;s active-claim mechanism is in
+          development and pending legal review:
+        </p>
+        <ul className="list-disc pl-6 space-y-1">
+          <li>backer trading-fee shares (claims of accrued fees on tokens you backed);</li>
+          <li>daily $PROOF holder airdrop;</li>
+          <li>per-token holder-bot distributions (e.g., distribute-SOL-to-holders, distribute-tokens-to-holders, distribute-SOL-to-backers, distribute-tokens-to-backers).</li>
+        </ul>
+        <p>
+          Accrual mechanics continue to operate. Fees collected from launched tokens
+          continue to be attributed per the protocol&apos;s on-chain logic, and the
+          balances remain transparently viewable per backing. <strong>Outbound
+          transfer of accrued amounts is paused</strong> until the active-claim
+          mechanism ships. Creators continue to be able to claim fee shares attributed
+          to launches they themselves created.
         </p>
         <p>
-          You may not use this protocol if you are a resident of, located in, or
-          otherwise subject to the jurisdiction of any country, territory, or region
-          subject to comprehensive sanctions administered by the U.S. Department of
-          Treasury&apos;s Office of Foreign Assets Control (OFAC), the United Nations
-          Security Council, the European Union, or other applicable authority,
-          including (without limitation) Cuba, Iran, North Korea, Syria, and the
-          Crimea, Donetsk, Luhansk, and Sevastopol regions of Ukraine.
+          The protocol&apos;s roadmap describes three resumption paths under
+          evaluation: (a) a proof-of-work claim mechanism under which participants
+          demonstrate active community contribution to unlock their accrued share;
+          (b) ambassador-style scheduled distributions; or (c) a registered offering
+          under Reg CF or partner-tokenized-RWA frameworks. Final structure pending
+          counsel review.
+        </p>
+      </Section>
+
+      <Section title="Geographic Restrictions">
+        <p>
+          When distribution surfaces resume, the protocol intends to apply geographic
+          restrictions to participants located in or subject to the jurisdiction of
+          any country, territory, or region under comprehensive sanctions administered
+          by the U.S. Department of Treasury&apos;s Office of Foreign Assets Control
+          (OFAC), including (without limitation) Cuba, Iran, North Korea, Syria, and
+          the Crimea, Donetsk, Luhansk, and Sevastopol regions of Ukraine.
+        </p>
+        <p>
+          Application of geographic restrictions to U.S. persons specifically may
+          additionally apply, depending on the active-claim mechanism selected and
+          counsel guidance.
+        </p>
+      </Section>
+
+      <Section title="Accrual Continues While Distribution Pauses">
+        <p>
+          During the distribution pause, fees attributable to your participation
+          continue to accrue and remain attributed to your wallet on-chain and in
+          the protocol&apos;s database. The pause is implementational, not a
+          forfeiture: accrued balances will become claimable through the
+          active-claim mechanism when it ships.
+        </p>
+        <p>
+          Participants should be aware that, depending on jurisdiction, accruing
+          balances may have tax implications even prior to actual receipt
+          (constructive-receipt doctrine in some jurisdictions). Consult a qualified
+          tax professional regarding your specific circumstances.
+        </p>
+      </Section>
+
+      <Section title="Your Broader Responsibility for Legal Compliance">
+        <p>
+          It remains your sole responsibility to determine whether use of this
+          protocol is permitted under the laws of your jurisdiction, and to comply
+          with all applicable laws, including but not limited to securities, tax,
+          anti-money-laundering, and sanctions regulations.
         </p>
       </Section>
 

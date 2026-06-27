@@ -165,10 +165,16 @@ export const PortfolioRewards: FC = () => {
     );
   }
 
-  const hasClaimable = rewards && rewards.total_claimable > 0;
+  // Backer claims are paused pending the active-claim mechanism (see
+  // /roadmap). Only the creator-source claim button is live. The backer
+  // accrual still shows in the UI as a counter so users see the system
+  // tracking their share.
+  const creatorClaimable = rewards?.creator_rewards.claimable ?? 0;
+  const backerAccruing = rewards?.backer_rewards.claimable ?? 0;
+  const hasClaimable = creatorClaimable > 0;          // only creator portion is actually claimable now
   const hasClaimed = rewards && rewards.total_claimed > 0;
   const hasPending = rewards && (rewards.total_pending || 0) > 0;
-  const hasAnyRewards = hasClaimable || hasClaimed || hasPending;
+  const hasAnyRewards = creatorClaimable > 0 || backerAccruing > 0 || hasClaimed || hasPending;
 
   // Get all tokens with rewards
   const allTokens = [
@@ -247,13 +253,18 @@ export const PortfolioRewards: FC = () => {
         )}
       </div>
 
-      {/* Summary — Claimable (ready now) + Pending (live on-chain accrual) + Total Claimed */}
+      {/* Summary — Claimable (creator portion only, while backer is paused) + Pending (live on-chain accrual) + Total Claimed */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-[var(--background)] rounded-lg p-4">
           <div className="text-sm text-[var(--muted)] mb-1">Claimable</div>
           <div className={`text-2xl font-bold ${hasClaimable ? 'text-[var(--success)]' : ''}`}>
-            <TickingNumber value={rewards?.total_claimable || 0} /> SOL
+            <TickingNumber value={creatorClaimable} /> SOL
           </div>
+          {backerAccruing > 0 && (
+            <div className="text-[10px] font-mono text-[var(--accent-gold)] mt-1">
+              + {backerAccruing.toFixed(6)} SOL backer share accruing (claim paused — see <a href="/roadmap" className="underline">roadmap</a>)
+            </div>
+          )}
         </div>
         <div className="bg-[var(--background)] rounded-lg p-4">
           <div className="text-sm text-[var(--muted)] mb-1 flex items-center gap-2">
@@ -282,21 +293,21 @@ export const PortfolioRewards: FC = () => {
       </div>
 
       {/* Breakdown by source */}
-      {rewards && (rewards.backer_rewards.claimable > 0 || rewards.creator_rewards.claimable > 0) && (
+      {rewards && (backerAccruing > 0 || creatorClaimable > 0) && (
         <div className="space-y-2 pt-2 border-t border-[var(--border)]">
-          {rewards.backer_rewards.claimable > 0 && (
+          {backerAccruing > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-[var(--muted)]">From backing ({rewards.backer_rewards.tokens.length} tokens):</span>
-              <span className="font-medium text-[var(--success)]">
-                {rewards.backer_rewards.claimable.toFixed(6)} SOL
+              <span className="text-[var(--muted)]">From backing ({rewards.backer_rewards.tokens.length} tokens, claim paused):</span>
+              <span className="font-medium text-[var(--accent-gold)]">
+                {backerAccruing.toFixed(6)} SOL
               </span>
             </div>
           )}
-          {rewards.creator_rewards.claimable > 0 && (
+          {creatorClaimable > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-[var(--muted)]">Creator fees ({rewards.creator_rewards.tokens.length} tokens):</span>
               <span className="font-medium text-[var(--success)]">
-                {rewards.creator_rewards.claimable.toFixed(6)} SOL
+                {creatorClaimable.toFixed(6)} SOL
               </span>
             </div>
           )}
@@ -337,7 +348,8 @@ export const PortfolioRewards: FC = () => {
         </div>
       )}
 
-      {/* Claim All button */}
+      {/* Claim button — only the creator-source portion is actually
+          claimable while the active-claim mechanism is in development. */}
       {hasClaimable && (
         <button
           onClick={handleClaimAll}
@@ -350,7 +362,7 @@ export const PortfolioRewards: FC = () => {
               Claiming...
             </span>
           ) : (
-            `Claim All ${rewards?.total_claimable.toFixed(4)} SOL`
+            `Claim ${creatorClaimable.toFixed(4)} SOL (creator)`
           )}
         </button>
       )}
@@ -383,7 +395,7 @@ export const PortfolioRewards: FC = () => {
 
       {/* Info */}
       <p className="text-xs text-[var(--muted)]">
-        Rewards accrue from trading fees when your backed tokens are traded on pump.fun. Min claim: 0.001 SOL.
+        Backer share accrues from trading fees on tokens you backed; active claim mechanism rolls out per <a href="/roadmap" className="underline">roadmap</a>. Creator share is directly claimable (min 0.001 SOL).
       </p>
     </div>
   );

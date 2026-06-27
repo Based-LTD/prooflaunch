@@ -1,18 +1,31 @@
 'use client';
 
-import { FC, useEffect, useRef } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
+
+// Optional acknowledgement gate. When set, renders a required checkbox
+// inside the dialog. The Confirm button stays disabled until the box is
+// checked. Used for geo-restriction / ToS attestation on backing flows
+// (see src/app/meme/[id]/page.tsx). Keeping it as a prop rather than a
+// separate dialog component keeps the visual + interaction model
+// consistent for users across all confirm flows.
+interface Acknowledgement {
+  label: string;          // text shown next to the checkbox
+  disclosureText?: string; // optional longer text shown above the checkbox
+  versionTag?: string;     // opaque tag (e.g. "geo-v1") sent back via onConfirm metadata
+}
 
 interface ConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (meta?: { acknowledgement?: { versionTag: string; acceptedAt: string } }) => void;
   title: string;
   message: string;
   confirmText?: string;
   cancelText?: string;
   variant?: 'warning' | 'danger' | 'info';
   isLoading?: boolean;
+  requireAcknowledgement?: Acknowledgement;
 }
 
 export const ConfirmDialog: FC<ConfirmDialogProps> = ({
@@ -25,7 +38,15 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
   cancelText = 'Cancel',
   variant = 'warning',
   isLoading = false,
+  requireAcknowledgement,
 }) => {
+  const [acked, setAcked] = useState(false);
+
+  // Reset checkbox each time the dialog opens — otherwise a previous
+  // session's "checked" state would persist into a new backing flow.
+  useEffect(() => {
+    if (isOpen) setAcked(false);
+  }, [isOpen]);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,7 +119,30 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
 
         {/* Content */}
         <h3 className="text-xl font-bold text-center mb-2">{title}</h3>
-        <p className="text-[var(--muted)] text-center mb-6">{message}</p>
+        <p className="text-[var(--muted)] text-center mb-6 whitespace-pre-line">{message}</p>
+
+        {/* Optional ToS / geo acknowledgement */}
+        {requireAcknowledgement && (
+          <div className="mb-6 border border-[var(--border)] rounded-lg p-4 bg-[var(--background)]/50">
+            {requireAcknowledgement.disclosureText && (
+              <p className="text-xs text-[var(--muted)] mb-3 whitespace-pre-line leading-relaxed">
+                {requireAcknowledgement.disclosureText}
+              </p>
+            )}
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={acked}
+                onChange={(e) => setAcked(e.target.checked)}
+                disabled={isLoading}
+                className="mt-0.5 flex-shrink-0 w-4 h-4 accent-[var(--accent)] cursor-pointer disabled:cursor-not-allowed"
+              />
+              <span className="text-xs text-[var(--foreground)] leading-relaxed">
+                {requireAcknowledgement.label}
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3">
@@ -110,9 +154,21 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
             {cancelText}
           </button>
           <button
-            onClick={onConfirm}
-            disabled={isLoading}
-            className={`flex-1 px-4 py-2.5 rounded-lg text-white font-medium transition-colors disabled:opacity-50 ${styles.button}`}
+            onClick={() => {
+              if (requireAcknowledgement && !acked) return;
+              onConfirm(
+                requireAcknowledgement
+                  ? {
+                      acknowledgement: {
+                        versionTag: requireAcknowledgement.versionTag ?? 'unspecified',
+                        acceptedAt: new Date().toISOString(),
+                      },
+                    }
+                  : undefined,
+              );
+            }}
+            disabled={isLoading || (requireAcknowledgement && !acked)}
+            className={`flex-1 px-4 py-2.5 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${styles.button}`}
           >
             {isLoading ? 'Processing...' : confirmText}
           </button>

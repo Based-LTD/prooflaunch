@@ -38,6 +38,21 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
+    // PAUSED 2026-06-27 pending legal review. BACKER-source claims (your
+    // pro-rata of a launch's trading fees) are paused while we work
+    // through the active-claim mechanism with counsel — passive auto-
+    // claim by US-resident operator looks too much like a securities
+    // distribution. Backer fees continue to ACCRUE per backing row;
+    // only the actual payout is paused. Creator-source claims (a
+    // creator's own fees from a launch they created) remain available —
+    // that's self-employment income from your own venture, not passive
+    // distribution, and the lawyer-call carve-out is much cleaner.
+    //
+    // To resume: flip the flag below, ship the underlying claim mechanic
+    // (proof-of-work / registered offering / etc.) the lawyer signed
+    // off on, push, announce.
+    const BACKER_CLAIMS_PAUSED_FOR_LEGAL_REVIEW = true;
+
     // ── TOCTOU-safe claim flow ───────────────────────────────────────
     // Previous flow read claimable, sent SOL, then zeroed out — concurrent
     // requests could all observe the same pre-zero value and double-pay.
@@ -58,19 +73,26 @@ export async function POST(request: NextRequest) {
     type Source = { type: 'backer' | 'creator'; id: string; memeId: string; observedAmount: number; oldTotalClaimed: number };
     const observed: Source[] = [];
 
-    const backingsQuery = supabase
-      .from('backings')
-      .select('id, meme_id, claimable_fees_sol, total_claimed_sol')
-      .eq('backer_wallet', wallet_address)
-      .gt('claimable_fees_sol', 0);
-    if (meme_id) backingsQuery.eq('meme_id', meme_id);
-    const { data: backings } = await backingsQuery;
-    for (const b of backings || []) {
-      const amount = Number(b.claimable_fees_sol);
-      if (amount > 0) observed.push({
-        type: 'backer', id: b.id, memeId: b.meme_id, observedAmount: amount,
-        oldTotalClaimed: Number(b.total_claimed_sol || 0),
-      });
+    // Backer claims are paused (see flag above). We deliberately don't
+    // include backings in the observed-sources list so the rest of the
+    // TOCTOU flow runs unchanged for creator-source claims. The GET
+    // (status read) below still returns the accruing balance for
+    // visibility — only the actual payout is paused.
+    if (!BACKER_CLAIMS_PAUSED_FOR_LEGAL_REVIEW) {
+      const backingsQuery = supabase
+        .from('backings')
+        .select('id, meme_id, claimable_fees_sol, total_claimed_sol')
+        .eq('backer_wallet', wallet_address)
+        .gt('claimable_fees_sol', 0);
+      if (meme_id) backingsQuery.eq('meme_id', meme_id);
+      const { data: backings } = await backingsQuery;
+      for (const b of backings || []) {
+        const amount = Number(b.claimable_fees_sol);
+        if (amount > 0) observed.push({
+          type: 'backer', id: b.id, memeId: b.meme_id, observedAmount: amount,
+          oldTotalClaimed: Number(b.total_claimed_sol || 0),
+        });
+      }
     }
 
     const creatorQuery = supabase
@@ -89,6 +111,28 @@ export async function POST(request: NextRequest) {
     }
 
     if (observed.length === 0) {
+      // If backer claims are paused AND this wallet has an accruing
+      // backer balance, give a precise paused message instead of a
+      // misleading "nothing to claim" — the user can see the balance
+      // in the UI and would be confused otherwise.
+      if (BACKER_CLAIMS_PAUSED_FOR_LEGAL_REVIEW) {
+        const probe = supabase
+          .from('backings')
+          .select('id', { count: 'exact', head: true })
+          .eq('backer_wallet', wallet_address)
+          .gt('claimable_fees_sol', 0);
+        if (meme_id) probe.eq('meme_id', meme_id);
+        const { count } = await probe;
+        if ((count || 0) > 0) {
+          return NextResponse.json(
+            {
+              error: 'Backer fee claims are paused pending legal review of the distribution mechanism. Your balance continues to accrue; see /roadmap for the active-claim mechanism rollout. Creator-source claims remain available.',
+              code: 'BACKER_CLAIMS_PAUSED',
+            },
+            { status: 423 }, // 423 Locked — distinct from 400 so the UI can render the paused state, not a generic error.
+          );
+        }
+      }
       return NextResponse.json({ error: 'No rewards to claim' }, { status: 400 });
     }
 
