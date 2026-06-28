@@ -130,12 +130,10 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
 
   const backerClaimable = rewards?.backer_rewards.claimable ?? 0;
   const creatorClaimable = rewards?.creator_rewards.claimable ?? 0;
-  // Backer claims are paused pending the active-claim mechanism. Only
-  // the creator portion is actually claimable until that lands. The API
-  // also enforces this server-side; the UI just renders the matching
-  // state so the button doesn't pretend it'll succeed.
-  const claimableNow = creatorClaimable;
-  const accruingPaused = backerClaimable;
+  // Both backer + creator claims are active. Total claimable is the sum.
+  // IP geoblock at the API layer (src/middleware.ts) catches US/OFAC
+  // before any payout; this UI doesn't try to second-guess that.
+  const claimableNow = backerClaimable + creatorClaimable;
   const hasClaimed = rewards && rewards.total_claimed > 0;
 
   return (
@@ -147,18 +145,13 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
 
       {rewards && (
         <div className="space-y-2">
-          {/* Backer rewards — accruing, distribution paused */}
-          {isBacker && accruingPaused > 0 && (
-            <div>
-              <div className="flex justify-between text-sm">
-                <span className="text-[var(--muted)]">Backer share (accruing):</span>
-                <span className="font-medium text-[var(--accent-gold)]">
-                  {accruingPaused.toFixed(6)} SOL
-                </span>
-              </div>
-              <p className="text-[10px] text-[var(--muted)] mt-1">
-                Claim mechanism paused pending legal review. Balance continues to accrue. See <a href="/roadmap" className="underline">roadmap</a>.
-              </p>
+          {/* Backer rewards — claimable */}
+          {isBacker && backerClaimable > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-[var(--muted)]">Backer share:</span>
+              <span className="font-medium text-[var(--success)]">
+                {backerClaimable.toFixed(6)} SOL
+              </span>
             </div>
           )}
 
@@ -172,10 +165,10 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
             </div>
           )}
 
-          {/* Total claimable now (creator only while backer is paused) */}
+          {/* Total claimable now */}
           {claimableNow > 0 && (
             <div className="flex justify-between text-sm pt-2 border-t border-[var(--border)]">
-              <span className="font-medium">Claimable now:</span>
+              <span className="font-medium">Total claimable:</span>
               <span className="font-bold text-[var(--success)]">
                 {claimableNow.toFixed(6)} SOL
               </span>
@@ -193,7 +186,7 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
       )}
 
       {/* No rewards message */}
-      {claimableNow === 0 && accruingPaused === 0 && !hasClaimed && (
+      {claimableNow === 0 && !hasClaimed && (
         <p className="text-sm text-[var(--muted)]">
           No rewards yet. Rewards accrue from trading fees when this token is traded.
         </p>

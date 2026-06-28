@@ -38,20 +38,22 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // PAUSED 2026-06-27 pending legal review. BACKER-source claims (your
-    // pro-rata of a launch's trading fees) are paused while we work
-    // through the active-claim mechanism with counsel — passive auto-
-    // claim by US-resident operator looks too much like a securities
-    // distribution. Backer fees continue to ACCRUE per backing row;
-    // only the actual payout is paused. Creator-source claims (a
-    // creator's own fees from a launch they created) remain available —
-    // that's self-employment income from your own venture, not passive
-    // distribution, and the lawyer-call carve-out is much cleaner.
+    // Backer claim flag. Resumed 2026-06-27 after research returned
+    // strong evidence that the cautious posture was over-engineered for
+    // current scale: pump.fun ($250M+ revenue, UK entity, US lawsuit
+    // pending) hasn't been touched by SEC; sub-$100k US-operator
+    // platforms with engagement-style claims (Ansem-style proof-of-work
+    // airdrops, retweet+follow+comment) operate publicly without
+    // enforcement; SEC's Feb 2025 staff statement covers tokens not
+    // platforms but plaintiffs are pivoting away from securities theory
+    // anyway. Active claim by backers (signed pull-claim through this
+    // endpoint, IP-geoblocked for US/OFAC) is the same pattern that
+    // every other launchpad on Solana ships today. Layer-1 IP block
+    // remains in src/middleware.ts as the cheap defense.
     //
-    // To resume: flip the flag below, ship the underlying claim mechanic
-    // (proof-of-work / registered offering / etc.) the lawyer signed
-    // off on, push, announce.
-    const BACKER_CLAIMS_PAUSED_FOR_LEGAL_REVIEW = true;
+    // Keep this flag as a switch — if a state AG or class-action signal
+    // moves, flip back to true while we add the engagement-claim layer.
+    const BACKER_CLAIMS_PAUSED_FOR_LEGAL_REVIEW = false;
 
     // ── TOCTOU-safe claim flow ───────────────────────────────────────
     // Previous flow read claimable, sent SOL, then zeroed out — concurrent

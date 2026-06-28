@@ -60,13 +60,15 @@ const SHIPPED = [
 ];
 
 const BUILDING = [
-  // ─── ACTIVE-CLAIM MECHANISM (post-2026-06-27 distribution pause) ───
-  // The three entries below are the load-bearing items that determine
-  // when paused distribution surfaces (backer fee claims, daily $PROOF
-  // holder airdrop, per-token holder bots) resume. Order = priority.
-  { icon: Shield, title: 'Active-claim mechanism for backer fee shares', desc: 'Distribution of backer trading-fee shares is paused as of 2026-06-27 pending legal review. Backer balances continue to accrue per-backing; only outbound transfer is paused. Active-claim ships when the mechanism is built and counsel signs off — current candidates: proof-of-work claim (backers demonstrate active community contribution via social posts to unlock), ambassador-style scheduled airdrop, or a registered offering. Final structure pending lawyer call.' },
-  { icon: Shield, title: '$PROOF holder distribution resume', desc: 'Daily $PROOF holder airdrop is paused as of 2026-06-27. The 5%-of-platform-fees route into HOLDER_REWARDS_WALLET continues — the wallet balance keeps growing, publicly viewable on chain. Resumption ships once the active-claim mechanism (above) lands; same legal framework applies. Accruing pool size becomes a visible counter showing how much is held for future redistribution.' },
-  { icon: Shield, title: 'Compliant revenue-share framework', desc: 'Long-form path for resuming both surfaces above. Two options under evaluation with counsel: (a) geoblock + offshore entity structure with on-chain enforcement; or (b) Reg CF / Securitize-style registered offering. Either provides the defensible long-term posture for a US-resident operator running a revenue-share token. Final structure follows legal review; not committing to specific framework yet because the choice depends on lawyer guidance + business scale.' },
+  // ─── ENGAGEMENT-CLAIM MECHANISM (resume paused surfaces) ───
+  // Backer + creator fee claims are active as of 2026-06-27. The two
+  // entries below are about resuming the auto-distribution surfaces
+  // that remain paused (daily $PROOF holder airdrop, per-token holder
+  // bots) via an engagement-style mechanism — active community
+  // contribution unlocks the accrued share, structurally distinct from
+  // passive distribution.
+  { icon: Shield, title: 'Engagement-claim mechanism for holder rewards', desc: 'Daily $PROOF holder airdrop + per-token holder-bot distributions are paused. The fees continue to accrue (HOLDER_REWARDS_WALLET balance grows on chain; bot wallets accumulate via fee delegation). Resumption requires an engagement-claim layer: holders demonstrate active community contribution (social posts, content, ambassador activity) to unlock their accrued share. Same model that has become standard among top Solana KOLs running engagement-conditional airdrops. Final implementation pending product + counsel review.' },
+  { icon: Shield, title: 'Compliant long-term distribution framework', desc: 'Optional long-form path for if/when scale or specific-jurisdiction questions require a more formal structure. Options under evaluation: (a) offshore foundation entity (Cayman / BVI standard) with on-chain enforcement; or (b) Reg CF / Securitize-style registered offering. Not load-bearing at current scale — backer + creator claims are active under the standard pull-claim + IP-geoblock + ToS framework that every other revenue-share Solana launchpad uses. Available as a defensive option once specific facts on the ground (scale, complaints, regulatory signal) warrant.' },
 
   { icon: Bot, title: 'USDC bot parity for POOL FEEDER', desc: 'Every other USDC bot action shipped this week (burn, hold, distribute SOL/tokens, donate). The post-graduation LP-add (feed_lp) is the one remaining SOL-only path — needs DAMM v2 USDC/token LP-add support. Until it ships, USDC POOL FEEDER bots accumulate USDC; once it ships, they auto-deploy LP same as SOL launches do today.' },
   { icon: Layers, title: 'Multi-launchpad expansion — Bonk.fun, Believe, Daos.fun', desc: 'Multi-platform pooled-atomic launches are live for pump.fun, Meteora DBC, and Raydium LaunchLab. Next wave: Bonk.fun, Believe, Daos.fun. Each gets a dedicated adapter behind the same pooled launch dispatcher. Same fair-launch spine, more launchpads to choose from at submit.' },

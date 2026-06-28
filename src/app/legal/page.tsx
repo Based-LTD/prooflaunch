@@ -85,30 +85,28 @@ export default function LegalPage() {
 
       <Section title="Current Distribution Posture (Updated 2026-06-27)">
         <p>
-          <strong>The following trading-fee distribution surfaces are currently
-          paused</strong> while the protocol&apos;s active-claim mechanism is in
-          development and pending legal review:
+          <strong>Active surfaces (pull-claim, signed by wallet, geographically
+          restricted at the API layer):</strong>
         </p>
         <ul className="list-disc pl-6 space-y-1">
-          <li>backer trading-fee shares (claims of accrued fees on tokens you backed);</li>
-          <li>daily $PROOF holder airdrop;</li>
-          <li>per-token holder-bot distributions (e.g., distribute-SOL-to-holders, distribute-tokens-to-holders, distribute-SOL-to-backers, distribute-tokens-to-backers).</li>
+          <li>backer trading-fee claims (your pro-rata of accrued fees on tokens you backed);</li>
+          <li>creator fee claims (a creator&apos;s fees on launches they created).</li>
         </ul>
         <p>
-          Accrual mechanics continue to operate. Fees collected from launched tokens
-          continue to be attributed per the protocol&apos;s on-chain logic, and the
-          balances remain transparently viewable per backing. <strong>Outbound
-          transfer of accrued amounts is paused</strong> until the active-claim
-          mechanism ships. Creators continue to be able to claim fee shares attributed
-          to launches they themselves created.
+          <strong>Paused surfaces (continue to accrue, distribution pending the
+          engagement-claim mechanism):</strong>
         </p>
+        <ul className="list-disc pl-6 space-y-1">
+          <li>daily $PROOF holder airdrop — accumulated fees remain in HOLDER_REWARDS_WALLET, publicly viewable on chain;</li>
+          <li>per-token holder-bot distributions (e.g., distribute-SOL-to-holders, distribute-tokens-to-holders, distribute-SOL-to-backers, distribute-tokens-to-backers) — bot wallets continue to accumulate via fee delegation but do not currently push outbound.</li>
+        </ul>
         <p>
-          The protocol&apos;s roadmap describes three resumption paths under
-          evaluation: (a) a proof-of-work claim mechanism under which participants
-          demonstrate active community contribution to unlock their accrued share;
-          (b) ambassador-style scheduled distributions; or (c) a registered offering
-          under Reg CF or partner-tokenized-RWA frameworks. Final structure pending
-          counsel review.
+          The protocol&apos;s roadmap describes the planned engagement-claim
+          mechanism for resuming the paused surfaces: participants demonstrate
+          active community contribution (e.g., social engagement, content, ambassador
+          activity) to unlock their accrued share — an active-participant model
+          structurally distinct from passive distribution. Final structure pending
+          counsel review and product implementation.
         </p>
       </Section>
 

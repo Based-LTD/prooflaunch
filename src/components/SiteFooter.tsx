@@ -31,20 +31,19 @@ export function SiteFooter() {
           </div>
         </div>
 
-        {/* Distribution-pause disclosure — persistent + site-wide so users
-            encounter it before reaching a claim surface. Replaces the
-            earlier geo-restriction line as of 2026-06-27 when all
-            distribution surfaces moved to paused/accruing-only state
-            pending legal review of the active-claim mechanism. */}
+        {/* Site-wide disclosure. As of 2026-06-27 pivot: backer + creator
+            claims are active (pull-claim with IP geoblock at the API
+            layer). $PROOF holder airdrop and per-token holder bots stay
+            paused pending the engagement-claim mechanism. */}
         <div className="text-[10px] sm:text-[11px] font-mono leading-relaxed text-[var(--foreground)]/80 border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 px-3 py-2">
-          <span className="text-[var(--accent-gold)] font-semibold">DISTRIBUTIONS PAUSED —</span>{' '}
-          Backer trading-fee shares, $PROOF holder airdrops, and per-token holder bots continue to accrue but are not currently distributed. Active claim mechanism in development; see roadmap.{' '}
-          <Link href="/roadmap" className="text-[var(--accent)] hover:underline">
-            Roadmap →
-          </Link>
-          {' · '}
+          <span className="text-[var(--accent-gold)] font-semibold">GEOGRAPHIC RESTRICTIONS —</span>{' '}
+          Trading-fee claims (backer + creator) are open globally except U.S. + OFAC. $PROOF holder airdrop and per-token holder distributions remain paused pending the engagement-claim mechanism.{' '}
           <Link href="/legal" className="text-[var(--accent)] hover:underline">
             Terms →
+          </Link>
+          {' · '}
+          <Link href="/roadmap" className="text-[var(--accent)] hover:underline">
+            Roadmap →
           </Link>
         </div>
 
