@@ -85,28 +85,24 @@ export default function LegalPage() {
 
       <Section title="Current Distribution Posture (Updated 2026-06-27)">
         <p>
-          <strong>Active surfaces (pull-claim, signed by wallet, geographically
-          restricted at the API layer):</strong>
+          <strong>Active surfaces — open globally:</strong>
         </p>
         <ul className="list-disc pl-6 space-y-1">
-          <li>backer trading-fee claims (your pro-rata of accrued fees on tokens you backed);</li>
-          <li>creator fee claims (a creator&apos;s fees on launches they created).</li>
+          <li>Backer fee claims. Backers pool capital to fund an atomic community launch, receive proportional supply at launch price, and claim their share of trading fees via signed pull-claim with a wallet message. This is participation in a shared creation — active contribution to a community launch — not passive holding of an investment contract. No geographic gate.</li>
+          <li>Creator fee claims. A creator&apos;s share of fees from launches they created. Self-employment income from their own venture. No geographic gate.</li>
         </ul>
         <p>
-          <strong>Paused surfaces (continue to accrue, distribution pending the
-          engagement-claim mechanism):</strong>
+          <strong>Paused surfaces:</strong>
         </p>
         <ul className="list-disc pl-6 space-y-1">
-          <li>daily $PROOF holder airdrop — accumulated fees remain in HOLDER_REWARDS_WALLET, publicly viewable on chain;</li>
-          <li>per-token holder-bot distributions (e.g., distribute-SOL-to-holders, distribute-tokens-to-holders, distribute-SOL-to-backers, distribute-tokens-to-backers) — bot wallets continue to accumulate via fee delegation but do not currently push outbound.</li>
+          <li>Daily $PROOF holder airdrop. Auto-distribution of SOL to wallet addresses based on token holdings, without any user action, is structurally a securities-style distribution under US law. The protocol does not run this surface as a US-resident operator. Accumulated fees continue to be routed into HOLDER_REWARDS_WALLET on every fee drain — publicly viewable on chain.</li>
+          <li>Per-token holder-bot distributions (e.g., distribute-SOL-to-holders, distribute-tokens-to-holders, distribute-SOL-to-backers, distribute-tokens-to-backers). Same structural reason as above. Bot wallets continue to accumulate via fee delegation but do not push outbound.</li>
         </ul>
         <p>
-          The protocol&apos;s roadmap describes the planned engagement-claim
-          mechanism for resuming the paused surfaces: participants demonstrate
-          active community contribution (e.g., social engagement, content, ambassador
-          activity) to unlock their accrued share — an active-participant model
-          structurally distinct from passive distribution. Final structure pending
-          counsel review and product implementation.
+          Resumption of paused surfaces would require a structural change —
+          for example, an offshore issuing entity, a registered offering under
+          Reg CF or a tokenized-RWA partner, or a redesigned active-participation
+          model. These are explicitly not near-term commitments.
         </p>
       </Section>
 

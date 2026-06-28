@@ -32,18 +32,16 @@ export function SiteFooter() {
         </div>
 
         {/* Site-wide disclosure. As of 2026-06-27 pivot: backer + creator
-            claims are active (pull-claim with IP geoblock at the API
-            layer). $PROOF holder airdrop and per-token holder bots stay
-            paused pending the engagement-claim mechanism. */}
+            fee claims are open globally — shared-creator participation in
+            a community launch, not passive securities. $PROOF holder
+            airdrop and per-token holder-bot distributions stay paused
+            because passive auto-distribution to wallet addresses based on
+            holding is structurally a securities distribution under US law. */}
         <div className="text-[10px] sm:text-[11px] font-mono leading-relaxed text-[var(--foreground)]/80 border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 px-3 py-2">
-          <span className="text-[var(--accent-gold)] font-semibold">GEOGRAPHIC RESTRICTIONS —</span>{' '}
-          Trading-fee claims (backer + creator) are open globally except U.S. + OFAC. $PROOF holder airdrop and per-token holder distributions remain paused pending the engagement-claim mechanism.{' '}
+          <span className="text-[var(--accent-gold)] font-semibold">FEE CLAIMS OPEN —</span>{' '}
+          Backer + creator fee claims are open globally; backers participate in community launches as active contributors. $PROOF holder airdrop and per-token holder-bot distributions remain paused for structural reasons.{' '}
           <Link href="/legal" className="text-[var(--accent)] hover:underline">
             Terms →
-          </Link>
-          {' · '}
-          <Link href="/roadmap" className="text-[var(--accent)] hover:underline">
-            Roadmap →
           </Link>
         </div>
 

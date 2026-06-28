@@ -60,15 +60,14 @@ const SHIPPED = [
 ];
 
 const BUILDING = [
-  // ─── ENGAGEMENT-CLAIM MECHANISM (resume paused surfaces) ───
-  // Backer + creator fee claims are active as of 2026-06-27. The two
-  // entries below are about resuming the auto-distribution surfaces
-  // that remain paused (daily $PROOF holder airdrop, per-token holder
-  // bots) via an engagement-style mechanism — active community
-  // contribution unlocks the accrued share, structurally distinct from
-  // passive distribution.
-  { icon: Shield, title: 'Engagement-claim mechanism for holder rewards', desc: 'Daily $PROOF holder airdrop + per-token holder-bot distributions are paused. The fees continue to accrue (HOLDER_REWARDS_WALLET balance grows on chain; bot wallets accumulate via fee delegation). Resumption requires an engagement-claim layer: holders demonstrate active community contribution (social posts, content, ambassador activity) to unlock their accrued share. Same model that has become standard among top Solana KOLs running engagement-conditional airdrops. Final implementation pending product + counsel review.' },
-  { icon: Shield, title: 'Compliant long-term distribution framework', desc: 'Optional long-form path for if/when scale or specific-jurisdiction questions require a more formal structure. Options under evaluation: (a) offshore foundation entity (Cayman / BVI standard) with on-chain enforcement; or (b) Reg CF / Securitize-style registered offering. Not load-bearing at current scale — backer + creator claims are active under the standard pull-claim + IP-geoblock + ToS framework that every other revenue-share Solana launchpad uses. Available as a defensive option once specific facts on the ground (scale, complaints, regulatory signal) warrant.' },
+  // ─── HOLDER-SIDE DISTRIBUTIONS (paused indefinitely) ───
+  // The two surfaces below are paused without a near-term resumption
+  // path. Honest about the structural reason: passive auto-distribution
+  // of fees to wallet addresses based on token holdings is a securities-
+  // style distribution under US law. A US-resident operator running it
+  // would be doing it illegally. Backer + creator fee claims are active
+  // globally — those are participation-based, not passive distribution.
+  { icon: Shield, title: '$PROOF holder + per-token holder distributions — paused', desc: 'The daily $PROOF holder airdrop and the per-token holder-bot distribution actions (distribute_sol_holders, distribute_tokens_holders, distribute_sol_backers, distribute_tokens_backers) are paused. Auto-distribution of trading fees to wallet addresses based on token holdings alone is a passive securities-style distribution under US law, and we don\'t run that surface as US-resident operators. Accrual continues on chain (HOLDER_REWARDS_WALLET grows; bot wallets accumulate via fee delegation) so nothing is lost — but distribution doesn\'t resume in a near-term sprint. A real resumption would require structural change (offshore issuing entity, registered offering, or a redesigned model where holders are active participants rather than passive recipients). We\'re not committing to any of those right now. The roadmap is honest about that.' },
 
   { icon: Bot, title: 'USDC bot parity for POOL FEEDER', desc: 'Every other USDC bot action shipped this week (burn, hold, distribute SOL/tokens, donate). The post-graduation LP-add (feed_lp) is the one remaining SOL-only path — needs DAMM v2 USDC/token LP-add support. Until it ships, USDC POOL FEEDER bots accumulate USDC; once it ships, they auto-deploy LP same as SOL launches do today.' },
   { icon: Layers, title: 'Multi-launchpad expansion — Bonk.fun, Believe, Daos.fun', desc: 'Multi-platform pooled-atomic launches are live for pump.fun, Meteora DBC, and Raydium LaunchLab. Next wave: Bonk.fun, Believe, Daos.fun. Each gets a dedicated adapter behind the same pooled launch dispatcher. Same fair-launch spine, more launchpads to choose from at submit.' },

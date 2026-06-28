@@ -30,25 +30,23 @@ const BLOCKED_COUNTRIES = new Set<string>([
   'SY',  // Syria (OFAC SDN)
 ]);
 
-// Gated path patterns + methods. We block ONLY the passive-fee-collection
-// surfaces — the act of CLAIMING accrued fees or withdrawing earned
-// returns. Active creation actions (launching, submitting, backing as a
-// "shared creator" co-investor) remain open to all users.
+// Gated path patterns + methods.
 //
-// IMPORTANT ARCHITECTURAL NOTE: this IP gate is necessary but NOT
-// sufficient. distribution.ts auto-pushes fees to backers' wallets
-// during drain cycles, so a US backer would receive fees on-chain
-// regardless of whether they can hit the /api/claim endpoint. Full
-// enforcement requires Layer 4: a per-wallet US flag captured at
-// backing time + a filter in distribution.ts that skips flagged
-// wallets. The IP gate here is the first defense layer; Layer 4 is
-// the actually-load-bearing one for on-chain enforcement.
+// As of 2026-06-27: /api/fees/claim (backer + creator fee claims) is NOT
+// gated. Backers contributed capital to a community launch and claim
+// their share via signed pull-claim with a wallet message — they're
+// active participants in a shared creation, not passive securities
+// holders. Same logic applies to creators claiming their own fees.
+// Open globally. The 'shared creator / community launch' theory makes
+// the geographic gate the wrong layer for this surface.
+//
+// /api/bots/[id]/withdraw stays gated as defense-in-depth — those
+// bot-action surfaces are themselves paused at the dispatch layer
+// (services/buybackBot.ts) and the API gate (/api/memes) for paused
+// actions, so this is belt-and-suspenders.
 const GATED_PATHS: Array<{ pattern: RegExp; methods: Set<string> }> = [
-  // Claiming accrued fees: the explicit "give me my passive returns" call
-  { pattern: /^\/api\/claim(\/|$)/, methods: new Set(['POST']) },
-  { pattern: /^\/api\/fees\/claim(\/|$)/, methods: new Set(['POST']) },
-
-  // Withdrawing accrued bot earnings (passive collection variant)
+  // Withdrawing accrued bot earnings — paused upstream too, this is
+  // belt-and-suspenders.
   { pattern: /^\/api\/bots\/[^/]+\/withdraw$/, methods: new Set(['POST']) },
 ];
 
@@ -107,8 +105,6 @@ export function middleware(request: NextRequest) {
 // Keep this in sync with GATED_PATHS above.
 export const config = {
   matcher: [
-    '/api/claim/:path*',
-    '/api/fees/claim/:path*',
     '/api/bots/:path*',
   ],
 };
