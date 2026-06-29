@@ -405,12 +405,23 @@ export async function POST(request: NextRequest) {
     //     fall through to open slots if all reserved are taken.
     //   - Non-allowlisted users are confined to 1..openSlots.
     //   - Memes with reservedSlots=0 walk 1..totalSlots monotonically.
-    const MAX_SLOT_RETRIES = 5;
+    // Slot picking with retry. Attempt 0 picks the LOWEST open slot
+    // (preserves the "first come first served" feel of Genesis/Wave 2
+    // tiers for low-traffic memes). Attempt 1+ picks RANDOM open slot
+    // (spreads concurrent backers across slots to avoid deterministic
+    // collisions during KOL-push-style contention). 12 retries gives
+    // plenty of headroom — even with 6+ concurrent backers, each retry
+    // is rolling against a different random slot so the probability of
+    // 12 consecutive losses is negligible.
+    const MAX_SLOT_RETRIES = 12;
     let slotNumber = 0;
     let slotTier: 'Genesis' | 'Wave 2' = 'Genesis';
     let data: unknown = null;
     let lastNonRaceError: { message: string } | null = null;
     let allFullState: { allFilled: boolean; allOpenFilledOnly: boolean } = { allFilled: false, allOpenFilledOnly: false };
+
+    const pickFromList = (list: number[], useRandom: boolean): number =>
+      useRandom ? list[Math.floor(Math.random() * list.length)] : list[0];
 
     for (let attempt = 0; attempt < MAX_SLOT_RETRIES; attempt++) {
       // Re-read taken slots FRESH each attempt — the set may have changed
@@ -421,17 +432,27 @@ export async function POST(request: NextRequest) {
         .eq('meme_id', meme_id)
         .neq('status', 'withdrawn');
       const taken = new Set((activeSlotRows || []).map((r) => Number(r.slot_number)));
+      const useRandom = attempt > 0; // first attempt deterministic, retries randomize
 
+      // Allowlisted users prefer reserved slots (openSlots+1..totalSlots).
       slotNumber = 0;
       if (isAllowlisted && reservedSlots > 0) {
+        const reservedOpen: number[] = [];
         for (let i = openSlots + 1; i <= totalSlots; i++) {
-          if (!taken.has(i)) { slotNumber = i; break; }
+          if (!taken.has(i)) reservedOpen.push(i);
+        }
+        if (reservedOpen.length > 0) {
+          slotNumber = pickFromList(reservedOpen, useRandom);
         }
       }
       if (slotNumber === 0) {
         const maxSlot = isAllowlisted ? totalSlots : openSlots;
+        const open: number[] = [];
         for (let i = 1; i <= maxSlot; i++) {
-          if (!taken.has(i)) { slotNumber = i; break; }
+          if (!taken.has(i)) open.push(i);
+        }
+        if (open.length > 0) {
+          slotNumber = pickFromList(open, useRandom);
         }
       }
       if (slotNumber === 0) {
