@@ -430,13 +430,10 @@ export async function POST(request: NextRequest) {
 
     // Create the backing (pooled model — no per-backer burner; the
     // backer's SOL is already in the meme's pool wallet, verified above)
-    // Capture client country from Vercel's geo header for forensic
-    // continuity only (we know where backings came from over time even
-    // though we no longer gate). The IP middleware doesn't gate this
-    // path either now — backing is open globally; only fee CLAIMING is
-    // gated, and only when claims resume under the future mechanism.
-    const requestCountry = request.headers.get('x-vercel-ip-country') || null;
-
+    // Backing is open globally — no attestation gate, no per-row geo
+    // tagging needed in production. Migration 060 (which added the
+    // forensic columns) was never applied, and the columns aren't
+    // load-bearing for any active flow.
     const { data, error } = await supabase
       .from('backings')
       .insert({
@@ -446,7 +443,6 @@ export async function POST(request: NextRequest) {
         deposit_tx,
         status: 'confirmed',
         slot_number: slotNumber,
-        attested_from_country: requestCountry,
       })
       .select()
       .single();
