@@ -481,10 +481,19 @@ export async function POST(request: NextRequest) {
         break;
       }
 
-      if ((insertError as { code?: string }).code === '23505') {
-        // Lost the race for this specific slot — another insert
-        // landed first. Pick a different slot and retry.
-        console.warn(`[backing] slot ${slotNumber} race-lost on attempt ${attempt + 1}/${MAX_SLOT_RETRIES}, retrying with fresh slot search`);
+      // Capture FULL error detail on every failed insert so we can see
+      // exactly what the 23505 (or other) is firing on. Constraint name
+      // + message + details + hint together identify the actual conflict.
+      const errCode = (insertError as { code?: string }).code;
+      const errMsg = (insertError as { message?: string }).message;
+      const errDetails = (insertError as { details?: string }).details;
+      const errHint = (insertError as { hint?: string }).hint;
+      console.error(`[backing] insert attempt ${attempt + 1}/${MAX_SLOT_RETRIES} failed at slot ${slotNumber} (taken set size=${taken.size}, useRandom=${useRandom}). code=${errCode} message=${errMsg} details=${errDetails} hint=${errHint}`);
+
+      if (errCode === '23505') {
+        // Unique constraint violation — could be slot race OR something
+        // else (debug via the detail log above). Retry with a fresh
+        // slot pick.
         continue;
       }
 
@@ -513,12 +522,20 @@ export async function POST(request: NextRequest) {
         );
       }
       // Exhausted retries on race — extremely unlikely at our slot
-      // counts (5 retries vs ≤24 slots) but possible under degenerate
-      // contention. Honest message + refund.
+      // counts (12 retries vs ≤24 slots) but possible under degenerate
+      // contention. Honest message + refund. Diagnostic detail in
+      // server console.error logs (above), and the meme state echoed
+      // back here so we can see what slots were "free" but kept failing.
+      const { data: snap } = await supabase
+        .from('backings')
+        .select('slot_number, status')
+        .eq('meme_id', meme_id);
+      console.error(`[backing] retry-exhausted state for meme ${meme_id}:`, JSON.stringify(snap || []));
       return rejectAndRefund(
         poolForRefund, backer_wallet, amount_sol,
-        'Slot allocation kept racing with other backers — please retry.',
+        `Slot allocation kept racing — diagnostic: tried ${MAX_SLOT_RETRIES} slot picks, all hit unique constraint. Last attempted slot: ${slotNumber}. Meme has ${(snap || []).length} backing rows. Please retry once or contact support.`,
         409,
+        { diagnostic: { totalSlots, reservedSlots, openSlots, isAllowlisted, lastSlotTried: slotNumber, rowCount: (snap || []).length } },
       );
     }
 
