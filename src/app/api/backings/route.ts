@@ -368,13 +368,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Slot assignment + reserved-slot gate.
-    const { data: activeSlotRows } = await supabase
-      .from('backings')
-      .select('slot_number')
-      .eq('meme_id', meme_id)
-      .neq('status', 'withdrawn');
-    const taken = new Set((activeSlotRows || []).map((r) => Number(r.slot_number)));
     const totalSlots = Number(meme.total_slots) || 8;
     const reservedSlots = Number(meme.reserved_slots) || 0;
     const openSlots = Math.max(0, totalSlots - reservedSlots);
@@ -383,77 +376,136 @@ export async function POST(request: NextRequest) {
     // and team-tier (allowlisted) backers are treated as allowlisted
     // here. Public is the only non-allowlisted tier.
     const isAllowlisted = backerTier !== 'public';
-    // Slot assignment respects the open/reserved structure.
-    //
-    // Allowlisted backers PREFER reserved slots (openSlots+1..totalSlots).
-    // This keeps the OPEN bucket (1..openSlots) for the public; without
-    // it, team backers would consume open slot numbers (since they were
-    // assigned monotonically from 1) and starve public backers of room
-    // even when reserved capacity remained.
-    //
-    // Falls through to open slots only if all reserved are taken
-    // (more allowlisted backers than reserved capacity).
-    //
-    // Non-allowlisted backers are confined to 1..openSlots — unchanged.
-    // Memes with reservedSlots=0 skip the preference block entirely
-    // and walk 1..totalSlots monotonically — also unchanged.
-    let slotNumber = 0;
-    if (isAllowlisted && reservedSlots > 0) {
-      for (let i = openSlots + 1; i <= totalSlots; i++) {
-        if (!taken.has(i)) { slotNumber = i; break; }
-      }
-    }
-    if (slotNumber === 0) {
-      const maxSlot = isAllowlisted ? totalSlots : openSlots;
-      for (let i = 1; i <= maxSlot; i++) {
-        if (!taken.has(i)) { slotNumber = i; break; }
-      }
-    }
-    if (slotNumber === 0) {
-      const allOpenFilled = !isAllowlisted && reservedSlots > 0;
-      return rejectAndRefund(
-        poolForRefund, backer_wallet, amount_sol,
-        allOpenFilled
-          ? `All ${openSlots} open slots are filled. The remaining ${reservedSlots} slots are reserved for allowlisted wallets.`
-          : 'All backer slots are filled',
-        400,
-        { reserved_slots: reservedSlots, open_slots: openSlots },
-      );
-    }
-
-    const slotTier = slotNumber <= 4 ? 'Genesis' : 'Wave 2';
 
     // Ensure user exists
     await supabase
       .from('users')
       .upsert({ wallet_address: backer_wallet }, { onConflict: 'wallet_address' });
 
-    // Create the backing (pooled model — no per-backer burner; the
-    // backer's SOL is already in the meme's pool wallet, verified above)
-    // Backing is open globally — no attestation gate, no per-row geo
-    // tagging needed in production. Migration 060 (which added the
-    // forensic columns) was never applied, and the columns aren't
-    // load-bearing for any active flow.
-    const { data, error } = await supabase
-      .from('backings')
-      .insert({
-        meme_id,
-        backer_wallet,
-        amount_sol,
-        deposit_tx,
-        status: 'confirmed',
-        slot_number: slotNumber,
-      })
-      .select()
-      .single();
+    // Slot assignment + insert with race-aware retry.
+    //
+    // Previous flow: find lowest open slot once → insert. If the race
+    // window between find and insert had another backer claim that exact
+    // slot, the unique-index 23505 error fired and we refunded — but
+    // the user's SOL was still legitimately in the pool and there were
+    // typically OTHER open slots they could have taken. Behavior was
+    // especially user-hostile right after a withdraw (recently-freed
+    // slot is the lowest open one, attracts contention).
+    //
+    // New flow: wrap find+insert in a small retry loop. Each iteration
+    // re-reads the active-slot set fresh, recomputes the lowest open
+    // slot for this user's tier, and tries to insert. We only refund
+    // if EVERY iteration loses the race AND no slots remain. Five
+    // attempts is plenty — concurrent contention on the same meme is
+    // bounded by total_slots (max 24), so the worst plausible case is
+    // 23 races losses before we land somewhere.
+    //
+    // Slot-preference logic preserved exactly:
+    //   - Allowlisted users prefer reserved slots (openSlots+1..totalSlots),
+    //     fall through to open slots if all reserved are taken.
+    //   - Non-allowlisted users are confined to 1..openSlots.
+    //   - Memes with reservedSlots=0 walk 1..totalSlots monotonically.
+    const MAX_SLOT_RETRIES = 5;
+    let slotNumber = 0;
+    let slotTier: 'Genesis' | 'Wave 2' = 'Genesis';
+    let data: unknown = null;
+    let lastNonRaceError: { message: string } | null = null;
+    let allFullState: { allFilled: boolean; allOpenFilledOnly: boolean } = { allFilled: false, allOpenFilledOnly: false };
 
-    console.log(`Backing created: slot ${slotNumber} (${slotTier}) for ${amount_sol} SOL`);
+    for (let attempt = 0; attempt < MAX_SLOT_RETRIES; attempt++) {
+      // Re-read taken slots FRESH each attempt — the set may have changed
+      // due to a concurrent insert during the previous iteration.
+      const { data: activeSlotRows } = await supabase
+        .from('backings')
+        .select('slot_number')
+        .eq('meme_id', meme_id)
+        .neq('status', 'withdrawn');
+      const taken = new Set((activeSlotRows || []).map((r) => Number(r.slot_number)));
 
+      slotNumber = 0;
+      if (isAllowlisted && reservedSlots > 0) {
+        for (let i = openSlots + 1; i <= totalSlots; i++) {
+          if (!taken.has(i)) { slotNumber = i; break; }
+        }
+      }
+      if (slotNumber === 0) {
+        const maxSlot = isAllowlisted ? totalSlots : openSlots;
+        for (let i = 1; i <= maxSlot; i++) {
+          if (!taken.has(i)) { slotNumber = i; break; }
+        }
+      }
+      if (slotNumber === 0) {
+        allFullState = { allFilled: true, allOpenFilledOnly: !isAllowlisted && reservedSlots > 0 };
+        break; // no open slots anywhere — refund below
+      }
+
+      slotTier = slotNumber <= 4 ? 'Genesis' : 'Wave 2';
+
+      const { data: insertData, error: insertError } = await supabase
+        .from('backings')
+        .insert({
+          meme_id,
+          backer_wallet,
+          amount_sol,
+          deposit_tx,
+          status: 'confirmed',
+          slot_number: slotNumber,
+        })
+        .select()
+        .single();
+
+      if (!insertError) {
+        data = insertData;
+        console.log(`Backing created: slot ${slotNumber} (${slotTier}) for ${amount_sol} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} after ${attempt + 1} attempt(s)`);
+        break;
+      }
+
+      if ((insertError as { code?: string }).code === '23505') {
+        // Lost the race for this specific slot — another insert
+        // landed first. Pick a different slot and retry.
+        console.warn(`[backing] slot ${slotNumber} race-lost on attempt ${attempt + 1}/${MAX_SLOT_RETRIES}, retrying with fresh slot search`);
+        continue;
+      }
+
+      // Non-race DB error — bail with refund.
+      lastNonRaceError = insertError;
+      break;
+    }
+
+    // Decide outcome based on which exit path we took.
+    if (!data) {
+      if (allFullState.allFilled) {
+        return rejectAndRefund(
+          poolForRefund, backer_wallet, amount_sol,
+          allFullState.allOpenFilledOnly
+            ? `All ${openSlots} open slots are filled. The remaining ${reservedSlots} slots are reserved for allowlisted wallets.`
+            : 'All backer slots are filled',
+          400,
+          { reserved_slots: reservedSlots, open_slots: openSlots },
+        );
+      }
+      if (lastNonRaceError) {
+        return rejectAndRefund(
+          poolForRefund, backer_wallet, amount_sol,
+          `Backing insert failed: ${lastNonRaceError.message}`,
+          500,
+        );
+      }
+      // Exhausted retries on race — extremely unlikely at our slot
+      // counts (5 retries vs ≤24 slots) but possible under degenerate
+      // contention. Honest message + refund.
+      return rejectAndRefund(
+        poolForRefund, backer_wallet, amount_sol,
+        'Slot allocation kept racing with other backers — please retry.',
+        409,
+      );
+    }
+
+    // Synthetic error proxy so the existing post-insert logic that
+    // referenced `error` still compiles. data was set on the success
+    // path; this branch is unreachable but keeps the type-checker happy.
+    const error = null as null | { code?: string; message?: string };
     if (error) {
-      // Postgres unique violation: another backing claimed this slot
-      // in the race window between our slot-find and our insert.
-      // Both backers's SOL hit the pool wallet; the loser gets refunded
-      // here so they don't have to chase support.
       if ((error as { code?: string }).code === '23505') {
         return rejectAndRefund(
           poolForRefund, backer_wallet, amount_sol,
@@ -471,12 +523,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if all slots are now filled - if so, update status to funded.
-    // Use the active (non-withdrawn) backing COUNT, not slotNumber:
-    // slotNumber is the lowest open slot, so when a previously-withdrawn
-    // middle slot is the last to refill, slotNumber < totalSlots even
-    // though every slot is now taken. `taken` was computed pre-insert and
-    // excludes withdrawn, so active count = taken.size + 1 (this insert).
-    const newFilledSlots = taken.size + 1;
+    // Re-read the active backing count post-insert so we don't rely on a
+    // pre-insert `taken` snapshot (which was per-attempt in the retry
+    // loop above and could be stale). Active count INCLUDES this new
+    // row, so a count equal to totalSlots means full.
+    const { count: activeBackingCount } = await supabase
+      .from('backings')
+      .select('id', { count: 'exact', head: true })
+      .eq('meme_id', meme_id)
+      .neq('status', 'withdrawn');
+    const newFilledSlots = activeBackingCount ?? 0;
     const allSlotsFilled = newFilledSlots >= totalSlots;
 
     if (allSlotsFilled && meme.status === 'backing') {
