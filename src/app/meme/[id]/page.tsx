@@ -268,14 +268,44 @@ export default function MemeDetailPage() {
         );
       }
 
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      const unit = quoteCurrency === 'usdc' ? 'USDC' : 'SOL';
+
+      // Mobile-friendly send: build with fresh blockhash, ask user to
+      // sign, then broadcast with skipPreflight=true so a stale-blockhash
+      // preflight check doesn't surface a misleading "signature
+      // verification failed" error when the user spent 15-30s in the
+      // wallet's app-switch bounce. If the first attempt still fails
+      // (rare but possible if the user took >60s to sign), rebuild with
+      // a fresh blockhash and ask for one more signature.
+      let { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
 
-      const unit = quoteCurrency === 'usdc' ? 'USDC' : 'SOL';
       setBackingStatus(`Approve ${amountSol} ${unit} to the pool...`);
-      const signed = await signTransaction(tx);
-      const sig = await connection.sendRawTransaction(signed.serialize());
+      let signed = await signTransaction(tx);
+      let sig: string;
+      try {
+        sig = await connection.sendRawTransaction(signed.serialize(), {
+          skipPreflight: true,
+          preflightCommitment: 'confirmed',
+          maxRetries: 3,
+        });
+      } catch (firstErr) {
+        // Stale-blockhash retry: rebuild with a fresh blockhash, ask
+        // the user to sign once more. Common on slow mobile bounces.
+        console.warn('[backing] first send failed, retrying with fresh blockhash:', firstErr);
+        setBackingStatus(`Signature expired during wallet bounce — sign once more to retry...`);
+        const fresh = await connection.getLatestBlockhash();
+        blockhash = fresh.blockhash;
+        lastValidBlockHeight = fresh.lastValidBlockHeight;
+        tx.recentBlockhash = blockhash;
+        signed = await signTransaction(tx);
+        sig = await connection.sendRawTransaction(signed.serialize(), {
+          skipPreflight: true,
+          preflightCommitment: 'confirmed',
+          maxRetries: 3,
+        });
+      }
 
       setBackingStatus('Processing transaction...');
       await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');

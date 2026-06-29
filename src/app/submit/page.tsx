@@ -517,11 +517,36 @@ function SubmitPageInner() {
             lamports: creationFeeLamports,
           })
         );
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+        // Mobile-friendly send: skipPreflight + retry with fresh
+        // blockhash on first failure. The Safari→Phantom (or other
+        // wallet)→Safari bounce on mobile can easily exceed blockhash
+        // lifetime, surfacing as a misleading "signature verification
+        // failed" error from preflight. Skipping preflight lets the
+        // chain itself adjudicate; retry handles the rare case where
+        // the blockhash genuinely expired during the bounce.
+        let { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = publicKey;
-        const signed = await signTransaction!(transaction);
-        signature = await connection.sendRawTransaction(signed.serialize());
+        let signed = await signTransaction!(transaction);
+        try {
+          signature = await connection.sendRawTransaction(signed.serialize(), {
+            skipPreflight: true,
+            preflightCommitment: 'confirmed',
+            maxRetries: 3,
+          });
+        } catch (firstErr) {
+          console.warn('[submit-fee] first send failed, retrying with fresh blockhash:', firstErr);
+          const fresh = await connection.getLatestBlockhash();
+          blockhash = fresh.blockhash;
+          lastValidBlockHeight = fresh.lastValidBlockHeight;
+          transaction.recentBlockhash = blockhash;
+          signed = await signTransaction!(transaction);
+          signature = await connection.sendRawTransaction(signed.serialize(), {
+            skipPreflight: true,
+            preflightCommitment: 'confirmed',
+            maxRetries: 3,
+          });
+        }
         await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
       }
 
