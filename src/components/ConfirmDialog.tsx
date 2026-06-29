@@ -97,55 +97,63 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({
         onClick={isLoading ? undefined : onClose}
       />
 
-      {/* Dialog */}
+      {/* Dialog
+          Mobile-safe layout: max 90vh height with the message body
+          scrollable and the action buttons pinned at the bottom so they
+          never get pushed off-screen on long-message dialogs (caught by
+          a user on Samsung mobile 2026-06-29). flex-col + body flex-1
+          + actions flex-shrink-0 is the standard sticky-footer pattern. */}
       <div
         ref={dialogRef}
-        className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl max-w-md w-full mx-4 p-6 animate-in fade-in zoom-in-95 duration-200"
+        className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl max-w-md w-full mx-4 max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Close button */}
         {!isLoading && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            className="absolute top-4 right-4 text-[var(--muted)] hover:text-[var(--foreground)] transition-colors z-10"
           >
             <X className="w-5 h-5" />
           </button>
         )}
 
-        {/* Icon */}
-        <div className={`w-12 h-12 rounded-full ${styles.iconBg} flex items-center justify-center mx-auto mb-4`}>
-          <AlertTriangle className={`w-6 h-6 ${styles.icon}`} />
+        {/* Scrollable body — icon + title + message + optional acknowledgement */}
+        <div className="flex-1 overflow-y-auto px-6 pt-6 pb-2">
+          {/* Icon */}
+          <div className={`w-12 h-12 rounded-full ${styles.iconBg} flex items-center justify-center mx-auto mb-4`}>
+            <AlertTriangle className={`w-6 h-6 ${styles.icon}`} />
+          </div>
+
+          {/* Content */}
+          <h3 className="text-xl font-bold text-center mb-2">{title}</h3>
+          <p className="text-[var(--muted)] text-center mb-6 whitespace-pre-line">{message}</p>
+
+          {/* Optional ToS / geo acknowledgement */}
+          {requireAcknowledgement && (
+            <div className="mb-2 border border-[var(--border)] rounded-lg p-4 bg-[var(--background)]/50">
+              {requireAcknowledgement.disclosureText && (
+                <p className="text-xs text-[var(--muted)] mb-3 whitespace-pre-line leading-relaxed">
+                  {requireAcknowledgement.disclosureText}
+                </p>
+              )}
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={acked}
+                  onChange={(e) => setAcked(e.target.checked)}
+                  disabled={isLoading}
+                  className="mt-0.5 flex-shrink-0 w-4 h-4 accent-[var(--accent)] cursor-pointer disabled:cursor-not-allowed"
+                />
+                <span className="text-xs text-[var(--foreground)] leading-relaxed">
+                  {requireAcknowledgement.label}
+                </span>
+              </label>
+            </div>
+          )}
         </div>
 
-        {/* Content */}
-        <h3 className="text-xl font-bold text-center mb-2">{title}</h3>
-        <p className="text-[var(--muted)] text-center mb-6 whitespace-pre-line">{message}</p>
-
-        {/* Optional ToS / geo acknowledgement */}
-        {requireAcknowledgement && (
-          <div className="mb-6 border border-[var(--border)] rounded-lg p-4 bg-[var(--background)]/50">
-            {requireAcknowledgement.disclosureText && (
-              <p className="text-xs text-[var(--muted)] mb-3 whitespace-pre-line leading-relaxed">
-                {requireAcknowledgement.disclosureText}
-              </p>
-            )}
-            <label className="flex items-start gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={acked}
-                onChange={(e) => setAcked(e.target.checked)}
-                disabled={isLoading}
-                className="mt-0.5 flex-shrink-0 w-4 h-4 accent-[var(--accent)] cursor-pointer disabled:cursor-not-allowed"
-              />
-              <span className="text-xs text-[var(--foreground)] leading-relaxed">
-                {requireAcknowledgement.label}
-              </span>
-            </label>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-3">
+        {/* Actions — pinned at bottom, never scrolls out of view */}
+        <div className="flex gap-3 p-6 pt-4 border-t border-[var(--border)] bg-[var(--card)] rounded-b-xl flex-shrink-0">
           <button
             onClick={onClose}
             disabled={isLoading}
