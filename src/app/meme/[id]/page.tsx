@@ -638,7 +638,14 @@ export default function MemeDetailPage() {
 
   const totalSlots = Number(meme.total_slots) || 8;
   const minBacking = Number(meme.min_backing_sol) || 0.1;
-  const backerCount = backings.length;
+  // Count only ACTIVE backings (pending/confirmed/distributed) — withdrawn
+  // rows still exist in the DB for audit history but the slots they
+  // occupied are free for re-backing. Without this filter, the page
+  // double-counted any wallet that withdrew and re-backed, showing
+  // 11/12 when the actual active count is 10/12. The proving-grounds
+  // card already filters correctly via the memes_with_stats view.
+  const activeBackings = backings.filter((b) => b.status !== 'withdrawn');
+  const backerCount = activeBackings.length;
   const slotsRemaining = totalSlots - backerCount;
   // Header countdown picks the active deadline by status:
   //   backing  → backing_deadline (proving window)
@@ -738,7 +745,7 @@ export default function MemeDetailPage() {
           backingPaused={false}
           connected={connected}
           projectedSharePct={projectedSharePct}
-          backerWallets={backings.map((b) => b.backer_wallet)}
+          backerWallets={activeBackings.map((b) => b.backer_wallet)}
           allowlistWallets={allowlistWallets}
         />
       )}
