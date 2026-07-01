@@ -254,6 +254,14 @@ export async function distributeLegacyMeme(
   let ammCollectSig: string | null = null;
   let closeSig: string | null = null;
 
+  // Fee payer split. When the on-chain creator authority is OLD_ESCROW
+  // (rotated out 2026-06-04), that wallet is typically drained to 0 and
+  // can't afford tx fees or wSOL ATA rent (~0.003 SOL). Use NEW_ESCROW
+  // as fee payer while OLD_ESCROW signs as the creator authority — old
+  // ends up with the collected fees anyway, and the rent flows back on
+  // ATA close.
+  const feePayer = isOldEscrow ? newEscrow : escrow;
+
   // Step 1a: BC creator-vault collect (skip cleanly on AccountNotFound).
   if (bcLam > 0) {
     try {
@@ -264,8 +272,9 @@ export async function distributeLegacyMeme(
         .add(collectPriorityIx)
         .add(...collectIxs);
       collectTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-      collectTx.feePayer = escrow.publicKey;
-      collectSig = await simulateAndSend(conn, collectTx, [escrow], { label: 'legacy-bc-collect' });
+      collectTx.feePayer = feePayer.publicKey;
+      const signers = feePayer === escrow ? [escrow] : [feePayer, escrow];
+      collectSig = await simulateAndSend(conn, collectTx, signers, { label: 'legacy-bc-collect' });
       await conn.confirmTransaction(collectSig, 'confirmed');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -290,20 +299,23 @@ export async function distributeLegacyMeme(
 
       const escrowWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, escrow.publicKey, true);
       const state = await ammSdk.collectCoinCreatorFeeSolanaState(escrow.publicKey, escrowWsolAta);
-      const ammCollectIxs = await offlineAmmSdk.collectCoinCreatorFee(state, escrow.publicKey);
+      const ammCollectIxs = await offlineAmmSdk.collectCoinCreatorFee(state, feePayer.publicKey);
 
       const ammPriorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
       const ammTx = new Transaction()
         .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
         .add(ammPriorityIx)
         // Ensure escrow's wSOL ATA exists before the collect targets it.
+        // feePayer pays the rent — for legacy-with-broke-old-escrow, that's
+        // NEW_ESCROW; when a modern path routes through here, it's escrow itself.
         .add(createAssociatedTokenAccountIdempotentInstruction(
-          escrow.publicKey, escrowWsolAta, escrow.publicKey, NATIVE_MINT, TOKEN_PROGRAM_ID,
+          feePayer.publicKey, escrowWsolAta, escrow.publicKey, NATIVE_MINT, TOKEN_PROGRAM_ID,
         ))
         .add(...ammCollectIxs);
       ammTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-      ammTx.feePayer = escrow.publicKey;
-      ammCollectSig = await simulateAndSend(conn, ammTx, [escrow], { label: 'legacy-amm-collect' });
+      ammTx.feePayer = feePayer.publicKey;
+      const signers = feePayer === escrow ? [escrow] : [feePayer, escrow];
+      ammCollectSig = await simulateAndSend(conn, ammTx, signers, { label: 'legacy-amm-collect' });
       await conn.confirmTransaction(ammCollectSig, 'confirmed');
     } catch (e) {
       return { ok: false, error: `AMM collect failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
@@ -312,15 +324,17 @@ export async function distributeLegacyMeme(
     // Step 1c: unwrap wSOL to native SOL by closing the escrow's wSOL ATA.
     // The AMM collect deposits wrapped SOL — downstream distribution math
     // reads native SOL, so we have to close-to-lamports here or the AMM
-    // fees would still show as 0 in the escrow balance.
+    // fees would still show as 0 in the escrow balance. Rent flows to
+    // escrow (the ATA owner), fee comes from feePayer.
     try {
       const escrowWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, escrow.publicKey, true);
       const closeTx = new Transaction().add(
         createCloseAccountInstruction(escrowWsolAta, escrow.publicKey, escrow.publicKey, [], TOKEN_PROGRAM_ID),
       );
       closeTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-      closeTx.feePayer = escrow.publicKey;
-      closeSig = await simulateAndSend(conn, closeTx, [escrow], { label: 'legacy-close-wsol' });
+      closeTx.feePayer = feePayer.publicKey;
+      const signers = feePayer === escrow ? [escrow] : [feePayer, escrow];
+      closeSig = await simulateAndSend(conn, closeTx, signers, { label: 'legacy-close-wsol' });
       await conn.confirmTransaction(closeSig, 'confirmed');
     } catch (e) {
       // Non-fatal: the wSOL is safely in the ATA, next tick's math can
