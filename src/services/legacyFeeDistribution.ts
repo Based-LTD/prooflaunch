@@ -178,7 +178,13 @@ export async function distributeLegacyMeme(
     return { ok: false, skipped: 'no_distributed_backings', symbol: config.symbol };
   }
 
-  // ── Pre-flight: read BC + AMM vaults ─────────────────────────────
+  // ── Pre-flight: read BC + AMM vaults + escrow's own residual wSOL ─
+  // Residual wSOL on escrow's own ATA happens when a previous AMM
+  // collect succeeded but the close/unwrap step didn't finish (e.g.
+  // pre-atomic-tx era of this code, or when close was a separate tx
+  // and silently failed). Treating that residual as collectable lets
+  // the flow recover automatically instead of the SOL sitting stuck
+  // forever below the "no new AMM fees to trigger a run" floor.
   const [AMM_VAULT_AUTH] = PublicKey.findProgramAddressSync(
     [Buffer.from('creator_vault'), escrow.publicKey.toBuffer()],
     PUMPSWAP_AMM,
@@ -186,15 +192,21 @@ export async function distributeLegacyMeme(
   const AMM_VAULT_WSOL_ATA = getAssociatedTokenAddressSync(
     NATIVE_MINT, AMM_VAULT_AUTH, true, TOKEN_PROGRAM_ID,
   );
-  const [bcLamBN, ammAtaInfo, escrowLamPre] = await Promise.all([
+  const ESCROW_WSOL_ATA = getAssociatedTokenAddressSync(
+    NATIVE_MINT, escrow.publicKey, true, TOKEN_PROGRAM_ID,
+  );
+  const [bcLamBN, ammAtaInfo, escrowWsolInfo, escrowLamPre] = await Promise.all([
     sdk.getCreatorVaultBalance(escrow.publicKey),
     conn.getAccountInfo(AMM_VAULT_WSOL_ATA, 'confirmed'),
+    conn.getAccountInfo(ESCROW_WSOL_ATA, 'confirmed'),
     conn.getBalance(escrow.publicKey, 'confirmed'),
   ]);
   const bcLam = Number(bcLamBN.toString());
   const ammLam = ammAtaInfo && ammAtaInfo.data.length >= 72
     ? Number(ammAtaInfo.data.readBigUInt64LE(64)) : 0;
-  const totalCollectableLam = bcLam + ammLam;
+  const escrowWsolResidualLam = escrowWsolInfo && escrowWsolInfo.data.length >= 72
+    ? Number(escrowWsolInfo.data.readBigUInt64LE(64)) : 0;
+  const totalCollectableLam = bcLam + ammLam + escrowWsolResidualLam;
 
   // ── Safety floor ──────────────────────────────────────────────────
   if (totalCollectableLam < COLLECTABLE_FLOOR_LAMPORTS) {
@@ -292,9 +304,21 @@ export async function distributeLegacyMeme(
     }
   }
 
-  // Step 1b: PumpSwap AMM creator-vault collect. Post-graduation fees
-  // land here as wSOL. Uses @pump-fun/pump-swap-sdk (separate from the
-  // BC-side @pump-fun/pump-sdk above).
+  // Step 1b: PumpSwap AMM creator-vault collect + wSOL unwrap in ONE
+  // atomic tx. The AMM collect deposits wrapped SOL into escrow's wSOL
+  // ATA; closeAccount immediately unwraps it back to native SOL. Merging
+  // both into a single tx eliminates the failure mode where collect
+  // succeeds but close silently fails, leaving fees stranded as wSOL
+  // (which the native-SOL verify step below can't see, so distribution
+  // aborts even though the collect actually worked).
+  //
+  // Instruction order:
+  //   1. createAssociatedTokenAccountIdempotent → ATA exists
+  //   2. collectCoinCreatorFee (from AMM SDK) → wSOL lands in ATA
+  //   3. closeAccount → wSOL unwrapped to native SOL, ATA rent to owner
+  //
+  // Instructions execute sequentially inside a single tx, so ordering
+  // is safe. If the whole tx fails on sim, no state changes on chain.
   if (ammLam > 0) {
     try {
       const { OnlinePumpAmmSdk, PumpAmmSdk } = await import('@pump-fun/pump-swap-sdk');
@@ -309,47 +333,48 @@ export async function distributeLegacyMeme(
       const ammTx = new Transaction()
         .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
         .add(ammPriorityIx)
-        // Ensure escrow's wSOL ATA exists before the collect targets it.
-        // feePayer pays the rent — for legacy-with-broke-old-escrow, that's
-        // NEW_ESCROW; when a modern path routes through here, it's escrow itself.
         .add(createAssociatedTokenAccountIdempotentInstruction(
           feePayer.publicKey, escrowWsolAta, escrow.publicKey, NATIVE_MINT, TOKEN_PROGRAM_ID,
         ))
-        .add(...ammCollectIxs);
+        .add(...ammCollectIxs)
+        // Atomic unwrap — see Step 1b comment. wSOL amount → native SOL,
+        // ATA rent → escrow (owner). Both wSOL-amount and ATA-rent
+        // become spendable native SOL on escrow after this tx confirms.
+        .add(createCloseAccountInstruction(
+          escrowWsolAta, escrow.publicKey, escrow.publicKey, [], TOKEN_PROGRAM_ID,
+        ));
       ammTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
       ammTx.feePayer = feePayer.publicKey;
-      // Same as BC collect — the AMM's collect_coin_creator_fee ix
-      // uses PDA-derived authority, no wallet signature required from
-      // the creator. Only fee payer signs.
-      ammCollectSig = await simulateAndSend(conn, ammTx, [feePayer], { label: 'legacy-amm-collect' });
+      // AMM collect: PDA-authorized, no creator signature required.
+      // closeAccount: token-program-authorized, requires ATA owner
+      // (escrow) to sign. So the tx needs both feePayer AND escrow
+      // signatures when they're distinct.
+      const signers = feePayer === escrow ? [escrow] : [feePayer, escrow];
+      ammCollectSig = await simulateAndSend(conn, ammTx, signers, { label: 'legacy-amm-collect-unwrap' });
       await conn.confirmTransaction(ammCollectSig, 'confirmed');
+      closeSig = ammCollectSig;  // same tx, same sig — surfaces in result for observability
     } catch (e) {
-      return { ok: false, error: `AMM collect failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
+      return { ok: false, error: `AMM collect+unwrap failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
     }
-
-    // Step 1c: unwrap wSOL to native SOL by closing the escrow's wSOL ATA.
-    // The AMM collect deposits wrapped SOL — downstream distribution math
-    // reads native SOL, so we have to close-to-lamports here or the AMM
-    // fees would still show as 0 in the escrow balance. Rent flows to
-    // escrow (the ATA owner), fee comes from feePayer.
+  } else if (escrowWsolResidualLam > 0) {
+    // AMM vault didn't have new fees to collect, but there's residual
+    // wSOL sitting on escrow's own ATA from a prior partial run.
+    // Recovery: close it standalone to unwrap → native SOL. Same
+    // signer requirements as the atomic path — escrow signs as ATA
+    // owner, feePayer signs the tx.
     try {
-      const escrowWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, escrow.publicKey, true);
       const closeTx = new Transaction().add(
-        createCloseAccountInstruction(escrowWsolAta, escrow.publicKey, escrow.publicKey, [], TOKEN_PROGRAM_ID),
+        createCloseAccountInstruction(
+          ESCROW_WSOL_ATA, escrow.publicKey, escrow.publicKey, [], TOKEN_PROGRAM_ID,
+        ),
       );
       closeTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
       closeTx.feePayer = feePayer.publicKey;
-      // closeAccount DOES require the ATA owner (escrow) to sign — it's
-      // a token-program authority check, not a PDA. If fee payer is
-      // separate, we need both signatures.
       const closeSigners = feePayer === escrow ? [escrow] : [feePayer, escrow];
-      closeSig = await simulateAndSend(conn, closeTx, closeSigners, { label: 'legacy-close-wsol' });
+      closeSig = await simulateAndSend(conn, closeTx, closeSigners, { label: 'legacy-residual-unwrap' });
       await conn.confirmTransaction(closeSig, 'confirmed');
     } catch (e) {
-      // Non-fatal: the wSOL is safely in the ATA, next tick's math can
-      // read it and try again. Log but don't abort — the collect
-      // succeeded and we want its record persisted.
-      console.warn(`[legacy-distribute] ${config.symbol} wSOL unwrap failed (fees safe in ATA, next tick retries): ${e instanceof Error ? e.message : e}`);
+      return { ok: false, error: `Residual wSOL unwrap failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
     }
   }
 
