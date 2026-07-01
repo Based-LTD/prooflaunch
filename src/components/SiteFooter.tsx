@@ -31,19 +31,6 @@ export function SiteFooter() {
           </div>
         </div>
 
-        {/* Site-wide disclosure. As of 2026-06-27 pivot: backer + creator
-            fee claims are open globally — shared-creator participation in
-            a community launch, not passive securities. $PROOF holder
-            airdrop and per-token holder-bot distributions stay paused
-            because passive auto-distribution to wallet addresses based on
-            holding is structurally a securities distribution under US law. */}
-        <div className="text-[10px] sm:text-[11px] font-mono leading-relaxed text-[var(--foreground)]/80 border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 px-3 py-2">
-          <span className="text-[var(--accent-gold)] font-semibold">FEE CLAIMS OPEN —</span>{' '}
-          Backer + creator fee claims are open globally; backers participate in community launches as active contributors. $PROOF holder airdrop and per-token holder-bot distributions remain paused for structural reasons.{' '}
-          <Link href="/legal" className="text-[var(--accent)] hover:underline">
-            Terms →
-          </Link>
-        </div>
 
         <div className="text-[10px] sm:text-[11px] font-mono leading-relaxed text-[var(--muted)]/85 border border-[var(--border)] bg-[var(--card)]/40 p-3">
           <span className="text-[var(--accent-gold)] font-semibold">PARTICIPATION DISCLAIMER —</span>{' '}

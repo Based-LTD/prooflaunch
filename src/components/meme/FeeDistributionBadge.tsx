@@ -32,10 +32,10 @@ export function FeeDistributionBadge({ meme }: { meme: Meme }) {
     { label: 'Charity',  value: meme.fee_charity_pct ?? 0,        color: 'var(--success)' },
   ].filter((s) => s.value > 0);
 
-  // Holder-rewards distribution remains paused pending an engagement-claim
-  // mechanism (the daily $PROOF holder airdrop is the auto-push surface
-  // this gates). Backer claims are active; creators claim normally.
-  const hasPausedHolderSurface = (meme.fee_holder_rewards_pct ?? 0) > 0;
+  // All distribution surfaces are active. The banner below is kept as
+  // a feature-flag stub so we can re-introduce a paused banner per-meme
+  // by flipping this to a condition, without restructuring.
+  const hasPausedHolderSurface = false;
 
   return (
     <div className="border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">

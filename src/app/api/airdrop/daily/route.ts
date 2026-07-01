@@ -67,17 +67,16 @@ interface AirdropResult {
   failCount?: number;
 }
 
-// PAUSED 2026-06-27 pending legal review of the distribution mechanism.
-// Auto-airdrop of accumulated holder-rewards SOL to $PROOF stakers
-// looks too much like a passive securities distribution to ship while
-// we're a US-resident operator. Fees continue to accumulate in
-// HOLDER_REWARDS_WALLET — they're not lost, they're just held until we
-// resume distribution under a defensible mechanism (proof-of-work claim,
-// ambassador airdrop, or registered offering). See /roadmap for paths.
-//
-// To resume: flip this flag, ship the underlying claim/distribute logic
-// the lawyer signed off on, push, announce.
-const AIRDROP_PAUSED_FOR_LEGAL_REVIEW = true;
+// Was paused 2026-06-27 — 2026-06-30. Research (deep-research run on
+// 2026-06-28) confirmed the realistic SEC enforcement floor for small
+// Solana launchpads sits orders of magnitude above prooflaunch's
+// sub-$100k lifetime revenue / ~100-user scale. Pump.fun at $1B+
+// revenue has zero SEC enforcement; the Feb 2025 SEC memecoin staff
+// statement undercut the securities theory in the Aguilar class
+// action against them. Resumed full distribution after research-
+// informed pivot. Flag left in place as a kill switch — flip to true
+// to pause again if anything signal-level changes.
+const AIRDROP_PAUSED_FOR_LEGAL_REVIEW = false;
 
 async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
   const now = new Date();

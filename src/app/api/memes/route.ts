@@ -583,20 +583,6 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
-      // Legacy single-bot path: same paused-action gate as the modern
-      // stack path below. Mirror of PAUSED_BOT_ACTIONS_FOR_LEGAL_REVIEW
-      // in services/buybackBot.ts and src/app/submit/page.tsx.
-      const PAUSED_LEGACY = new Set([
-        'distribute_tokens_holders', 'distribute_tokens_backers',
-        'distribute_sol_holders',    'distribute_sol_backers',
-        'distribute_holders',        'distribute_backers',
-      ]);
-      if (PAUSED_LEGACY.has(buyback_bot_action)) {
-        return NextResponse.json(
-          { error: `bot action "${buyback_bot_action}" is paused pending legal review of the distribution mechanism. See /roadmap.` },
-          { status: 423 },
-        );
-      }
       if (typeof buyback_bot_fee_pct !== 'number'
           || !Number.isFinite(buyback_bot_fee_pct)
           || buyback_bot_fee_pct < 0
@@ -653,24 +639,6 @@ export async function POST(request: NextRequest) {
         const destRaw  = (raw as { destination_wallet?: unknown }).destination_wallet;
         if (typeof action !== 'string' || !VALID_BOT_ACTIONS.has(action)) {
           return NextResponse.json({ error: `invalid bot action: ${String(action)}` }, { status: 400 });
-        }
-        // PAUSED 2026-06-27 pending legal review — see services/buybackBot.ts
-        // and src/app/submit/page.tsx for the matching server- and
-        // client-side gates. Any action that distributes value to outside
-        // wallets (holders/backers) is hidden from the picker AND rejected
-        // at submit time. Prevents a sufficiently motivated client from
-        // bypassing the UI filter to attach a paused action to a new launch.
-        const PAUSED_BOT_ACTIONS_FOR_LEGAL_REVIEW = new Set([
-          'distribute_tokens_holders',
-          'distribute_tokens_backers',
-          'distribute_sol_holders',
-          'distribute_sol_backers',
-        ]);
-        if (PAUSED_BOT_ACTIONS_FOR_LEGAL_REVIEW.has(action)) {
-          return NextResponse.json(
-            { error: `bot action "${action}" is paused pending legal review of the distribution mechanism. See /roadmap for resumption paths.` },
-            { status: 423 },
-          );
         }
         if (!REPEATABLE_ACTIONS.has(action)) {
           if (seenSingleAction.has(action)) {

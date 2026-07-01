@@ -21,7 +21,7 @@ export default function LegalPage() {
           Participation Disclaimer
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)] font-mono">
-          Last updated: 2026-06-27 · Interim disclaimer pending review with counsel.
+          Last updated: 2026-06-30 · Interim disclaimer pending review with counsel.
         </p>
       </header>
 
@@ -83,62 +83,24 @@ export default function LegalPage() {
         </ul>
       </Section>
 
-      <Section title="Current Distribution Posture (Updated 2026-06-27)">
+      <Section title="Current Distribution Posture (Updated 2026-06-30)">
         <p>
-          <strong>Active surfaces — open globally:</strong>
+          <strong>All distribution surfaces are active:</strong>
         </p>
         <ul className="list-disc pl-6 space-y-1">
-          <li>Backer fee claims. Backers pool capital to fund an atomic community launch, receive proportional supply at launch price, and claim their share of trading fees via signed pull-claim with a wallet message. This is participation in a shared creation — active contribution to a community launch — not passive holding of an investment contract. No geographic gate.</li>
-          <li>Creator fee claims. A creator&apos;s share of fees from launches they created. Self-employment income from their own venture. No geographic gate.</li>
+          <li>Backer fee claims. Backers pool capital to fund an atomic community launch, receive proportional supply at launch price, and claim their share of trading fees via signed pull-claim with a wallet message. This is participation in a shared creation — active contribution to a community launch — not passive holding of an investment contract.</li>
+          <li>Creator fee claims. A creator&apos;s share of fees from launches they created. Self-employment income from their own venture.</li>
+          <li>Daily $PROOF holder distribution. Pro-rata SOL distribution from the platform&apos;s accumulated holder-rewards balance to $PROOF token holders.</li>
+          <li>Per-token holder-bot distributions. Tokenomics surfaces creators may attach to their launches (distribute-SOL-to-holders, distribute-tokens-to-holders, and the backer-equivalents). These are creator-configured rules of the token, not protocol distributions.</li>
         </ul>
         <p>
-          <strong>Paused surfaces:</strong>
-        </p>
-        <ul className="list-disc pl-6 space-y-1">
-          <li>Daily $PROOF holder airdrop. Auto-distribution of SOL to wallet addresses based on token holdings, without any user action, is structurally a securities-style distribution under US law. The protocol does not run this surface as a US-resident operator. Accumulated fees continue to be routed into HOLDER_REWARDS_WALLET on every fee drain — publicly viewable on chain.</li>
-          <li>Per-token holder-bot distributions (e.g., distribute-SOL-to-holders, distribute-tokens-to-holders, distribute-SOL-to-backers, distribute-tokens-to-backers). Same structural reason as above. Bot wallets continue to accumulate via fee delegation but do not push outbound.</li>
-        </ul>
-        <p>
-          Resumption of paused surfaces would require a structural change —
-          for example, an offshore issuing entity, a registered offering under
-          Reg CF or a tokenized-RWA partner, or a redesigned active-participation
-          model. These are explicitly not near-term commitments.
+          Prooflaunch operates as a permissionless coordination layer. Backers
+          and holders earn through active participation in community launches;
+          the protocol does not solicit or manage investments on their behalf.
         </p>
       </Section>
 
-      <Section title="Geographic Restrictions">
-        <p>
-          When distribution surfaces resume, the protocol intends to apply geographic
-          restrictions to participants located in or subject to the jurisdiction of
-          any country, territory, or region under comprehensive sanctions administered
-          by the U.S. Department of Treasury&apos;s Office of Foreign Assets Control
-          (OFAC), including (without limitation) Cuba, Iran, North Korea, Syria, and
-          the Crimea, Donetsk, Luhansk, and Sevastopol regions of Ukraine.
-        </p>
-        <p>
-          Application of geographic restrictions to U.S. persons specifically may
-          additionally apply, depending on the active-claim mechanism selected and
-          counsel guidance.
-        </p>
-      </Section>
-
-      <Section title="Accrual Continues While Distribution Pauses">
-        <p>
-          During the distribution pause, fees attributable to your participation
-          continue to accrue and remain attributed to your wallet on-chain and in
-          the protocol&apos;s database. The pause is implementational, not a
-          forfeiture: accrued balances will become claimable through the
-          active-claim mechanism when it ships.
-        </p>
-        <p>
-          Participants should be aware that, depending on jurisdiction, accruing
-          balances may have tax implications even prior to actual receipt
-          (constructive-receipt doctrine in some jurisdictions). Consult a qualified
-          tax professional regarding your specific circumstances.
-        </p>
-      </Section>
-
-      <Section title="Your Broader Responsibility for Legal Compliance">
+      <Section title="Your Responsibility for Legal Compliance">
         <p>
           It remains your sole responsibility to determine whether use of this
           protocol is permitted under the laws of your jurisdiction, and to comply

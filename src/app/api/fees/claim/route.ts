@@ -38,21 +38,8 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Backer claim flag. Resumed 2026-06-27 after research returned
-    // strong evidence that the cautious posture was over-engineered for
-    // current scale: pump.fun ($250M+ revenue, UK entity, US lawsuit
-    // pending) hasn't been touched by SEC; sub-$100k US-operator
-    // platforms with engagement-style claims (Ansem-style proof-of-work
-    // airdrops, retweet+follow+comment) operate publicly without
-    // enforcement; SEC's Feb 2025 staff statement covers tokens not
-    // platforms but plaintiffs are pivoting away from securities theory
-    // anyway. Active claim by backers (signed pull-claim through this
-    // endpoint, IP-geoblocked for US/OFAC) is the same pattern that
-    // every other launchpad on Solana ships today. Layer-1 IP block
-    // remains in src/middleware.ts as the cheap defense.
-    //
-    // Keep this flag as a switch — if a state AG or class-action signal
-    // moves, flip back to true while we add the engagement-claim layer.
+    // Kill switch for backer claims. Flip to true to pause if anything
+    // signal-level changes.
     const BACKER_CLAIMS_PAUSED_FOR_LEGAL_REVIEW = false;
 
     // ── TOCTOU-safe claim flow ───────────────────────────────────────

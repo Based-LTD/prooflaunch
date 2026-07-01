@@ -162,12 +162,6 @@ export async function POST(request: NextRequest) {
       backer_wallet,
       amount_sol,
       deposit_tx, // tx that sent amount_sol from backer -> meme's pool wallet
-      // attestation field accepted but no longer required — backers are
-      // now framed as active community participants (proof-of-work claim
-      // mechanism on /roadmap), not passive investors. The 'I am not a
-      // U.S. person' gate doesn't fit that frame and was removed from
-      // the confirm dialog 2026-06-27. Migration 060's columns remain
-      // for forensic continuity but accept null going forward.
     } = body;
 
     // Validation
@@ -481,23 +475,14 @@ export async function POST(request: NextRequest) {
         break;
       }
 
-      // Capture FULL error detail on every failed insert so we can see
-      // exactly what the 23505 (or other) is firing on. Constraint name
-      // + message + details + hint together identify the actual conflict.
       const errCode = (insertError as { code?: string }).code;
-      const errMsg = (insertError as { message?: string }).message;
-      const errDetails = (insertError as { details?: string }).details;
-      const errHint = (insertError as { hint?: string }).hint;
-      console.error(`[backing] insert attempt ${attempt + 1}/${MAX_SLOT_RETRIES} failed at slot ${slotNumber} (taken set size=${taken.size}, useRandom=${useRandom}). code=${errCode} message=${errMsg} details=${errDetails} hint=${errHint}`);
-
       if (errCode === '23505') {
-        // Unique constraint violation — could be slot race OR something
-        // else (debug via the detail log above). Retry with a fresh
-        // slot pick.
+        // Slot race — concurrent backer claimed the slot we picked.
+        // Pick again. Withdraw-rebackable case is handled by the
+        // partial unique on (meme_id, backer_wallet) — see
+        // migration history, fixed 2026-06-29.
         continue;
       }
-
-      // Non-race DB error — bail with refund.
       lastNonRaceError = insertError;
       break;
     }
@@ -523,19 +508,11 @@ export async function POST(request: NextRequest) {
       }
       // Exhausted retries on race — extremely unlikely at our slot
       // counts (12 retries vs ≤24 slots) but possible under degenerate
-      // contention. Honest message + refund. Diagnostic detail in
-      // server console.error logs (above), and the meme state echoed
-      // back here so we can see what slots were "free" but kept failing.
-      const { data: snap } = await supabase
-        .from('backings')
-        .select('slot_number, status')
-        .eq('meme_id', meme_id);
-      console.error(`[backing] retry-exhausted state for meme ${meme_id}:`, JSON.stringify(snap || []));
+      // contention. Honest message + refund.
       return rejectAndRefund(
         poolForRefund, backer_wallet, amount_sol,
-        `Slot allocation kept racing — diagnostic: tried ${MAX_SLOT_RETRIES} slot picks, all hit unique constraint. Last attempted slot: ${slotNumber}. Meme has ${(snap || []).length} backing rows. Please retry once or contact support.`,
+        'Slot allocation kept racing with other backers — please retry.',
         409,
-        { diagnostic: { totalSlots, reservedSlots, openSlots, isAllowlisted, lastSlotTried: slotNumber, rowCount: (snap || []).length } },
       );
     }
 

@@ -165,8 +165,6 @@ export const PortfolioRewards: FC = () => {
     );
   }
 
-  // Both backer + creator claims are active. IP geoblock (see
-  // src/middleware.ts) catches US/OFAC at the API layer.
   const creatorClaimable = rewards?.creator_rewards.claimable ?? 0;
   const backerClaimable = rewards?.backer_rewards.claimable ?? 0;
   const totalClaimable = rewards?.total_claimable ?? (backerClaimable + creatorClaimable);

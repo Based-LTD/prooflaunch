@@ -283,25 +283,10 @@ export async function executeBuybackBot(
 
   const action = b.action;
 
-  // PAUSED 2026-06-27 pending legal review. Any bot action that
-  // distributes SOL or tokens to holders/backers is currently a
-  // securities-flavored surface for a US-resident operator. We pause
-  // these actions at the dispatch layer — bot wallets continue to
-  // accumulate their fee-pct share (via the bot_fee_delegation step in
-  // distribution.ts) but don't push anything outbound. Non-distribution
-  // bot actions (hold / burn / buyback) keep running because they
-  // don't transfer value to outside wallets.
-  //
-  // To resume: drop the action from this set, ship the underlying
-  // distribute mechanism the lawyer signed off on, push, announce.
-  const DISTRIBUTION_ACTIONS_PAUSED = new Set<BotAction>([
-    'distribute_sol_holders',
-    'distribute_sol_backers',
-    'distribute_tokens_holders',
-    'distribute_tokens_backers',
-    'distribute_holders',  // legacy alias
-    'distribute_backers',  // legacy alias
-  ]);
+  // Was paused 2026-06-27 — 2026-06-30. See airdrop/daily route's flag
+  // comment for context. Kill switch kept as an empty set so we can
+  // re-pause any specific action by adding it without restructuring.
+  const DISTRIBUTION_ACTIONS_PAUSED = new Set<BotAction>([]);
   if (DISTRIBUTION_ACTIONS_PAUSED.has(action)) {
     return {
       ok: true,
@@ -309,7 +294,7 @@ export async function executeBuybackBot(
       memeId: m.id,
       symbol: m.symbol,
       action,
-      skipped: `${action} is paused pending legal review (see /roadmap). Bot wallet continues to accumulate via fee delegation; outbound distribution will resume when the active claim mechanism ships.`,
+      skipped: `${action} is currently paused.`,
     };
   }
 

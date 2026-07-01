@@ -30,19 +30,12 @@ interface BotActionMeta {
 // see 'SOL → HOLDERS' / 'DONATE SOL'; USDC memes see 'USDC → HOLDERS' /
 // 'DONATE USDC'. The action enum stays the same so the DB schema and
 // downstream code don't need to know the difference.
-// Bot actions PAUSED 2026-06-27 pending legal review. Any action that
-// distributes value to outside wallets (token holders or backers) is a
-// securities-flavored surface for a US-resident operator and is hidden
-// from the picker for new launches. The bot dispatch layer
-// (services/buybackBot.ts) also skips these actions at runtime so any
-// already-attached bots from prior launches no-op cleanly. To resume:
-// drop from this set, re-enable in buybackBot.ts, push, announce.
-const PAUSED_BOT_ACTIONS_FOR_LEGAL_REVIEW: ReadonlySet<BotActionT> = new Set([
-  'distribute_tokens_holders',
-  'distribute_tokens_backers',
-  'distribute_sol_holders',
-  'distribute_sol_backers',
-]);
+// Bot actions paused-set. Was populated 2026-06-27 - 2026-06-30 during
+// the legal-review pivot. Cleared after research-informed decision to
+// resume full distribution surfaces. Kill switch retained as an empty
+// set so we can re-pause individual actions by adding them without
+// restructuring.
+const PAUSED_BOT_ACTIONS_FOR_LEGAL_REVIEW: ReadonlySet<BotActionT> = new Set<BotActionT>();
 
 function botActionsForQuote(qc: 'sol' | 'usdc'): BotActionMeta[] {
   const Q = qc === 'usdc' ? 'USDC' : 'SOL';

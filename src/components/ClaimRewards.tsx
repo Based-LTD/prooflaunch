@@ -130,9 +130,6 @@ export const ClaimRewards: FC<ClaimRewardsProps> = ({ memeId, isCreator, isBacke
 
   const backerClaimable = rewards?.backer_rewards.claimable ?? 0;
   const creatorClaimable = rewards?.creator_rewards.claimable ?? 0;
-  // Both backer + creator claims are active. Total claimable is the sum.
-  // IP geoblock at the API layer (src/middleware.ts) catches US/OFAC
-  // before any payout; this UI doesn't try to second-guess that.
   const claimableNow = backerClaimable + creatorClaimable;
   const hasClaimed = rewards && rewards.total_claimed > 0;
 
