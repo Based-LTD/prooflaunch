@@ -212,7 +212,7 @@ async function processFees() {
     for (const r of legacyResults) {
       const s = r.result;
       if (s.ok && !s.skipped) {
-        console.log(`[legacy-distribute] ${s.symbol} (${r.mint.slice(0, 8)}…): collected ${s.collectedLamports} lamports, slot1=${s.sentToSlot1WalletLamports}, holders=${s.sentToHolderRewardsLamports}, collect_tx=${s.collectSig}, transfer_tx=${s.transferSig}`);
+        console.log(`[legacy-distribute] ${s.symbol} (${r.mint.slice(0, 8)}…): collected ${s.collectedLamports} lamports, slot1=${s.sentToSlot1WalletLamports}, holders=${s.sentToHolderRewardsLamports}, bc_collect_tx=${s.collectSig ?? 'skipped'}, amm_collect_tx=${s.ammCollectSig ?? 'skipped'}, close_tx=${s.closeSig ?? 'n/a'}, transfer_tx=${s.transferSig}`);
       } else if (s.skipped) {
         console.log(`[legacy-distribute] ${s.symbol} skipped: ${s.skipped}`);
       } else {

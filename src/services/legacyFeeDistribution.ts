@@ -40,6 +40,8 @@ import {
 } from '@solana/web3.js';
 import {
   getAssociatedTokenAddressSync, NATIVE_MINT, TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountIdempotentInstruction,
+  createCloseAccountInstruction,
 } from '@solana/spl-token';
 import { OnlinePumpSdk } from '@pump-fun/pump-sdk';
 import { SolanaStreamClient, ICluster } from '@streamflow/stream';
@@ -89,7 +91,9 @@ export interface LegacyDistributionResult {
   sentToSlot1WalletLamports?: number;
   sentToHolderRewardsLamports?: number;
   freedLamports?: number;
-  collectSig?: string;
+  collectSig?: string;      // BC creator-vault collect (null when graduated)
+  ammCollectSig?: string;   // PumpSwap AMM creator-vault collect (null pre-graduation)
+  closeSig?: string;        // wSOL ATA close/unwrap (only present after AMM collect)
   transferSig?: string;
   // When the meme's on-chain creator is the pre-rotation old escrow,
   // this is the sig of the residual sweep tx (old → new escrow).
@@ -236,23 +240,99 @@ export async function distributeLegacyMeme(
     }
   }
 
-  // ── Step 1: collect (BC + AMM → escrow) in one tx ────────────────
-  let collectSig: string;
-  try {
-    const collectIxs = await sdk.collectCoinCreatorFeeInstructions(escrow.publicKey, escrow.publicKey);
-    // SOL-030: adaptive priority fee.
-    const collectPriorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
-    const collectTx = new Transaction()
-      .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
-      .add(collectPriorityIx)
-      .add(...collectIxs);
-    collectTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-    collectTx.feePayer = escrow.publicKey;
-    // SOL-029: simulate before send.
-    collectSig = await simulateAndSend(conn, collectTx, [escrow], { label: 'legacy-collect' });
-    await conn.confirmTransaction(collectSig, 'confirmed');
-  } catch (e) {
-    return { ok: false, error: `Collect failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
+  // ── Step 1: collect fees ─────────────────────────────────────────
+  // Two-step collect for graduated tokens: try BC creator vault first
+  // (may fail with AccountNotFound if graduated), then PumpSwap AMM
+  // creator vault separately. Prior implementation combined both in a
+  // single sdk.collectCoinCreatorFeeInstructions() call which included
+  // BC-vault references — when a token graduated, the BC vault account
+  // was closed, so simulate rejected the whole tx with AccountNotFound
+  // and the AMM fees piled up unclaimed (2026-07-01: found 4.38 SOL
+  // stuck for PROOF). Mirror of the split pattern already working in
+  // src/services/distribution.ts Steps A + A2 + A3.
+  let collectSig: string | null = null;
+  let ammCollectSig: string | null = null;
+  let closeSig: string | null = null;
+
+  // Step 1a: BC creator-vault collect (skip cleanly on AccountNotFound).
+  if (bcLam > 0) {
+    try {
+      const collectIxs = await sdk.collectCoinCreatorFeeInstructions(escrow.publicKey, escrow.publicKey);
+      const collectPriorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
+      const collectTx = new Transaction()
+        .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+        .add(collectPriorityIx)
+        .add(...collectIxs);
+      collectTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+      collectTx.feePayer = escrow.publicKey;
+      collectSig = await simulateAndSend(conn, collectTx, [escrow], { label: 'legacy-bc-collect' });
+      await conn.confirmTransaction(collectSig, 'confirmed');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Graduated tokens close their BC vault. AccountNotFound is the
+      // expected signal — log and move on to AMM collect. Any other
+      // error is a real failure and we bail.
+      if (!msg.includes('AccountNotFound')) {
+        return { ok: false, error: `BC collect failed: ${msg}`, symbol: config.symbol };
+      }
+      console.log(`[legacy-distribute] ${config.symbol} BC vault closed (graduated) — skipping BC collect, trying AMM`);
+    }
+  }
+
+  // Step 1b: PumpSwap AMM creator-vault collect. Post-graduation fees
+  // land here as wSOL. Uses @pump-fun/pump-swap-sdk (separate from the
+  // BC-side @pump-fun/pump-sdk above).
+  if (ammLam > 0) {
+    try {
+      const { OnlinePumpAmmSdk, PumpAmmSdk } = await import('@pump-fun/pump-swap-sdk');
+      const ammSdk = new OnlinePumpAmmSdk(conn);
+      const offlineAmmSdk = new PumpAmmSdk();
+
+      const escrowWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, escrow.publicKey, true);
+      const state = await ammSdk.collectCoinCreatorFeeSolanaState(escrow.publicKey, escrowWsolAta);
+      const ammCollectIxs = await offlineAmmSdk.collectCoinCreatorFee(state, escrow.publicKey);
+
+      const ammPriorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
+      const ammTx = new Transaction()
+        .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
+        .add(ammPriorityIx)
+        // Ensure escrow's wSOL ATA exists before the collect targets it.
+        .add(createAssociatedTokenAccountIdempotentInstruction(
+          escrow.publicKey, escrowWsolAta, escrow.publicKey, NATIVE_MINT, TOKEN_PROGRAM_ID,
+        ))
+        .add(...ammCollectIxs);
+      ammTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+      ammTx.feePayer = escrow.publicKey;
+      ammCollectSig = await simulateAndSend(conn, ammTx, [escrow], { label: 'legacy-amm-collect' });
+      await conn.confirmTransaction(ammCollectSig, 'confirmed');
+    } catch (e) {
+      return { ok: false, error: `AMM collect failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
+    }
+
+    // Step 1c: unwrap wSOL to native SOL by closing the escrow's wSOL ATA.
+    // The AMM collect deposits wrapped SOL — downstream distribution math
+    // reads native SOL, so we have to close-to-lamports here or the AMM
+    // fees would still show as 0 in the escrow balance.
+    try {
+      const escrowWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, escrow.publicKey, true);
+      const closeTx = new Transaction().add(
+        createCloseAccountInstruction(escrowWsolAta, escrow.publicKey, escrow.publicKey, [], TOKEN_PROGRAM_ID),
+      );
+      closeTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+      closeTx.feePayer = escrow.publicKey;
+      closeSig = await simulateAndSend(conn, closeTx, [escrow], { label: 'legacy-close-wsol' });
+      await conn.confirmTransaction(closeSig, 'confirmed');
+    } catch (e) {
+      // Non-fatal: the wSOL is safely in the ATA, next tick's math can
+      // read it and try again. Log but don't abort — the collect
+      // succeeded and we want its record persisted.
+      console.warn(`[legacy-distribute] ${config.symbol} wSOL unwrap failed (fees safe in ATA, next tick retries): ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  // At least one collect step must have succeeded to proceed.
+  if (!collectSig && !ammCollectSig) {
+    return { ok: false, error: `No collect ran (bcLam=${bcLam}, ammLam=${ammLam})`, symbol: config.symbol };
   }
 
   // Verify the collect actually moved funds. The post-balance read can
@@ -271,9 +351,11 @@ export async function distributeLegacyMeme(
   if (collectedActualLam < totalCollectableLam * 0.95) {
     return {
       ok: false,
-      error: `Collect verify failed after 5 retries: escrow grew by ${collectedActualLam} lamports, expected ≥${Math.floor(totalCollectableLam * 0.95)} (collectSig ${collectSig})`,
+      error: `Collect verify failed after 5 retries: escrow grew by ${collectedActualLam} lamports, expected ≥${Math.floor(totalCollectableLam * 0.95)} (collectSig ${collectSig ?? 'n/a'} ammCollectSig ${ammCollectSig ?? 'n/a'})`,
       symbol: config.symbol,
-      collectSig,
+      collectSig: collectSig ?? undefined,
+      ammCollectSig: ammCollectSig ?? undefined,
+      closeSig: closeSig ?? undefined,
     };
   }
 
@@ -309,7 +391,9 @@ export async function distributeLegacyMeme(
       ok: false,
       error: `Transfer failed (funds safe in escrow): ${e instanceof Error ? e.message : e}`,
       symbol: config.symbol,
-      collectSig,
+      collectSig: collectSig ?? undefined,
+      ammCollectSig: ammCollectSig ?? undefined,
+      closeSig: closeSig ?? undefined,
     };
   }
 
@@ -373,7 +457,9 @@ export async function distributeLegacyMeme(
     sentToSlot1WalletLamports: sendToSlot1WalletLam,
     sentToHolderRewardsLamports: holderRewardsLam,
     freedLamports: freedLam,
-    collectSig,
+    collectSig: collectSig ?? undefined,
+    ammCollectSig: ammCollectSig ?? undefined,
+    closeSig: closeSig ?? undefined,
     transferSig,
     oldEscrowSweepSig,
   };
