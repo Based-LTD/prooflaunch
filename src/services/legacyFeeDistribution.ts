@@ -273,8 +273,12 @@ export async function distributeLegacyMeme(
         .add(...collectIxs);
       collectTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
       collectTx.feePayer = feePayer.publicKey;
-      const signers = feePayer === escrow ? [escrow] : [feePayer, escrow];
-      collectSig = await simulateAndSend(conn, collectTx, signers, { label: 'legacy-bc-collect' });
+      // pump.fun collect_creator_fee authorizes via PDA seeds, so the
+      // creator (escrow) does NOT need to sign — only the fee payer.
+      // Including escrow as a signer when it's not marked as one in the
+      // ix's account_keys triggers 'unknown signer' from web3.js's
+      // partialSign.
+      collectSig = await simulateAndSend(conn, collectTx, [feePayer], { label: 'legacy-bc-collect' });
       await conn.confirmTransaction(collectSig, 'confirmed');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -314,8 +318,10 @@ export async function distributeLegacyMeme(
         .add(...ammCollectIxs);
       ammTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
       ammTx.feePayer = feePayer.publicKey;
-      const signers = feePayer === escrow ? [escrow] : [feePayer, escrow];
-      ammCollectSig = await simulateAndSend(conn, ammTx, signers, { label: 'legacy-amm-collect' });
+      // Same as BC collect — the AMM's collect_coin_creator_fee ix
+      // uses PDA-derived authority, no wallet signature required from
+      // the creator. Only fee payer signs.
+      ammCollectSig = await simulateAndSend(conn, ammTx, [feePayer], { label: 'legacy-amm-collect' });
       await conn.confirmTransaction(ammCollectSig, 'confirmed');
     } catch (e) {
       return { ok: false, error: `AMM collect failed: ${e instanceof Error ? e.message : e}`, symbol: config.symbol };
@@ -333,8 +339,11 @@ export async function distributeLegacyMeme(
       );
       closeTx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
       closeTx.feePayer = feePayer.publicKey;
-      const signers = feePayer === escrow ? [escrow] : [feePayer, escrow];
-      closeSig = await simulateAndSend(conn, closeTx, signers, { label: 'legacy-close-wsol' });
+      // closeAccount DOES require the ATA owner (escrow) to sign — it's
+      // a token-program authority check, not a PDA. If fee payer is
+      // separate, we need both signatures.
+      const closeSigners = feePayer === escrow ? [escrow] : [feePayer, escrow];
+      closeSig = await simulateAndSend(conn, closeTx, closeSigners, { label: 'legacy-close-wsol' });
       await conn.confirmTransaction(closeSig, 'confirmed');
     } catch (e) {
       // Non-fatal: the wSOL is safely in the ATA, next tick's math can
