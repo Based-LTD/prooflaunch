@@ -301,8 +301,12 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
     return { status: 'error', message: `Failed to queue payout rows: ${insertErr.message}` };
   }
 
-  // Broadcast in batches
+  // Broadcast in batches. Track per-wallet success so failed batches
+  // don't get their pending_lamports zeroed downstream — silent loss
+  // bug we hit 2026-06-23..27 (three fully-failed rounds silently
+  // marked wallets as paid).
   let successCount = 0, failCount = 0;
+  const paidWallets = new Set<string>();
   for (let b = 0; b < payouts.length; b += PAYOUTS_PER_TX) {
     const batch = payouts.slice(b, b + PAYOUTS_PER_TX);
     // SOL-030: adaptive priority fee.
@@ -329,6 +333,7 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
         .eq('distribution_id', distRow.id)
         .in('wallet', ids);
       successCount += batch.length;
+      for (const p of batch) paidWallets.add(p.wallet);
     } catch (e) {
       console.error(`batch ${b / PAYOUTS_PER_TX + 1} failed:`, e instanceof Error ? e.message : e);
       failCount += batch.length;
@@ -346,6 +351,13 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
   }> = [];
 
   for (const p of payouts) {
+    // Failed batches — leave the DB row untouched so pending_lamports
+    // stays intact and the next airdrop tick retries with the same
+    // accumulated balance. Small tradeoff: this round's accrual
+    // increment doesn't get folded into total_accrued_lamports (stat
+    // undercount), which is acceptable — the SOL is still in the
+    // rewards wallet and will be paid on a successful retry.
+    if (!paidWallets.has(p.wallet)) continue;
     const priorRow = pendingRows?.find(r => r.wallet === p.wallet);
     const priorTotalAccrued = priorRow ? Number((priorRow as { total_accrued_lamports?: number }).total_accrued_lamports || 0) : 0;
     const priorTotalPaid = priorRow ? Number((priorRow as { total_paid_lamports?: number }).total_paid_lamports || 0) : 0;
