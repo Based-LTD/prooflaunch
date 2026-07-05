@@ -20,9 +20,13 @@ import { verifySignedAuthMessage } from '@/lib/crypto';
  *   - banner_url
  *   - description
  *
+ * Pre-launch identity edits (allowed while status IN ('backing','funded')):
+ *   - name, symbol, image_url — creators frequently rebrand between
+ *     submit and launch. Locked once the token is `live` because
+ *     these are baked into on-chain pump.fun / meteora metadata at
+ *     that point.
+ *
  * NOT editable from this endpoint:
- *   - name, symbol, image_url (token identity — would mess up the
- *     pump.fun/meteora metadata that already references them)
  *   - slot config (total_slots, reserved_slots, etc.) — separate
  *     endpoint with stricter rules since backings already exist
  *   - launch_platform — committed at submit
@@ -74,7 +78,26 @@ function isValidBannerUrl(s: string): boolean {
   return /^https:\/\//.test(s);
 }
 
+// Regex for the token-identity fields (pre-launch editable). Kept
+// intentionally forgiving — the /submit form's rules are the canonical
+// source; here we just guard against obviously-broken values.
+const NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} \-_'.&!?]{1,31}$/u;
+const SYMBOL_PATTERN = /^[A-Z0-9]{1,15}$/;
+
+// Same host + storage prefix check as banner_url. Image logos live at
+// token-assets/logos/... but any https on our storage bucket is fine
+// since /api/upload/image is the choke point that shapes the path.
+function isValidImageUrl(s: string): boolean {
+  if (!s) return false;
+  return /^https:\/\//.test(s);
+}
+
 interface EditableFields {
+  // Token-identity fields (pre-launch only — validated below).
+  name?: string;
+  symbol?: string;
+  image_url?: string;
+  // Soft display fields (editable through the token's lifetime).
   github?: string | null;
   twitter?: string | null;
   telegram?: string | null;
@@ -83,6 +106,12 @@ interface EditableFields {
   banner_url?: string | null;
   description?: string | null;
 }
+
+// Which fields require the meme to still be pre-launch. Enforced in
+// the PATCH handler once we've read the current status.
+const PRE_LAUNCH_ONLY_FIELDS = new Set<keyof EditableFields>([
+  'name', 'symbol', 'image_url',
+]);
 
 function pickAndValidate(body: Record<string, unknown>): {
   ok: true; update: EditableFields;
@@ -96,6 +125,35 @@ function pickAndValidate(body: Record<string, unknown>): {
     const trimmed = v.trim();
     return trimmed.length === 0 ? null : trimmed;
   };
+
+  // ── Token-identity fields (pre-launch only) ──────────────────────
+  // These are intentionally REQUIRED-if-present (no null-to-clear).
+  // A meme without a name / symbol / logo doesn't make sense, so we
+  // reject cleared values and force the caller to send a real value.
+  if ('name' in body) {
+    if (typeof body.name !== 'string') return { ok: false, error: 'name must be a string' };
+    const v = body.name.trim();
+    if (!NAME_PATTERN.test(v)) {
+      return { ok: false, error: 'name must be 2-32 chars of letters/numbers/spaces (no leading punctuation)' };
+    }
+    update.name = v;
+  }
+  if ('symbol' in body) {
+    if (typeof body.symbol !== 'string') return { ok: false, error: 'symbol must be a string' };
+    const v = body.symbol.trim().toUpperCase();
+    if (!SYMBOL_PATTERN.test(v)) {
+      return { ok: false, error: 'symbol must be 1-15 uppercase alphanumerics' };
+    }
+    update.symbol = v;
+  }
+  if ('image_url' in body) {
+    if (typeof body.image_url !== 'string') return { ok: false, error: 'image_url must be a string' };
+    const v = body.image_url.trim();
+    if (!isValidImageUrl(v)) {
+      return { ok: false, error: 'image_url must be a https URL (upload via /api/upload/image first)' };
+    }
+    update.image_url = v;
+  }
 
   if ('github' in body) {
     const raw = stringOrNull(body.github);
@@ -213,19 +271,37 @@ export async function PATCH(
     if (meme.creator_wallet !== caller_wallet) {
       return NextResponse.json({ error: 'Only the meme creator can edit metadata' }, { status: 403 });
     }
-    // Status gate intentionally removed — these are display-only DB
-    // fields, not on-chain metadata. Creators can refine description,
-    // socials and banner for the lifetime of the launch (matches Dex
-    // Screener / pump.fun / Birdeye pattern).
+
+    // Status gate for token-identity fields. Description / socials /
+    // banner stay editable through the token's lifetime (Dex Screener
+    // / pump.fun / Birdeye pattern), but name / symbol / image_url
+    // are locked once launched because they're baked into on-chain
+    // metadata at that point.
+    const identityFieldsInEdit = Object.keys(validated.update).filter(
+      (k) => PRE_LAUNCH_ONLY_FIELDS.has(k as keyof EditableFields),
+    );
+    if (identityFieldsInEdit.length > 0 && meme.status !== 'backing' && meme.status !== 'funded') {
+      return NextResponse.json({
+        error: `Cannot edit token identity fields (${identityFieldsInEdit.join(', ')}) once the token is ${meme.status}. These are baked into on-chain metadata at launch.`,
+      }, { status: 409 });
+    }
 
     const { error: updateErr, data: updated } = await supabase
       .from('memes')
       .update(validated.update)
       .eq('id', id)
-      .select('id, github, twitter, telegram, discord, website, banner_url, description')
+      .select('id, name, symbol, image_url, github, twitter, telegram, discord, website, banner_url, description')
       .single();
 
     if (updateErr) {
+      // Symbol collision on the partial unique index. Give the caller
+      // a specific message instead of the raw Postgres text.
+      if ((updateErr as { code?: string }).code === '23505'
+          && updateErr.message.includes('symbol')) {
+        return NextResponse.json({
+          error: 'That ticker is already taken by another active token. Try a different symbol.',
+        }, { status: 409 });
+      }
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
 

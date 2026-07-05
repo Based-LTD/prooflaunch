@@ -1,16 +1,18 @@
 'use client';
 
-// Creator-only inline editor for soft meme metadata. Available for the
-// lifetime of a launch (backing, funded, live) — same pattern Dex
-// Screener / pump.fun use for description + socials + banner. Reuses
-// the same URL-shape rules as the /submit form and the
-// /api/memes/[id]/metadata PATCH endpoint so surface-level validation
-// matches what the server enforces.
+// Creator-only inline editor for meme metadata. Reuses the same URL-
+// shape rules as the /submit form and the /api/memes/[id]/metadata
+// PATCH endpoint so surface-level validation matches what the server
+// enforces.
 //
-// Editable: socials (X / TG / DC / Web / GitHub) + description +
-// banner. Token name/symbol/icon are explicitly NOT editable from
-// here because they're already referenced in places that can't
-// rewrite (pump.fun / meteora metadata, allowlist signatures, etc.).
+// Two field groups:
+//   1. Token identity (name / symbol / logo) — editable ONLY while
+//      status IN ('backing', 'funded'). Rebranding pre-launch is a
+//      real workflow (creators refine as they hit KOL feedback);
+//      once launched these are baked into on-chain metadata and the
+//      server rejects with 409.
+//   2. Soft display (description / socials / banner) — editable for
+//      the token's lifetime, matches Dex Screener / pump.fun pattern.
 //
 // Auth: same wallet-signed message pattern as the visibility panel,
 // scoped to "metadata-edit:{meme_id}:{wallet}".
@@ -31,6 +33,8 @@ const TWITTER_PATTERN = /^https?:\/\/(x\.com|twitter\.com)\/[^\s]+$/i;
 const TELEGRAM_PATTERN = /^https?:\/\/t\.me\/[^\s]+$/i;
 const DISCORD_PATTERN = /^https?:\/\/discord\.(gg|com)\/[^\s]+$/i;
 const GITHUB_PATTERN = /^https?:\/\/(www\.)?github\.com\/[^\s]+$/i;
+const NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} \-_'.&!?]{1,31}$/u;
+const SYMBOL_PATTERN = /^[A-Z0-9]{1,15}$/;
 
 // Auto-prepend https:// if the user typed a bare domain like
 // "github.com/handle". Mirrors the server-side forgiveness so the
@@ -50,6 +54,13 @@ export function EditMetadataPanel({ meme, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
 
+  // Token identity — only surfaced when pre-launch (see isPreLaunch).
+  const [name, setName] = useState(meme.name ?? '');
+  const [symbol, setSymbol] = useState(meme.symbol ?? '');
+  const [imageUrl, setImageUrl] = useState(meme.image_url ?? '');
+  const [imageUploading, setImageUploading] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   const [github, setGithub] = useState(meme.github ?? '');
   const [twitter, setTwitter] = useState(meme.twitter ?? '');
   const [telegram, setTelegram] = useState(meme.telegram ?? '');
@@ -59,6 +70,38 @@ export function EditMetadataPanel({ meme, onSaved }: Props) {
   const [bannerUrl, setBannerUrl] = useState(meme.banner_url ?? '');
   const [bannerUploading, setBannerUploading] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  const isPreLaunch = meme.status === 'backing' || meme.status === 'funded';
+
+  // Logo upload — same shape as banner but writes to token-assets/logos/.
+  // Kept as a separate handler because kind + preview treatment differ.
+  const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setStatus({ kind: 'err', msg: `Logo must be under 2 MB (you have ${(file.size / 1024 / 1024).toFixed(1)} MB).` });
+      return;
+    }
+    setStatus(null);
+    setImageUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('kind', 'logo');
+      const r = await fetch('/api/upload/image', { method: 'POST', body: fd });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || 'Logo upload failed');
+      }
+      const j = await r.json();
+      setImageUrl(j.url);
+    } catch (e) {
+      setStatus({ kind: 'err', msg: e instanceof Error ? e.message : 'Upload failed' });
+    } finally {
+      setImageUploading(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  };
 
   const handleBannerPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -105,6 +148,16 @@ export function EditMetadataPanel({ meme, onSaved }: Props) {
   };
 
   const validate = (): string | null => {
+    // Token identity — only validate if actually shown (pre-launch).
+    if (isPreLaunch) {
+      const trimmedName = name.trim();
+      if (!trimmedName) return 'Name is required';
+      if (!NAME_PATTERN.test(trimmedName)) return 'Name must be 2-32 chars (letters/numbers/spaces/basic punctuation)';
+      const trimmedSymbol = symbol.trim().toUpperCase();
+      if (!trimmedSymbol) return 'Ticker is required';
+      if (!SYMBOL_PATTERN.test(trimmedSymbol)) return 'Ticker must be 1-15 uppercase letters/numbers';
+      if (!imageUrl) return 'Logo is required';
+    }
     const { github: g, twitter: tw, telegram: tg, discord: dc, website: ws } = normalized;
     if (g && !GITHUB_PATTERN.test(g)) return 'GitHub must be a github.com/... URL';
     if (tw && !TWITTER_PATTERN.test(tw)) return 'Twitter/X must be a x.com/... or twitter.com/... URL';
@@ -162,6 +215,17 @@ export function EditMetadataPanel({ meme, onSaved }: Props) {
         if (nextNorm !== prev) payload[key] = nextNorm;
       }
 
+      // Token identity fields — only send if pre-launch AND the value
+      // actually changed. These are required-if-present on the server
+      // (no null-to-clear allowed), so we skip null coercion here.
+      if (isPreLaunch) {
+        const trimmedName = name.trim();
+        const trimmedSymbol = symbol.trim().toUpperCase();
+        if (trimmedName && trimmedName !== (meme.name ?? '')) payload.name = trimmedName;
+        if (trimmedSymbol && trimmedSymbol !== (meme.symbol ?? '')) payload.symbol = trimmedSymbol;
+        if (imageUrl && imageUrl !== (meme.image_url ?? '')) payload.image_url = imageUrl;
+      }
+
       const r = await fetch(`/api/memes/${meme.id}/metadata`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -207,10 +271,78 @@ export function EditMetadataPanel({ meme, onSaved }: Props) {
       </div>
 
       <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
-        Edit description, socials, and banner anytime. Name / symbol / icon are locked at launch.
+        {isPreLaunch
+          ? 'Rebrand freely while pre-launch. Name / symbol / logo lock the moment your token deploys on chain.'
+          : 'Edit description, socials, and banner anytime. Name / symbol / logo are locked (already on chain).'}
       </p>
 
       <div className="space-y-2">
+        {isPreLaunch && (
+          <>
+            <div className="border-t border-[var(--border)] pt-2 mt-1">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">
+                {'// TOKEN_IDENTITY'}
+              </div>
+            </div>
+
+            {/* Logo upload */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">
+                Logo (square, 2 MB max)
+              </label>
+              {imageUrl ? (
+                <div className="relative w-24 h-24">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageUrl}
+                    alt="Logo preview"
+                    className="w-24 h-24 border border-[var(--accent)]/60 object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    aria-label="Replace logo"
+                    className="absolute -bottom-2 -right-2 px-2 py-0.5 bg-[var(--accent)] text-[#0a0a0a] text-[9px] font-mono uppercase tracking-widest hover:opacity-90"
+                  >
+                    Replace
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={imageUploading}
+                  className="w-24 h-24 border border-dashed border-[var(--border)] hover:border-[var(--accent)] transition-colors flex flex-col items-center justify-center gap-1 text-[var(--muted)] hover:text-[var(--accent)]"
+                >
+                  {imageUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span className="text-[9px] font-mono uppercase tracking-widest">Upload</span>
+                    </>
+                  )}
+                </button>
+              )}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleImagePick}
+                className="hidden"
+              />
+            </div>
+
+            <Field label="Name" value={name} onChange={setName} placeholder="e.g. Solana Music" />
+            <Field label="Ticker (uppercase, ≤15)" value={symbol} onChange={(v) => setSymbol(v.toUpperCase())} placeholder="e.g. SOLMUSIC" />
+          </>
+        )}
+
+        <div className="border-t border-[var(--border)] pt-2 mt-1">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">
+            {'// DISPLAY'}
+          </div>
+        </div>
         <Field label="Description (≤500)" value={description} onChange={setDescription} placeholder="One-liner about your token" multiline />
         <Field label="X / Twitter" value={twitter} onChange={setTwitter} placeholder="https://x.com/..." />
         <Field label="Telegram" value={telegram} onChange={setTelegram} placeholder="https://t.me/..." />
