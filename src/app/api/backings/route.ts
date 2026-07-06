@@ -270,10 +270,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (new Date(meme.backing_deadline) < new Date()) {
+    // Deadline check depends on which phase the meme is in:
+    //   - 'backing': check backing_deadline (slots still filling for the
+    //     first time — if the deadline passes without filling, backers
+    //     get refunded)
+    //   - 'funded': check launch_deadline (pool is filled but the creator
+    //     hasn't launched yet — vacated slots from withdrawals can be
+    //     refilled up until the launch deadline expires). Reusing
+    //     backing_deadline here would reject re-backings on any meme
+    //     that took its full backing window to fill, which is most.
+    const relevantDeadline = meme.status === 'funded'
+      ? (meme as { launch_deadline?: string | null }).launch_deadline
+      : meme.backing_deadline;
+    if (relevantDeadline && new Date(relevantDeadline) < new Date()) {
       return rejectAndRefund(
         poolForRefund, backer_wallet, amount_sol,
-        'Backing period has ended',
+        meme.status === 'funded'
+          ? 'Launch window has expired — creator can no longer launch, backers will be auto-refunded'
+          : 'Backing period has ended',
       );
     }
 
