@@ -50,6 +50,12 @@ interface FundedProps {
   resetting: boolean;
   resetStatus: string | null;
   connected: boolean;
+  // When >0, some backer(s) have withdrawn since the meme filled. The
+  // header copy switches from "all slots filled" to "X/Y filled — Z slot(s)
+  // open" and the creator can still fire the launch with whoever remains
+  // OR wait for a re-back. Optional so callers that never hit this state
+  // (isLaunching) don't need to plumb it.
+  slotsRemaining?: number;
 }
 
 interface LiveProps {
@@ -135,8 +141,10 @@ function formatTokens(raw: string | number | null | undefined): string {
 // ── FUNDED / LAUNCHING ───────────────────────────────────────────────
 const FundedPanel: React.FC<FundedProps> = ({
   meme, totalSlots, totalBackingSol, isCreator, isLaunching, launching, launchStatus,
-  onLaunch, onResetWindow, resetting, resetStatus, connected,
+  onLaunch, onResetWindow, resetting, resetStatus, connected, slotsRemaining = 0,
 }) => {
+  const filledSlots = totalSlots - slotsRemaining;
+  const hasVacancy = slotsRemaining > 0;
   const unit = quoteLabel(meme.quote_currency);
   // Live-updating countdown to launch_deadline. Re-renders every second
   // when not loading. Once the deadline hits, the cron auto-refunds
@@ -176,10 +184,14 @@ const FundedPanel: React.FC<FundedProps> = ({
       <div className="p-4 sm:p-5 space-y-4">
         <div className="text-center">
           <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
-            ALL {totalSlots} SLOTS FILLED · {totalBackingSol.toFixed(2)} {unit} RAISED
+            {hasVacancy
+              ? `${filledSlots}/${totalSlots} SLOTS FILLED · ${totalBackingSol.toFixed(2)} ${unit} RAISED`
+              : `ALL ${totalSlots} SLOTS FILLED · ${totalBackingSol.toFixed(2)} ${unit} RAISED`}
           </div>
           <p className="text-xs font-mono text-[var(--muted)] mt-2">
-            Token is ready to deploy on {meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'}.
+            {hasVacancy
+              ? `${slotsRemaining} slot${slotsRemaining === 1 ? '' : 's'} opened up — a backer withdrew. Creator can launch now with ${filledSlots} backers or wait for someone to fill the vacancy.`
+              : `Token is ready to deploy on ${meme.launch_platform === 'meteora' ? 'Meteora' : meme.launch_platform === 'launchlab' ? 'LaunchLab' : 'Pump.fun'}.`}
           </p>
         </div>
 

@@ -706,12 +706,20 @@ export default function MemeDetailPage() {
     return { mode: 'connect' as const, label: 'Loading…' };
   })();
 
+  // When funded but some backer(s) have withdrawn, the vacated slot(s)
+  // are reclaimable by anyone (including the wallet that just withdrew).
+  // Show BOTH panels: FundedPanel gives the creator their launch button,
+  // BackingPanel lets a new backer (or the returning one) fill the slot.
+  // Once slots fill back up to totalSlots, this collapses back to
+  // FundedPanel only.
+  const hasOpenSlotsWhileFunded = isFunded && slotsRemaining > 0;
+
   // Build the action panel once so we mount it in one spot.
   const actionPanel = (
     <div id="meme-action-panel">
       {isLaunched ? (
         <MemeActionPanel variant="live" meme={meme} myBacking={myBacking} />
-      ) : isFunded || isLaunching ? (
+      ) : isLaunching ? (
         <MemeActionPanel
           variant="funded"
           meme={meme}
@@ -727,6 +735,47 @@ export default function MemeDetailPage() {
           resetStatus={resetStatus}
           connected={connected}
         />
+      ) : isFunded ? (
+        <div className="space-y-3">
+          <MemeActionPanel
+            variant="funded"
+            meme={meme}
+            totalSlots={totalSlots}
+            totalBackingSol={totalBackingSol}
+            isCreator={isCreator}
+            isLaunching={isLaunching}
+            launching={launching}
+            launchStatus={launchStatus}
+            onLaunch={requestLaunch}
+            onResetWindow={handleResetWindow}
+            resetting={resetting}
+            resetStatus={resetStatus}
+            connected={connected}
+            slotsRemaining={slotsRemaining}
+          />
+          {hasOpenSlotsWhileFunded && (
+            <MemeActionPanel
+              variant="backing"
+              meme={meme}
+              backerCount={backerCount}
+              totalBackingSol={totalBackingSol}
+              slotsRemaining={slotsRemaining}
+              totalSlots={totalSlots}
+              timeRemaining={timeRemaining}
+              minBacking={minBacking}
+              amount={amount}
+              setAmount={setAmount}
+              onPledge={requestBack}
+              backing={backing}
+              backingStatus={backingStatus}
+              backingPaused={false}
+              connected={connected}
+              projectedSharePct={projectedSharePct}
+              backerWallets={activeBackings.map((b) => b.backer_wallet)}
+              allowlistWallets={allowlistWallets}
+            />
+          )}
+        </div>
       ) : (
         <MemeActionPanel
           variant="backing"

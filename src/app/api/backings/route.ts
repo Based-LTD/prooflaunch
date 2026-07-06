@@ -258,7 +258,12 @@ export async function POST(request: NextRequest) {
       quote_currency: (meme.quote_currency as 'sol' | 'usdc' | undefined) ?? 'sol',
     };
 
-    if (meme.status !== 'backing') {
+    // Backings accepted while status IN ('backing', 'funded'). Funded
+    // memes still have open slots when an earlier backer has withdrawn
+    // — the vacated slot is reclaimable at the same tier. Once the
+    // creator presses launch (status flips to 'launching'), no further
+    // backings are accepted.
+    if (meme.status !== 'backing' && meme.status !== 'funded') {
       return rejectAndRefund(
         poolForRefund, backer_wallet, amount_sol,
         `Meme is not accepting backings (status: ${meme.status})`,
