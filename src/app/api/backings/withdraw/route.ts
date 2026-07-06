@@ -54,15 +54,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Meme not found' }, { status: 404 });
     }
 
-    // Voluntary withdrawal is only allowed while slots are still being
-    // filled ('backing'). Once the pool is full ('funded') it's a
-    // committed group ready to launch — a last-second exit would break
-    // the deal for the other backers and the creator. An abandoned
-    // 'funded' meme is NOT a trap: the process-memes cron auto-refunds
-    // every backer in full once the backing_deadline passes.
-    if (meme.status !== 'backing') {
+    // Voluntary withdrawal is allowed any time before the creator
+    // presses the launch button — i.e. while status IN ('backing',
+    // 'funded'). Once the atomic launch is claimed (status flips to
+    // 'launching'), the pool is committed to the on-chain create+buy
+    // and withdrawals are locked. This is the "backer-can-exit
+    // anytime pre-launch" model — the fee stays at 2%, the vacated
+    // slot is reclaimable by another backer, and the creator can
+    // launch with whatever backers remain (down to 1).
+    if (meme.status !== 'backing' && meme.status !== 'funded') {
       return NextResponse.json(
-        { error: `Cannot withdraw: meme is ${meme.status}. Withdrawals are only allowed while slots are still filling.` },
+        { error: `Cannot withdraw: meme is ${meme.status}. Withdrawals are only allowed before launch.` },
         { status: 400 }
       );
     }
@@ -134,6 +136,31 @@ export async function POST(request: NextRequest) {
       // Another request beat us to it — either already withdrawn or refund in flight.
       return NextResponse.json(
         { error: 'Withdrawal already in progress or completed (concurrent request)' },
+        { status: 409 }
+      );
+    }
+
+    // Second-chance guard: between the meme status read at line 47 and
+    // now, the creator could have hit launch — flipping meme.status to
+    // 'launching'. If we proceed here, we'd send a refund tx from the
+    // pool wallet while the atomic launch tx is also spending from it,
+    // and the loser of the on-chain race would end up in an
+    // inconsistent state (worst case: backer marked withdrawn but no
+    // refund landed, launch spent SOL that included their contribution).
+    // Re-read status now; if it's moved past funded, revert the
+    // backing lock and 409.
+    const { data: memeNow } = await supabase
+      .from('memes')
+      .select('status')
+      .eq('id', meme_id)
+      .single();
+    if (!memeNow || (memeNow.status !== 'backing' && memeNow.status !== 'funded')) {
+      await supabase
+        .from('backings')
+        .update({ status: expectedStatus, refund_tx: null })
+        .eq('id', backing.id);
+      return NextResponse.json(
+        { error: `Cannot withdraw: launch is now in progress (meme status: ${memeNow?.status ?? 'unknown'}). Try again if the launch fails.` },
         { status: 409 }
       );
     }

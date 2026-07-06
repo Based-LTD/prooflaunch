@@ -845,7 +845,7 @@ export default function MemeDetailPage() {
                   backings={backings}
                   totalBacking={Number(meme.current_backing_sol)}
                   currentWallet={publicKey?.toBase58()}
-                  canWithdraw={isProving}
+                  canWithdraw={isProving || isFunded}
                   onWithdraw={requestWithdraw}
                   withdrawing={withdrawing}
                   withdrawStatus={withdrawStatus}
@@ -1002,7 +1002,7 @@ export default function MemeDetailPage() {
         }}
         onConfirm={confirmWithdraw}
         title="Confirm Withdrawal"
-        message={`Withdraw ${pendingWithdrawAmount.toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} from this token?\n\nWithdrawal fee: ${(pendingWithdrawAmount * 0.02).toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} (2%)\n\nYou will receive: ${(pendingWithdrawAmount * 0.98).toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}`}
+        message={`Withdraw ${pendingWithdrawAmount.toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} from this token?\n\nWithdrawal fee: ${(pendingWithdrawAmount * 0.02).toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'} (2%)\n\nYou will receive: ${(pendingWithdrawAmount * 0.98).toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}\n\nYou can withdraw any time before the creator presses launch. Once launch fires, all remaining backers are locked in for the atomic tx. Your vacated slot stays open for another backer at the same tier.${isFunded ? '\n\nThis token is currently funded and waiting for the creator to launch. Withdrawing now drops the total by your amount — the creator can still launch with the remaining backers.' : ''}`}
         confirmText={`Withdraw ${(pendingWithdrawAmount * 0.98).toFixed(4)} ${meme.quote_currency === 'usdc' ? 'USDC' : 'SOL'}`}
         variant="warning"
         isLoading={withdrawing}
