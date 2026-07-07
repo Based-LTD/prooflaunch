@@ -4,36 +4,27 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { X, Trophy } from 'lucide-react';
 
-// First-visit contest banner. Announces the 5 SOL bounty for the first
-// community-launched token on prooflaunch to bond on pump.fun. Shown
-// once per browser via localStorage; users can dismiss and it stays
-// dismissed unless the CONTEST_KEY constant bumps.
-//
-// Bump CONTEST_KEY when the contest changes (new prize, new rules,
-// new dates). All prior dismissals are invalidated and existing users
-// see the new popup once on their next visit.
-
-const CONTEST_KEY = 'contest-popup-2026-07-06-v1';
+// Contest banner. Announces the 5 SOL bounty for the first
+// community-launched token on prooflaunch to bond. Shown on EVERY
+// visit to the landing page — no localStorage gate. Deliberate UX
+// choice for a limited-time growth mechanic: maximum visibility
+// trumps returning-user politeness while the contest is live.
+// When the contest ends (winner confirmed), remove the <ContestPopup />
+// mount from src/app/page.tsx to retire it — no separate flag change
+// needed.
 
 export function ContestPopup() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    // Show only on first visit + only client-side (SSR renders nothing).
     // 800ms delay so the landing page has time to paint — the popup is
     // an intentional interruption, not a page-load flash.
     if (typeof window === 'undefined') return;
-    if (window.localStorage.getItem(CONTEST_KEY)) return;
     const t = setTimeout(() => setOpen(true), 800);
     return () => clearTimeout(t);
   }, []);
 
-  const dismiss = () => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(CONTEST_KEY, new Date().toISOString());
-    }
-    setOpen(false);
-  };
+  const dismiss = () => setOpen(false);
 
   if (!open) return null;
 
