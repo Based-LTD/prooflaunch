@@ -28,9 +28,6 @@ import {
 // Updated when reality changes, not on a schedule.
 
 const SHIPPED = [
-  // === LIVE CONTEST ===
-  { icon: Trophy, title: '5 SOL bounty — first rug-proof community launch to bond wins', desc: 'First non-founder token launched via prooflaunch atomic launch to bond wins 5 SOL — provided the token is still trading above its bond mcap 24 hours after bonding. The 24h anti-rug snapshot catches the classic post-bond insider dump: any token that gets rugged in the first day doesn\'t qualify, and the prize passes to the next legit bonded token. Dips within the window are fine; the check is at the 24h mark. Prize sent directly to the creator wallet after the snapshot confirms. Founder-launched tokens (SOL Music, GO, PROOF, TEST, BOTTEST) excluded. First rug-proof bond wins. Contest runs open-ended until a legitimate winner is confirmed. Verifiable end-to-end on chain.' },
-
   // === LAUNCH MECHANICS ===
   { icon: Rocket, title: 'Multi-platform pooled atomic launches', desc: 'createPool + first buy + token distribution in a single atomic transaction. Dev holds 0%. No sniper gap. Every backer enters at the identical price. Pick the launchpad at submit time: pump.fun, Meteora DBC, or Raydium LaunchLab. Every mint ends in "…pooL" so anyone can verify it on Solscan.' },
   { icon: Coins, title: 'Withdraw any time before launch', desc: 'Backers can withdraw their pledge any time while the meme is in backing OR funded state — right up until the creator presses launch. 2% withdrawal fee stays with the pool. Vacated slots are reclaimable by the same tier. Nobody\'s money is held hostage during dev delays. Once the launch button fires, remaining backers are locked in atomically.' },

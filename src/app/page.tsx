@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react';
 import { MemeCard } from '@/components/MemeCard';
 import { LandingHero } from '@/components/LandingHero';
-import { ContestPopup } from '@/components/ContestPopup';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { useRealtimeMemes } from '@/hooks/useRealtimeMemes';
 import type { Meme } from '@/types/database';
@@ -83,11 +82,6 @@ export default function Home() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* First-visit contest popup — 5 SOL bounty for the first
-          community launch to bond. Self-gated via localStorage;
-          returns null after the user dismisses OR on SSR. */}
-      <ContestPopup />
-
       {/* Landing hero — MAINNET chip + headline + subtext + stats +
           SUBMIT TOKEN CTA. Self-contained; no scroll-to-grounds button
           (the board below scrolls into view naturally). */}
