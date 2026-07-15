@@ -28,8 +28,27 @@ export const maxDuration = 300; // 5 min — needs Vercel Pro+
 const PROOF_MINT = 'oaBXM2rCnWFeQc9ufdTSSpASwSrMBPrSmg8xtiepooL';
 const PROOF_DECIMALS = 6;
 const MIN_PAYOUT_LAMPORTS = 1_000_000; // 0.001 SOL dust floor
-const RESERVE_LAMPORTS = 1_000_000;     // leave ~0.001 SOL for gas in rewards wallet
+// Reserve was 1_000_000 (0.001 SOL) but that only covered ~5 batches
+// of tx+priority fees. Under Solana congestion the priority fee alone
+// can hit 200k+ lamports per tx — 10 batches × 205k = 2.05M lamports
+// which blew the reserve, later batches simulate-failed with
+// insufficient funds, and the whole airdrop tanked (see 2026-07-11
+// and 07-12 which sent zero SOL despite the distribution running).
+// 20M (0.02 SOL) gives comfortable headroom for ~50+ batches at
+// worst-case priority — the accounting still routes 99%+ of the pool
+// to holders, we just don't blow the fee budget.
+const RESERVE_LAMPORTS = 20_000_000;    // 0.02 SOL fee headroom for many batches
+// Per-batch reserve required BEFORE we attempt each tx — this is a
+// gate: if the pool balance drops below (batch payout + this margin),
+// we skip the batch cleanly rather than simulate-failing and losing
+// the pending balances via the retry path.
+const PER_BATCH_FEE_RESERVE_LAMPORTS = 500_000; // 0.0005 SOL — covers tx + peak priority
 const PAYOUTS_PER_TX = 18;
+// Number of send attempts per batch. First attempt uses whatever
+// blockhash is live. If it fails (transient RPC issue, blockhash
+// aged, priority fee spike since simulate), we backoff briefly and
+// retry once with a fresh blockhash + fresh priority-fee sample.
+const BATCH_ATTEMPTS = 2;
 const TOKEN_2022 = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const SPL_TOKEN = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const PUMP_BC = new PublicKey('6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P');
@@ -304,40 +323,88 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
   // Broadcast in batches. Track per-wallet success so failed batches
   // don't get their pending_lamports zeroed downstream — silent loss
   // bug we hit 2026-06-23..27 (three fully-failed rounds silently
-  // marked wallets as paid).
+  // marked wallets as paid). Also uses per-batch pre-flight balance
+  // check + retry-with-backoff — see 2026-07-11/12 which lost the
+  // whole round to a transient dip that would've recovered on retry.
   let successCount = 0, failCount = 0;
   const paidWallets = new Set<string>();
+  const batchFailures: Array<{ batch: number; attempts: string[] }> = [];
+
   for (let b = 0; b < payouts.length; b += PAYOUTS_PER_TX) {
     const batch = payouts.slice(b, b + PAYOUTS_PER_TX);
-    // SOL-030: adaptive priority fee.
-    const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
-    const tx = new Transaction()
-      .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }))
-      .add(priorityIx);
-    for (const p of batch) {
-      tx.add(SystemProgram.transfer({
-        fromPubkey: rewardsKp.publicKey,
-        toPubkey: new PublicKey(p.wallet),
-        lamports: p.shareLamports,
-      }));
+    const batchIdx = b / PAYOUTS_PER_TX + 1;
+    const batchSumLamports = batch.reduce((s, p) => s + p.shareLamports, 0);
+
+    // Pre-flight: verify wallet has enough for this batch's payouts
+    // PLUS a fee margin. If not, skip cleanly rather than simulate-fail.
+    // The pending balances stay intact (correctness fix from 9f3a6f9)
+    // so these wallets get paid on the next successful airdrop.
+    const currentBal = await conn.getBalance(rewardsKp.publicKey, 'confirmed');
+    const needed = batchSumLamports + PER_BATCH_FEE_RESERVE_LAMPORTS;
+    if (currentBal < needed) {
+      const msg = `insufficient wallet balance: ${currentBal} lamports available, ${needed} needed (batch payout ${batchSumLamports} + fee reserve ${PER_BATCH_FEE_RESERVE_LAMPORTS})`;
+      console.error(`[airdrop] batch ${batchIdx} pre-flight skip: ${msg}`);
+      failCount += batch.length;
+      batchFailures.push({ batch: batchIdx, attempts: ['pre-flight: ' + msg] });
+      continue;
     }
-    try {
-      tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-      tx.feePayer = rewardsKp.publicKey;
-      // SOL-029: simulate before send.
-      const sig = await simulateAndSend(conn, tx, [rewardsKp], { label: `airdrop:${b}` });
-      await conn.confirmTransaction(sig, 'confirmed');
+
+    // Attempt loop: fresh priority fee + fresh blockhash on each try.
+    let landedSig: string | null = null;
+    const attemptErrors: string[] = [];
+    for (let attempt = 1; attempt <= BATCH_ATTEMPTS; attempt++) {
+      try {
+        // Re-sample priority fee per attempt — mempool congestion can
+        // change between the pre-flight check and now.
+        const priorityIx = await adaptivePriorityFeeIx(conn, { fallback: 50_000 });
+        const tx = new Transaction()
+          .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }))
+          .add(priorityIx);
+        for (const p of batch) {
+          tx.add(SystemProgram.transfer({
+            fromPubkey: rewardsKp.publicKey,
+            toPubkey: new PublicKey(p.wallet),
+            lamports: p.shareLamports,
+          }));
+        }
+        tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+        tx.feePayer = rewardsKp.publicKey;
+        // SOL-029: simulate before send.
+        const sig = await simulateAndSend(conn, tx, [rewardsKp], { label: `airdrop:${b}:${attempt}` });
+        await conn.confirmTransaction(sig, 'confirmed');
+        landedSig = sig;
+        break;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        attemptErrors.push(`attempt ${attempt}: ${msg}`);
+        console.error(`[airdrop] batch ${batchIdx} attempt ${attempt}/${BATCH_ATTEMPTS} failed: ${msg}`);
+        if (attempt < BATCH_ATTEMPTS) {
+          // Brief backoff for transient conditions (blockhash aging,
+          // RPC hiccup, priority spike since simulate).
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+    }
+
+    if (landedSig) {
       const ids = batch.map(p => p.wallet);
       await supabase.from('holder_distribution_payouts')
-        .update({ status: 'sent', tx_sig: sig })
+        .update({ status: 'sent', tx_sig: landedSig })
         .eq('distribution_id', distRow.id)
         .in('wallet', ids);
       successCount += batch.length;
       for (const p of batch) paidWallets.add(p.wallet);
-    } catch (e) {
-      console.error(`batch ${b / PAYOUTS_PER_TX + 1} failed:`, e instanceof Error ? e.message : e);
+    } else {
       failCount += batch.length;
+      batchFailures.push({ batch: batchIdx, attempts: attemptErrors });
     }
+  }
+
+  // Surface a compact summary of batch failures at the top of the log —
+  // easier to grep in Vercel than scrolling through per-attempt errors.
+  if (batchFailures.length > 0) {
+    console.error(`[airdrop] ${batchFailures.length} batch(es) failed after retries:`,
+      JSON.stringify(batchFailures.slice(0, 5)));
   }
 
   // Carry-forward DB writes:
