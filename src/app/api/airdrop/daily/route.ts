@@ -28,21 +28,24 @@ export const maxDuration = 300; // 5 min — needs Vercel Pro+
 const PROOF_MINT = 'oaBXM2rCnWFeQc9ufdTSSpASwSrMBPrSmg8xtiepooL';
 const PROOF_DECIMALS = 6;
 const MIN_PAYOUT_LAMPORTS = 1_000_000; // 0.001 SOL dust floor
-// Reserve was 1_000_000 (0.001 SOL) but that only covered ~5 batches
-// of tx+priority fees. Under Solana congestion the priority fee alone
-// can hit 200k+ lamports per tx — 10 batches × 205k = 2.05M lamports
-// which blew the reserve, later batches simulate-failed with
-// insufficient funds, and the whole airdrop tanked (see 2026-07-11
-// and 07-12 which sent zero SOL despite the distribution running).
-// 20M (0.02 SOL) gives comfortable headroom for ~50+ batches at
-// worst-case priority — the accounting still routes 99%+ of the pool
-// to holders, we just don't blow the fee budget.
-const RESERVE_LAMPORTS = 20_000_000;    // 0.02 SOL fee headroom for many batches
+// Reserve calibration history:
+//   - 1M lamports (0.001 SOL): original. Too small — 2026-07-11/12
+//     batches ran out of fee budget partway through, later batches
+//     simulate-failed.
+//   - 20M (0.02 SOL): overcorrection ab9de52. HRW naturally sits at
+//     ~0.02-0.05 SOL at low fee-volume periods; the 20M reserve
+//     starved distributions to zero (2026-07-14/15/16: all skipped
+//     or 0-holder rounds).
+//   - 5M (0.005 SOL): current. Covers ~25 batches × 200k lamports
+//     max priority fee per tx — enough headroom for a bad congestion
+//     day without swallowing the whole distributable pool when the
+//     wallet is small.
+const RESERVE_LAMPORTS = 5_000_000;     // 0.005 SOL
 // Per-batch reserve required BEFORE we attempt each tx — this is a
 // gate: if the pool balance drops below (batch payout + this margin),
-// we skip the batch cleanly rather than simulate-failing and losing
-// the pending balances via the retry path.
-const PER_BATCH_FEE_RESERVE_LAMPORTS = 500_000; // 0.0005 SOL — covers tx + peak priority
+// we skip the batch cleanly rather than simulate-failing. Sized to
+// realistic per-tx max fee (200k priority + 5k tx = ~205k).
+const PER_BATCH_FEE_RESERVE_LAMPORTS = 250_000; // 0.00025 SOL
 const PAYOUTS_PER_TX = 18;
 // Number of send attempts per batch. First attempt uses whatever
 // blockhash is live. If it fails (transient RPC issue, blockhash
