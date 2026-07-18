@@ -231,6 +231,10 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
       pumpFunUrl: `https://jup.ag/swap/SOL-${mint.toBase58()}`,
       createSignature: sig,
       poolWallet: poolKp.publicKey.toBase58(),
+      // Populated for the launch route to persist to
+      // memes.launchlab_pool_address. Without this the fee-collection
+      // cron can't locate the pool and silently skips forever.
+      launchlabPoolAddress,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

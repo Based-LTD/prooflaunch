@@ -54,4 +54,10 @@ export interface LaunchOutcome {
   // above so adding new ones is non-breaking.
   dbcPoolAddress?: string;
   bagsFeeShareAuthority?: string;
+  // Raydium LaunchLab pool ID. The launchlab adapter derives it from
+  // the SDK's extInfo.address.poolId; the launch route persists it to
+  // memes.launchlab_pool_address so the fee-collection cron can locate
+  // the pool for raydium.launchpad.claimCreatorFee (pre-grad) and the
+  // post-grad CPMM path can chain from it.
+  launchlabPoolAddress?: string;
 }

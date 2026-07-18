@@ -232,6 +232,14 @@ export async function POST(request: NextRequest) {
     if ((platform === 'meteora' || platform === 'bags') && result.dbcPoolAddress) {
       liveUpdate.dbc_pool_address = result.dbcPoolAddress;
     }
+    // LaunchLab: persist the Raydium launchpad pool ID from the SDK's
+    // extInfo.address.poolId. Without this the fee-collection cron
+    // reads launchlab_pool_address as NULL and silently skips forever,
+    // losing every backer's fee share. Not a "future work" — this is
+    // load-bearing for the whole LaunchLab lifecycle.
+    if (platform === 'launchlab' && result.launchlabPoolAddress) {
+      liveUpdate.launchlab_pool_address = result.launchlabPoolAddress;
+    }
     await supabase.from('memes').update(liveUpdate).eq('id', meme_id);
 
     await supabase.rpc('increment_successful_launches', { wallet: meme.creator_wallet });
