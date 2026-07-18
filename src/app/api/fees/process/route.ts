@@ -4,6 +4,7 @@ import { getRecentFeeTransactions, calculateFeeDistribution } from '@/services/f
 import { collectAndCreditFees } from '@/services/distribution';
 import { distributeAllLegacyMemes } from '@/services/legacyFeeDistribution';
 import { collectMeteoraFeesForCron } from '@/services/fees/meteora-dbc';
+import { collectLaunchLabFeesForCron } from '@/services/fees/launchlab';
 import { authorizeCron } from '@/lib/cronAuth';
 
 // Shared fee processing logic
@@ -147,13 +148,19 @@ async function processFees() {
   // sub-escrow, like PROOF) are skipped — their fees route to shared
   // escrow as platform revenue via the older path above, unchanged.
   //
-  // Dispatched by launch_platform: pump.fun memes use the existing
-  // collectAndCreditFees (collect_creator_fee → drain + split).
-  // Meteora memes use collectMeteoraFeesForCron (claimCreatorTradingFee).
-  // The platform-agnostic drain-and-credit-backers half is reused once
-  // we have real Meteora fee flow to validate against.
+  // Dispatched by launch_platform:
+  //   - 'pumpfun'   → collectAndCreditFees (collect_creator_fee → drain + split)
+  //   - 'meteora'   → collectMeteoraFeesForCron (claimCreatorTradingFee)
+  //   - 'bags'      → collectMeteoraFeesForCron (bags launches route through
+  //                   Meteora DBC pools under the hood; dbc_pool_address is
+  //                   set at launch time, treated identically)
+  //   - 'launchlab' → collectLaunchLabFeesForCron (Raydium SDK
+  //                   claimCreatorFee → unwrap wSOL → forward to sub-escrow
+  //                   → shared drain-and-credit pipeline)
+  // Downstream drain/credit is platform-agnostic and shared.
   const subescrowResults: Array<{ memeId: string; result: Awaited<ReturnType<typeof collectAndCreditFees>> }> = [];
   const meteoraResults: Array<{ memeId: string; result: Awaited<ReturnType<typeof collectMeteoraFeesForCron>> }> = [];
+  const launchlabResults: Array<{ memeId: string; result: Awaited<ReturnType<typeof collectLaunchLabFeesForCron>> }> = [];
   const { data: subEscrowMemes } = await supabase
     .from('memes')
     .select('id, symbol, launch_platform')
@@ -163,11 +170,10 @@ async function processFees() {
     // Default to 'pumpfun' for any row where launch_platform is NULL
     // (defense in depth — DB default already enforces this, but we
     // never want a bad column value to bypass platform routing).
-    // 'bags' tokens launch on Meteora DBC pools, so route them through
-    // the Meteora collection path. The bags-launched meme has its
-    // dbc_pool_address populated at launch time so the Meteora fee
-    // collector treats it identically to a native Meteora launch.
-    const platform = (m.launch_platform === 'meteora' || m.launch_platform === 'bags') ? 'meteora' : 'pumpfun';
+    const platform: 'pumpfun' | 'meteora' | 'launchlab' =
+      (m.launch_platform === 'meteora' || m.launch_platform === 'bags') ? 'meteora'
+      : m.launch_platform === 'launchlab' ? 'launchlab'
+      : 'pumpfun';
     try {
       if (platform === 'meteora') {
         const r = await collectMeteoraFeesForCron(supabase, m.id);
@@ -178,6 +184,16 @@ async function processFees() {
           console.log(`[fee-collect/meteora] ${m.symbol} (${m.id}) skipped: ${r.skipped}`);
         } else if (!r.ok) {
           console.log(`[fee-collect/meteora] ${m.symbol} (${m.id}) ERROR: ${r.error}`);
+        }
+      } else if (platform === 'launchlab') {
+        const r = await collectLaunchLabFeesForCron(supabase, m.id);
+        launchlabResults.push({ memeId: m.id, result: r });
+        if (r.ok && !r.skipped && r.claimSig) {
+          console.log(`[fee-collect/launchlab] ${m.symbol} (${m.id}): claim ${r.claimSig}, forwarded ${r.forwardedLamports || 0} lamports, credited ${r.backerCount || 0} backers`);
+        } else if (r.skipped) {
+          console.log(`[fee-collect/launchlab] ${m.symbol} (${m.id}) skipped: ${r.skipped}`);
+        } else if (!r.ok) {
+          console.log(`[fee-collect/launchlab] ${m.symbol} (${m.id}) ERROR: ${r.error}`);
         }
       } else {
         const r = await collectAndCreditFees(supabase, m.id);
@@ -194,6 +210,8 @@ async function processFees() {
       console.error(`[fee-collect] ${m.id} exception:`, e);
       if (platform === 'meteora') {
         meteoraResults.push({ memeId: m.id, result: { ok: false, error: e instanceof Error ? e.message : String(e) } });
+      } else if (platform === 'launchlab') {
+        launchlabResults.push({ memeId: m.id, result: { ok: false, error: e instanceof Error ? e.message : String(e) } });
       } else {
         subescrowResults.push({ memeId: m.id, result: { ok: false, error: e instanceof Error ? e.message : String(e) } });
       }
@@ -231,6 +249,7 @@ async function processFees() {
     subescrowMemesScanned: subEscrowMemes?.length || 0,
     subescrowResults,
     meteoraResults,
+    launchlabResults,
     legacyResults,
   };
 }
