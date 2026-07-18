@@ -16,9 +16,17 @@
 //   - Config: derived deterministically via getPdaLaunchpadConfigId
 //     with curveType=0, index=0. This is the canonical mainnet
 //     LaunchLab config Raydium ships with the SDK.
-//   - migrateType: 'amm' — post-graduation pools route to Raydium's
-//     AMM v4, matching Bonk.fun's behavior. CPMM is the alternative
-//     but AMM has the deeper aggregator support today.
+//   - migrateType: 'cpmm' — post-graduation pools route to Raydium's
+//     CPMM (Constant Product MM). Switched from 'amm' (v4 classic) on
+//     2026-07-17 to preserve creator-fee-claim rights after graduation.
+//     CPMM mints a fee-collection NFT to the pool creator on migration,
+//     which is what src/services/fees/launchlab.ts uses to keep
+//     backer-fee-share flowing post-bond. AMM v4 does NOT have this
+//     mechanism — fees just go to LPs — which would silently break
+//     prooflaunch's "backers earn from every trade forever" pitch the
+//     moment a token bonds. Slightly less aggregator-optimized routing
+//     than AMM v4, but Jupiter still routes CPMM pools fine and the
+//     product alignment is more valuable than the routing depth.
 //
 // What's deliberately excluded in Phase 2:
 //   - Per-meme custom curve / fee scheduler configs (Phase 3)
@@ -163,7 +171,11 @@ export async function launch(params: LaunchParams): Promise<LaunchOutcome> {
       name: config.name,
       symbol: config.symbol,
       uri,
-      migrateType: 'amm',
+      // See top-of-file comment for the AMM v4 → CPMM rationale.
+      // Post-graduation CPMM pools support raydium.cpmm.makeCollectCreatorFeeInstruction
+      // via a fee NFT minted to the pool creator, which src/services/fees/launchlab.ts
+      // uses to keep the backer-fee stream flowing after bond.
+      migrateType: 'cpmm',
       configId,
       mintBDecimals: QUOTE_MINT_DECIMALS,
       txVersion: TxVersion.V0,
