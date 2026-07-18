@@ -29,6 +29,7 @@ import {
 import {
   Raydium, LAUNCHPAD_PROGRAM, TxVersion,
 } from '@raydium-io/raydium-sdk-v2';
+import type { ApiV3PoolInfoStandardItemCpmm } from '@raydium-io/raydium-sdk-v2';
 import {
   NATIVE_MINT, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, createCloseAccountInstruction,
 } from '@solana/spl-token';
@@ -61,11 +62,65 @@ interface ClaimResult {
   error?: string;
 }
 
+// Post-graduation CPMM claim. After a LaunchLab pool bonds and migrates
+// to CPMM (per migrateType: 'cpmm' in services/launch/launchlab.ts), a
+// fee-collection NFT is minted to the pool creator (= our pool wallet).
+// The Raydium SDK's cpmm.collectCreatorFees automatically detects that
+// the SDK owner (loaded with the pool wallet keypair) holds this NFT
+// and claims the accrued fees.
+//
+// Pool discovery: uses raydium.api.fetchPoolByMints to look up the CPMM
+// pool paired against wSOL for our mint. Off-chain API is fast and
+// reliable — Raydium keeps its pool index fresh.
+//
+// Result path is identical to pre-grad: fees land in pool wallet's wSOL
+// ATA, we close to unwrap, forward to sub-escrow. The caller
+// (claimLaunchLabFees) does that downstream work uniformly.
+async function claimCpmmCreatorFees(opts: {
+  raydium: Raydium;
+  mintAddress: string;
+}): Promise<{ success: boolean; claimSig?: string; error?: string; noPoolFound?: boolean }> {
+  try {
+    // Discover the CPMM pool paired with wSOL for our mint. Raydium's
+    // off-chain API is authoritative for pool discovery post-migration.
+    const poolResp = await opts.raydium.api.fetchPoolByMints({
+      mint1: opts.mintAddress,
+      mint2: NATIVE_MINT.toBase58(),
+    });
+    const cpmmPool = (poolResp.data ?? []).find((p) => (p as { type?: string }).type === 'Standard');
+    if (!cpmmPool) {
+      return { success: false, noPoolFound: true, error: 'no CPMM pool found for mint against wSOL (not yet graduated?)' };
+    }
+
+    const microLamports = await getAdaptivePriorityFee(new Connection(RPC_URL, 'confirmed'), { fallback: 200_000 });
+
+    const { execute } = await opts.raydium.cpmm.collectCreatorFees({
+      poolInfo: cpmmPool as ApiV3PoolInfoStandardItemCpmm,
+      txVersion: TxVersion.V0,
+      computeBudgetConfig: { units: 400_000, microLamports },
+    });
+
+    const { txId } = await execute();
+    return { success: true, claimSig: txId };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// Detect if an error message indicates the pool has graduated (pre-grad
+// claim path returns "no fees" for both truly-no-fees AND graduated
+// state — we need finer detection). Graduated LaunchLab pools return
+// specific SDK errors when pre-grad claim is attempted.
+function looksLikeGraduated(errMsg: string): boolean {
+  return /migrated|graduated|already migrated|pool.*closed|pool.*complete|instruction.*11\b|InvalidPoolStatus/i.test(errMsg);
+}
+
 export async function claimLaunchLabFees(opts: {
   poolEncryptedKey: string;    // encrypted_pool_key from memes row
   poolPubkey: string;          // pool_wallet from memes row
   subEscrowPubkey: string;     // creator_subescrow_pubkey — destination for forwarded SOL
-}): Promise<ClaimResult> {
+  mintAddress: string;         // mint_address — needed for post-grad CPMM pool discovery
+}): Promise<ClaimResult & { graduated?: boolean }> {
   try {
     const conn = new Connection(RPC_URL, 'confirmed');
 
@@ -125,6 +180,7 @@ export async function claimLaunchLabFees(opts: {
     });
 
     let claimSig: string;
+    let graduated = false;
     try {
       // MakeTxData.execute returns { txId, signedTx } — single-tx path.
       const { txId } = await executeClaim();
@@ -132,13 +188,34 @@ export async function claimLaunchLabFees(opts: {
       await conn.confirmTransaction(claimSig, 'confirmed');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // If the pool has no accrued fees to claim, Raydium reverts. That's
-      // not an error condition for the cron — surface as "no fees to claim"
-      // so upstream can log info-level, not error.
-      if (/no fees|nothing to claim|zero balance|InsufficientFunds/i.test(msg)) {
+      // If the pool has no accrued fees, Raydium reverts. Not an error —
+      // surface as info so upstream logs at info level. BUT: distinguish
+      // "no fees on active pool" from "pool graduated → use CPMM path".
+      if (looksLikeGraduated(msg)) {
+        // Post-graduation flow: fall through to CPMM's collectCreatorFees.
+        // Pool wallet holds the fee-collection NFT that was minted at
+        // migration; Raydium SDK auto-detects that ownership when the
+        // SDK is loaded with pool wallet as owner (which we already did
+        // above for the pre-grad attempt).
+        graduated = true;
+        console.log(`[launchlab-fees] pre-grad claim rejected as graduated (${msg.slice(0, 100)}); falling through to CPMM path for mint ${opts.mintAddress}`);
+        const postGrad = await claimCpmmCreatorFees({ raydium, mintAddress: opts.mintAddress });
+        if (postGrad.noPoolFound) {
+          // Graduation-shaped error but no CPMM pool discovered yet —
+          // migration might still be in-flight. Skip this tick, retry
+          // next cron cycle. Not an error to surface loudly.
+          return { success: true, claimedLamports: 0, graduated: true };
+        }
+        if (!postGrad.success) {
+          return { success: false, error: `CPMM claim failed post-graduation: ${postGrad.error}`, graduated: true };
+        }
+        claimSig = postGrad.claimSig!;
+        await conn.confirmTransaction(claimSig, 'confirmed');
+      } else if (/no fees|nothing to claim|zero balance|InsufficientFunds/i.test(msg)) {
         return { success: true, claimedLamports: 0 };
+      } else {
+        return { success: false, error: `claimCreatorFee failed: ${msg}` };
       }
-      return { success: false, error: `claimCreatorFee failed: ${msg}` };
     }
 
     // After claim, wSOL is sitting in pool wallet's wSOL ATA. Close it to
@@ -194,6 +271,7 @@ export async function claimLaunchLabFees(opts: {
       forwardSig,
       claimedLamports,
       forwardedLamports,
+      graduated,
     };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -221,6 +299,7 @@ export interface LaunchLabCollectResult {
   backerLamports?: number;
   backerCount?: number;
   platformLamports?: number;
+  graduated?: boolean;    // true once we detected the pool migrated to CPMM
   error?: string;
 }
 
@@ -230,7 +309,7 @@ export async function collectLaunchLabFeesForCron(
 ): Promise<LaunchLabCollectResult> {
   const { data: meme, error } = await supabase
     .from('memes')
-    .select('id, symbol, status, launchlab_pool_address, encrypted_pool_key, pool_wallet, creator_subescrow_pubkey, encrypted_creator_subescrow_key')
+    .select('id, symbol, status, mint_address, launchlab_pool_address, encrypted_pool_key, pool_wallet, creator_subescrow_pubkey, encrypted_creator_subescrow_key')
     .eq('id', memeId)
     .single();
   if (error || !meme) return { ok: false, error: 'meme not found' };
@@ -239,25 +318,35 @@ export async function collectLaunchLabFeesForCron(
   if (!meme.pool_wallet || !meme.encrypted_pool_key) {
     return { ok: true, skipped: 'no pool wallet key (data drift)' };
   }
+  if (!meme.mint_address) {
+    return { ok: true, skipped: 'no mint_address (data drift — cannot lookup post-grad CPMM pool)' };
+  }
   if (!meme.creator_subescrow_pubkey || !meme.encrypted_creator_subescrow_key) {
     return { ok: true, skipped: 'no sub-escrow (would-be pre-P2 meme; LaunchLab requires sub-escrow for forward routing)' };
   }
 
-  // Step A: claim fees on-chain (pool wallet as creator authority) +
-  // unwrap wSOL + forward to sub-escrow.
+  // Step A: claim fees on-chain. Tries pre-grad LaunchLab creatorFee
+  // first; if the pool has already graduated (SDK error matches
+  // looksLikeGraduated), falls through to CPMM's collectCreatorFees.
+  // Either path lands wSOL in pool wallet ATA → closes to unwrap →
+  // forwards to sub-escrow.
   const claim = await claimLaunchLabFees({
     poolEncryptedKey: meme.encrypted_pool_key,
     poolPubkey: meme.pool_wallet,
     subEscrowPubkey: meme.creator_subescrow_pubkey,
+    mintAddress: meme.mint_address,
   });
-  if (!claim.success) return { ok: false, error: claim.error };
+  if (!claim.success) return { ok: false, error: claim.error, graduated: claim.graduated };
 
   // If nothing was claimed, no point running the downstream drain.
   if (!claim.claimedLamports || claim.claimedLamports === 0) {
     return {
       ok: true,
-      skipped: 'no fees accrued (claim returned zero lamports)',
+      skipped: claim.graduated
+        ? 'graduated: no CPMM fees accrued this tick (or CPMM pool not indexed yet)'
+        : 'no fees accrued (claim returned zero lamports)',
       claimSig: claim.claimSig,
+      graduated: claim.graduated,
     };
   }
 
@@ -280,6 +369,7 @@ export async function collectLaunchLabFeesForCron(
     backerLamports: credit.backerLamports,
     backerCount: credit.backerCount,
     platformLamports: credit.platformLamports,
+    graduated: claim.graduated,
     error: credit.ok ? undefined : credit.error,
   };
 }
