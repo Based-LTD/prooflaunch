@@ -268,14 +268,18 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
   for (const r of pendingRows || []) priorPending.set(r.wallet, Number(r.pending_lamports));
 
   // For every eligible holder: compute share, add to their pending, decide payout
-  const payouts: { wallet: string; balance: bigint; shareLamports: number; accruedThisRoundLamports: number }[] = [];
+  // prorateRemainder: the un-paid portion when total accumulated payouts exceed
+  // the actual pool. Set by the prorate step below (defaults to 0 pre-prorate).
+  // On upsert, this remainder becomes the wallet's new pending_lamports so the
+  // scaled-down share carries forward to the next round.
+  const payouts: { wallet: string; balance: bigint; shareLamports: number; accruedThisRoundLamports: number; prorateRemainder: number }[] = [];
   const carryForwards: { wallet: string; newPendingLamports: number; accruedThisRoundLamports: number }[] = [];
   for (const [wallet, balance] of holders) {
     const thisRoundShareLamports = Number((balance * BigInt(distributableLamports)) / eligibleSupply);
     if (thisRoundShareLamports === 0) continue; // truly zero — skip (no row needed)
     const accumulated = (priorPending.get(wallet) || 0) + thisRoundShareLamports;
     if (accumulated >= MIN_PAYOUT_LAMPORTS) {
-      payouts.push({ wallet, balance, shareLamports: accumulated, accruedThisRoundLamports: thisRoundShareLamports });
+      payouts.push({ wallet, balance, shareLamports: accumulated, accruedThisRoundLamports: thisRoundShareLamports, prorateRemainder: 0 });
     } else {
       carryForwards.push({ wallet, newPendingLamports: accumulated, accruedThisRoundLamports: thisRoundShareLamports });
     }
@@ -283,6 +287,52 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
 
   if (payouts.length === 0 && carryForwards.length === 0) {
     return { status: 'skipped_pool_too_small', message: 'No qualifying shares (pool exhausted by rounding?)' };
+  }
+
+  // PRORATE GUARD: sum of (this-round-share + prior-pending) can exceed
+  // the actual distributable pool. This happens when prior rounds failed
+  // and pending balances accumulated across many holders — over N failed
+  // rounds, pending stacks up but the wallet's SOL doesn't. If we ship
+  // the full accumulated payouts as-is, later batches simulate-fail with
+  // insufficient funds and the whole round dies (2026-07-18..22: half of
+  // daily runs partial with 0-13 pending each).
+  //
+  // Fix: if sum(payouts) > distributable, scale every payout down by
+  // the same factor. The remainder stays in each wallet's pending
+  // balance (via the downstream upsert), gets picked up on the next
+  // round when fresh SOL has come in from fee collection.
+  //
+  // Preserves fairness — everyone still gets their proportional share,
+  // just paid across more rounds instead of one. And guarantees every
+  // batch tx fits the wallet, so no more silent-partial-round failures.
+  const totalOwedLamports = payouts.reduce((s, p) => s + p.shareLamports, 0);
+  console.log(`[airdrop] pool=${distributableLamports} owed=${totalOwedLamports} payouts=${payouts.length} carry-fwd=${carryForwards.length}`);
+  if (totalOwedLamports > distributableLamports) {
+    const scaleNum = distributableLamports;
+    const scaleDen = totalOwedLamports;
+    console.warn(`[airdrop] prorating: owed ${totalOwedLamports} > distributable ${distributableLamports} → scale ${(scaleNum/scaleDen*100).toFixed(1)}%. Remainder stays as pending for next round.`);
+    for (const p of payouts) {
+      const scaled = Math.floor(p.shareLamports * scaleNum / scaleDen);
+      // prorateRemainder is what goes BACK to pending on upsert (the un-
+      // paid portion that carries forward). shareLamports becomes what
+      // actually gets sent in the batch tx.
+      p.prorateRemainder = p.shareLamports - scaled;
+      p.shareLamports = scaled;
+    }
+    // After scaling, some wallets may fall below MIN_PAYOUT dust floor.
+    // Move them out of payouts + into carryForwards so their tiny
+    // scaled share just accumulates instead of eating a tx fee.
+    const stillPayable = payouts.filter((p) => p.shareLamports >= MIN_PAYOUT_LAMPORTS);
+    const droppedToDust = payouts.filter((p) => p.shareLamports < MIN_PAYOUT_LAMPORTS);
+    for (const p of droppedToDust) {
+      // Full accumulated stays pending (their pre-prorate accumulated
+      // = the shareLamports + prorateRemainder they had before scaling).
+      const fullAccumulated = p.shareLamports + p.prorateRemainder;
+      carryForwards.push({ wallet: p.wallet, newPendingLamports: fullAccumulated, accruedThisRoundLamports: 0 });
+    }
+    payouts.length = 0;
+    payouts.push(...stillPayable);
+    console.log(`[airdrop] after prorate: ${payouts.length} payouts (${droppedToDust.length} dropped to dust)`);
   }
 
   const totalPayoutLamports = payouts.reduce((s, p) => s + p.shareLamports, 0);
@@ -434,7 +484,10 @@ async function runAirdrop(force: boolean = false): Promise<AirdropResult> {
     const priorPayoutCount = priorRow ? Number((priorRow as { payout_count?: number }).payout_count || 0) : 0;
     upserts.push({
       wallet: p.wallet,
-      pending_lamports: 0,                              // paid this round, reset
+      // Pre-prorate: 0 (fully paid). Post-prorate: the un-paid remainder
+      // that carries forward to next round. Same code path, different
+      // value depending on whether prorate scaled this payout down.
+      pending_lamports: p.prorateRemainder,
       last_updated: pendingNow,
       total_accrued_lamports: priorTotalAccrued + p.accruedThisRoundLamports,
       total_paid_lamports: priorTotalPaid + p.shareLamports,
