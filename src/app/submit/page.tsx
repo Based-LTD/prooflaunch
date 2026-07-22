@@ -517,10 +517,29 @@ function SubmitPageInner() {
         // failed" error from preflight. Skipping preflight lets the
         // chain itself adjudicate; retry handles the rare case where
         // the blockhash genuinely expired during the bounce.
+        // Verify the wallet actually returned a signed tx before we send.
+        // On mobile the browser↔wallet deep-link bounce can drop the
+        // signature entirely: the wallet returns an "unsigned" or
+        // partially-signed tx and we send it, then the chain rejects
+        // with "MISSING FOR PUBLIC KEY [...]" — an opaque error the
+        // user can't act on. This helper checks for the expected
+        // signature and throws a user-friendly reconnect message if
+        // it's missing, so the user has a clear next step instead of
+        // a scary red RPC error.
+        const assertSignedByFeePayer = (tx: Transaction, expected: PublicKey) => {
+          const sigEntry = tx.signatures.find((s) => s.publicKey.equals(expected));
+          if (!sigEntry || !sigEntry.signature) {
+            throw new Error(
+              'Wallet returned an unsigned transaction. This usually happens when your mobile wallet session drops mid-signature. Please disconnect + reconnect your wallet in the top right, then try again.',
+            );
+          }
+        };
+
         let { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = publicKey;
         let signed = await signTransaction!(transaction);
+        assertSignedByFeePayer(signed, publicKey);
         try {
           signature = await connection.sendRawTransaction(signed.serialize(), {
             skipPreflight: true,
@@ -529,11 +548,25 @@ function SubmitPageInner() {
           });
         } catch (firstErr) {
           console.warn('[submit-fee] first send failed, retrying with fresh blockhash:', firstErr);
+          // Build a FRESH tx for retry rather than re-signing the same
+          // object. Reusing a tx across sign calls can leave stale
+          // signatures + partial state that the second sign doesn't
+          // overwrite cleanly — different wallets handle re-sign
+          // idempotency differently.
+          const freshTx = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: publicKey,
+              toPubkey: new PublicKey(escrowAddress),
+              lamports: creationFeeLamports,
+            }),
+          );
           const fresh = await connection.getLatestBlockhash();
           blockhash = fresh.blockhash;
           lastValidBlockHeight = fresh.lastValidBlockHeight;
-          transaction.recentBlockhash = blockhash;
-          signed = await signTransaction!(transaction);
+          freshTx.recentBlockhash = blockhash;
+          freshTx.feePayer = publicKey;
+          signed = await signTransaction!(freshTx);
+          assertSignedByFeePayer(signed, publicKey);
           signature = await connection.sendRawTransaction(signed.serialize(), {
             skipPreflight: true,
             preflightCommitment: 'confirmed',
