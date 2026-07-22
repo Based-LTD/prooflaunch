@@ -288,7 +288,11 @@ export default function SubmitPage() {
 }
 
 function SubmitPageInner() {
-  const { connected, publicKey, signTransaction, signMessage } = useWallet();
+  // sendTransaction handles wallet-specific quirks (signAndSendTransaction
+  // vs signTransaction + sendRawTransaction split) internally. Prefer it
+  // over the manual two-step for cross-wallet compatibility. Kept
+  // signTransaction as fallback for any legacy code path that still needs it.
+  const { connected, publicKey, signTransaction, signMessage, sendTransaction } = useWallet();
   const { connection } = useConnection();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -517,61 +521,71 @@ function SubmitPageInner() {
         // failed" error from preflight. Skipping preflight lets the
         // chain itself adjudicate; retry handles the rare case where
         // the blockhash genuinely expired during the bounce.
-        // Verify the wallet actually returned a signed tx before we send.
-        // On mobile the browser↔wallet deep-link bounce can drop the
-        // signature entirely: the wallet returns an "unsigned" or
-        // partially-signed tx and we send it, then the chain rejects
-        // with "MISSING FOR PUBLIC KEY [...]" — an opaque error the
-        // user can't act on. This helper checks for the expected
-        // signature and throws a user-friendly reconnect message if
-        // it's missing, so the user has a clear next step instead of
-        // a scary red RPC error.
-        const assertSignedByFeePayer = (tx: Transaction, expected: PublicKey) => {
-          const sigEntry = tx.signatures.find((s) => s.publicKey.equals(expected));
-          if (!sigEntry || !sigEntry.signature) {
+        // Two mobile-wallet failure modes are handled here:
+        //   1. Wallet returns unsigned tx (in-app browsers, dead sessions)
+        //      → 'MISSING FOR PUBLIC KEY' from chain
+        //   2. Blockhash expires mid-handoff (slow wallet approval, deep-
+        //      link latency, > 60s from fetch to send)
+        //      → 'SIGNATURE ... HAS EXPIRED: BLOCK HEIGHT EXCEEDED'
+        //
+        // Both are fixed by: use wallet-adapter's sendTransaction (which
+        // internally picks signAndSendTransaction on wallets that only
+        // support it) + retry up to 3x with fresh blockhash + fresh tx
+        // each time.
+        //
+        // The retry loop is intentionally aggressive because mobile
+        // wallets can take 30-60s per approval, and we don't want to
+        // give up after one slow user click.
+        let blockhash = '';
+        let lastValidBlockHeight = 0;
+        let lastErr: unknown = null;
+        const MAX_SEND_ATTEMPTS = 3;
+        for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
+          try {
+            // Fresh tx + fresh blockhash on every attempt. Never reuse
+            // a Transaction object across attempts — different wallets
+            // handle re-sign of a dirty tx differently, some strand
+            // stale signature state.
+            const freshTx = new Transaction().add(
+              SystemProgram.transfer({
+                fromPubkey: publicKey,
+                toPubkey: new PublicKey(escrowAddress),
+                lamports: creationFeeLamports,
+              }),
+            );
+            const fresh = await connection.getLatestBlockhash('confirmed');
+            blockhash = fresh.blockhash;
+            lastValidBlockHeight = fresh.lastValidBlockHeight;
+            freshTx.recentBlockhash = blockhash;
+            freshTx.feePayer = publicKey;
+            signature = await sendTransaction(freshTx, connection, {
+              skipPreflight: true,
+              preflightCommitment: 'confirmed',
+              maxRetries: 3,
+            });
+            break; // success
+          } catch (e) {
+            lastErr = e;
+            const msg = e instanceof Error ? e.message : String(e);
+            console.warn(`[submit-fee] attempt ${attempt}/${MAX_SEND_ATTEMPTS} failed: ${msg}`);
+            if (attempt < MAX_SEND_ATTEMPTS) {
+              await new Promise((r) => setTimeout(r, 400));
+            }
+          }
+        }
+        if (!signature) {
+          const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+          if (/block height exceeded|blockhash.*expired|signature.*expired/i.test(msg)) {
             throw new Error(
-              'Wallet returned an unsigned transaction. This usually happens when your mobile wallet session drops mid-signature. Please disconnect + reconnect your wallet in the top right, then try again.',
+              'Signature expired before it could confirm. This usually means the wallet approval took too long. Please try again and approve the transaction as soon as your wallet pops up.',
             );
           }
-        };
-
-        let { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = publicKey;
-        let signed = await signTransaction!(transaction);
-        assertSignedByFeePayer(signed, publicKey);
-        try {
-          signature = await connection.sendRawTransaction(signed.serialize(), {
-            skipPreflight: true,
-            preflightCommitment: 'confirmed',
-            maxRetries: 3,
-          });
-        } catch (firstErr) {
-          console.warn('[submit-fee] first send failed, retrying with fresh blockhash:', firstErr);
-          // Build a FRESH tx for retry rather than re-signing the same
-          // object. Reusing a tx across sign calls can leave stale
-          // signatures + partial state that the second sign doesn't
-          // overwrite cleanly — different wallets handle re-sign
-          // idempotency differently.
-          const freshTx = new Transaction().add(
-            SystemProgram.transfer({
-              fromPubkey: publicKey,
-              toPubkey: new PublicKey(escrowAddress),
-              lamports: creationFeeLamports,
-            }),
-          );
-          const fresh = await connection.getLatestBlockhash();
-          blockhash = fresh.blockhash;
-          lastValidBlockHeight = fresh.lastValidBlockHeight;
-          freshTx.recentBlockhash = blockhash;
-          freshTx.feePayer = publicKey;
-          signed = await signTransaction!(freshTx);
-          assertSignedByFeePayer(signed, publicKey);
-          signature = await connection.sendRawTransaction(signed.serialize(), {
-            skipPreflight: true,
-            preflightCommitment: 'confirmed',
-            maxRetries: 3,
-          });
+          if (/MISSING FOR PUBLIC KEY|signature verification failed/i.test(msg)) {
+            throw new Error(
+              'Wallet did not return a valid signature. This can happen in in-app browsers (Jupiter, Twitter, Telegram). Try opening prooflaunch.fun directly in Phantom or Solflare\'s in-app browser, or disconnect + reconnect your wallet.',
+            );
+          }
+          throw lastErr instanceof Error ? lastErr : new Error(msg);
         }
         await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
       }
