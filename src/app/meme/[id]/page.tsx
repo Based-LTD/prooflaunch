@@ -44,7 +44,7 @@ function getTimeRemaining(deadline: string): string {
 
 export default function MemeDetailPage() {
   const { id } = useParams();
-  const { connected, publicKey, signTransaction, signMessage } = useWallet();
+  const { connected, publicKey, signMessage, sendTransaction } = useWallet();
   const { connection } = useConnection();
 
   // Backing state
@@ -116,7 +116,7 @@ export default function MemeDetailPage() {
   };
 
   const submitBacking = async () => {
-    if (!connected || !publicKey || !signTransaction || !amount || !meme) return;
+    if (!connected || !publicKey || !sendTransaction || !amount || !meme) return;
 
     const amountSol = parseFloat(amount);
     if (isNaN(amountSol) || amountSol <= 0) {
@@ -244,67 +244,82 @@ export default function MemeDetailPage() {
         throw new Error('This token has no pool wallet yet — please refresh and try again.');
       }
 
-      // Quote-currency branch (migration 053). USDC memes sign an SPL
-      // USDC transfer to the pool's USDC ATA (with idempotent ATA-create
-      // for the pool's first USDC deposit). SOL memes use the existing
-      // SystemProgram.transfer path — byte-identical to today.
       const quoteCurrency: 'sol' | 'usdc' = (meme as { quote_currency?: 'sol' | 'usdc' }).quote_currency ?? 'sol';
-      let tx: Transaction;
-      if (quoteCurrency === 'usdc') {
-        const { buildUsdcBackingTx } = await import('@/lib/usdc');
-        tx = buildUsdcBackingTx({
-          backer: publicKey,
-          pool: new PublicKey(poolWallet),
-          amount: amountSol, // amountSol is the quote-units value (USDC here)
-        });
-      } else {
+      const unit = quoteCurrency === 'usdc' ? 'USDC' : 'SOL';
+
+      const buildBackingTx = async (): Promise<Transaction> => {
+        if (quoteCurrency === 'usdc') {
+          const { buildUsdcBackingTx } = await import('@/lib/usdc');
+          return buildUsdcBackingTx({
+            backer: publicKey,
+            pool: new PublicKey(poolWallet),
+            amount: amountSol,
+          });
+        }
         const lamports = Math.floor(amountSol * LAMPORTS_PER_SOL);
-        tx = new Transaction().add(
+        return new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: publicKey,
             toPubkey: new PublicKey(poolWallet),
             lamports,
           }),
         );
-      }
+      };
 
-      const unit = quoteCurrency === 'usdc' ? 'USDC' : 'SOL';
-
-      // Mobile-friendly send: build with fresh blockhash, ask user to
-      // sign, then broadcast with skipPreflight=true so a stale-blockhash
-      // preflight check doesn't surface a misleading "signature
-      // verification failed" error when the user spent 15-30s in the
-      // wallet's app-switch bounce. If the first attempt still fails
-      // (rare but possible if the user took >60s to sign), rebuild with
-      // a fresh blockhash and ask for one more signature.
-      let { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = publicKey;
-
+      // Mobile-wallet failure modes handled here (same as /submit):
+      //   1. In-app browser / stale session returns unsigned tx
+      //      → 'MISSING FOR PUBLIC KEY' from chain
+      //   2. Blockhash expires during Safari→wallet→Safari bounce (>60s)
+      //      → 'BLOCK HEIGHT EXCEEDED'
+      // Fix: wallet-adapter sendTransaction (picks signAndSendTransaction
+      // on wallets that only support it) + 3 attempts + fresh Transaction
+      // + fresh blockhash each attempt. Never re-sign a dirty tx object.
       setBackingStatus(`Approve ${amountSol} ${unit} to the pool...`);
-      let signed = await signTransaction(tx);
-      let sig: string;
-      try {
-        sig = await connection.sendRawTransaction(signed.serialize(), {
-          skipPreflight: true,
-          preflightCommitment: 'confirmed',
-          maxRetries: 3,
-        });
-      } catch (firstErr) {
-        // Stale-blockhash retry: rebuild with a fresh blockhash, ask
-        // the user to sign once more. Common on slow mobile bounces.
-        console.warn('[backing] first send failed, retrying with fresh blockhash:', firstErr);
-        setBackingStatus(`Signature expired during wallet bounce — sign once more to retry...`);
-        const fresh = await connection.getLatestBlockhash();
-        blockhash = fresh.blockhash;
-        lastValidBlockHeight = fresh.lastValidBlockHeight;
-        tx.recentBlockhash = blockhash;
-        signed = await signTransaction(tx);
-        sig = await connection.sendRawTransaction(signed.serialize(), {
-          skipPreflight: true,
-          preflightCommitment: 'confirmed',
-          maxRetries: 3,
-        });
+      let sig: string | undefined;
+      let blockhash = '';
+      let lastValidBlockHeight = 0;
+      let lastErr: unknown = null;
+      const MAX_SEND_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
+        try {
+          const freshTx = await buildBackingTx();
+          const fresh = await connection.getLatestBlockhash('confirmed');
+          blockhash = fresh.blockhash;
+          lastValidBlockHeight = fresh.lastValidBlockHeight;
+          freshTx.recentBlockhash = blockhash;
+          freshTx.feePayer = publicKey;
+          sig = await sendTransaction(freshTx, connection, {
+            skipPreflight: true,
+            preflightCommitment: 'confirmed',
+            maxRetries: 3,
+          });
+          break;
+        } catch (e) {
+          lastErr = e;
+          const msg = e instanceof Error ? e.message : String(e);
+          console.warn(`[backing] attempt ${attempt}/${MAX_SEND_ATTEMPTS} failed: ${msg}`);
+          if (attempt < MAX_SEND_ATTEMPTS) {
+            setBackingStatus(`Wallet handoff hiccup — sign once more to retry (${attempt}/${MAX_SEND_ATTEMPTS - 1})...`);
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        }
+      }
+      if (!sig) {
+        const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+        if (/block height exceeded|blockhash.*expired|signature.*expired/i.test(msg)) {
+          throw new Error(
+            'Signature expired before it could confirm. This usually means the wallet approval took too long. Please try again and approve the transaction as soon as your wallet pops up.',
+          );
+        }
+        if (/MISSING FOR PUBLIC KEY|MISSING SIGNATURE|signature verification failed/i.test(msg)) {
+          throw new Error(
+            "Wallet did not return a valid signature. This can happen in in-app browsers (Jupiter, Twitter, Telegram). Try opening prooflaunch.fun directly in Phantom or Solflare's in-app browser, or disconnect + reconnect your wallet.",
+          );
+        }
+        if (/user rejected|user declined|rejected by user/i.test(msg)) {
+          throw new Error('Transaction was rejected in your wallet.');
+        }
+        throw lastErr instanceof Error ? lastErr : new Error(msg);
       }
 
       setBackingStatus('Processing transaction...');
