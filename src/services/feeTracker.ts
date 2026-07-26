@@ -1,7 +1,7 @@
 import { Connection, PublicKey, ParsedTransactionWithMeta } from '@solana/web3.js';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-const ESCROW_WALLET = process.env.NEXT_PUBLIC_ESCROW_WALLET || 'CEGgJZF6AXGkj3BBTmmhagudwU9FKscMB25RJM5iwFYY';
+const ESCROW_WALLET = process.env.NEXT_PUBLIC_ESCROW_WALLET || 'DRwYbZuhD8VLvgU18TKx4jm8rZaoUudoMQQzuziGqnrx';
 
 // Pump.fun fee program - this is the program that sends creator fees
 const PUMP_FUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
