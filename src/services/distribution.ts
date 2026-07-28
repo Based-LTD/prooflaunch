@@ -123,7 +123,18 @@ export async function settlePoolDistribution(
         .eq('id', p.id);
       ok++;
     } else {
+      // Persist the last-attempt error to the row so future audits
+      // can see WHY this slot didn't get its tokens. Without this,
+      // a stuck backing looks identical to one that was never tried.
+      await supabase
+        .from('backings')
+        .update({ last_distribution_error: r.error?.slice(0, 500) || 'unknown' })
+        .eq('id', p.id)
+        .then(() => {}, () => { /* column may not exist yet; non-fatal */ });
       failures.push({ backerWallet: r.backerWallet, error: r.error });
+      // Explicit log line so the failure is visible in stdout even if
+      // the log() call goes to a table that's not being tailed.
+      console.error(`[settlePoolDistribution] backer=${r.backerWallet} FAILED after all retries: ${r.error}`);
     }
   }
 

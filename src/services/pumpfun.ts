@@ -3506,25 +3506,43 @@ export async function distributeFromPool(
     log('reconcile_recovered', { detail: { stage: 'pool gas topup', lamports: need - have } });
   }
 
+  // Per-backer distribution with retry. A single failed backer (e.g.
+  // transient blockhash-expired, RPC hiccup, sim race) used to silently
+  // strand that slot's tokens in the pool forever — the reconcile cron
+  // retries but re-hits the same window if RPC is flaky. Retry 3x with
+  // fresh blockhash on each attempt so one bad slot can't slip through.
+  const MAX_ATTEMPTS = 3;
   for (const a of allocations) {
-    try {
-      const backer = new PublicKey(a.backerWallet);
-      const backerAta = await getAssociatedTokenAddress(mint, backer, false, tokenProgram);
-      const tx = new Transaction().add(
-        createAssociatedTokenAccountIdempotentInstruction(poolKp.publicKey, backerAta, backer, mint, tokenProgram),
-        createTransferInstruction(poolAta, backerAta, poolKp.publicKey, BigInt(a.tokens), [], tokenProgram),
-      );
-      tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-      tx.feePayer = poolKp.publicKey;
-      // SOL-029: simulate before send.
-      const sig = await simulateAndSend(conn, tx, [poolKp], { label: 'pool-distribute' });
-      await conn.confirmTransaction(sig, 'confirmed');
-      results.push({ backerWallet: a.backerWallet, tokens: a.tokens, signature: sig });
-      log('reconcile_recovered', { backerWallet: a.backerWallet, signature: sig, detail: { stage: 'distribute', tokens: a.tokens } });
-    } catch (e) {
-      const err = e instanceof Error ? e.message : String(e);
-      results.push({ backerWallet: a.backerWallet, tokens: a.tokens, error: err });
-      log('reconcile_error', { backerWallet: a.backerWallet, ok: false, detail: { stage: 'distribute', error: err } });
+    let lastErr: string | undefined;
+    let succeeded = false;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const backer = new PublicKey(a.backerWallet);
+        const backerAta = await getAssociatedTokenAddress(mint, backer, false, tokenProgram);
+        const tx = new Transaction().add(
+          createAssociatedTokenAccountIdempotentInstruction(poolKp.publicKey, backerAta, backer, mint, tokenProgram),
+          createTransferInstruction(poolAta, backerAta, poolKp.publicKey, BigInt(a.tokens), [], tokenProgram),
+        );
+        tx.recentBlockhash = (await conn.getLatestBlockhash('confirmed')).blockhash;
+        tx.feePayer = poolKp.publicKey;
+        const sig = await simulateAndSend(conn, tx, [poolKp], { label: `pool-distribute:${attempt}` });
+        await conn.confirmTransaction(sig, 'confirmed');
+        results.push({ backerWallet: a.backerWallet, tokens: a.tokens, signature: sig });
+        log('reconcile_recovered', { backerWallet: a.backerWallet, signature: sig, detail: { stage: 'distribute', tokens: a.tokens, attempt } });
+        succeeded = true;
+        break;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+        log('reconcile_error', { backerWallet: a.backerWallet, ok: false, detail: { stage: 'distribute', error: lastErr, attempt, willRetry: attempt < MAX_ATTEMPTS } });
+        if (attempt < MAX_ATTEMPTS) {
+          // Brief pause before retry — lets a bad blockhash or sim
+          // race clear on its own.
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+    }
+    if (!succeeded) {
+      results.push({ backerWallet: a.backerWallet, tokens: a.tokens, error: lastErr });
     }
   }
   return { results };
