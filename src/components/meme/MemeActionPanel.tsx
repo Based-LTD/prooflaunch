@@ -641,13 +641,20 @@ const PresetButton: React.FC<{ onClick: () => void; label: string }> = ({ onClic
 );
 
 const StatusLine: React.FC<{ text: string }> = ({ text }) => {
-  const cls = text.includes('Error')
+  const isError = text.includes('Error');
+  const cls = isError
     ? 'text-[var(--error)] border-[var(--error)]'
     : text.toLowerCase().includes('success') || text.toLowerCase().includes('launched')
     ? 'text-[var(--success)] border-[var(--success)]'
     : 'text-[var(--accent)] border-[var(--accent)]';
+  // Error messages carry actionable copy that gets shredded by uppercase +
+  // narrow tracking — keep those in normal case + tighter letter-spacing.
+  // Success/pending statuses stay in the retro terminal look.
+  const typography = isError
+    ? 'text-left tracking-normal normal-case leading-snug'
+    : 'text-center uppercase tracking-widest';
   return (
-    <div className={`p-2.5 text-[11px] font-mono text-center uppercase tracking-widest border ${cls}`}>
+    <div className={`p-2.5 text-[11px] font-mono border ${typography} ${cls}`}>
       &gt; {text}
     </div>
   );

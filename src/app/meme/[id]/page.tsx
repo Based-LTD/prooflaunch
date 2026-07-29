@@ -495,7 +495,7 @@ export default function MemeDetailPage() {
         derivationSigB58 = bs58.encode(derivationSigBytes);
       }
 
-      setLaunchStatus('Initiating launch...');
+      setLaunchStatus('Initiating launch (can take up to 60s)…');
       const res = await fetch('/api/launch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -507,22 +507,37 @@ export default function MemeDetailPage() {
           ...(derivationSigB58 ? { derivation_signature: derivationSigB58 } : {}),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Launch failed');
+      // Read the body ONCE as text so we can surface the actual response
+      // even when it isn't valid JSON (e.g. Vercel 504 gateway timeout
+      // returns an HTML error page). Previously a non-JSON response
+      // caused .json() to throw and we surfaced an empty "Error:" —
+      // which is what scared the founder during PPAYS's launch.
+      const rawText = await res.text();
+      let data: { error?: string; distribution?: { distributed: number; remaining: number } } = {};
+      try { data = JSON.parse(rawText); } catch { /* body isn't JSON — keep rawText for the error path */ }
+      if (!res.ok) {
+        const detail = data?.error || rawText.trim().slice(0, 200) || 'no response body';
+        throw new Error(`HTTP ${res.status} — ${detail}`);
+      }
 
-      const dist = data.distribution as { distributed: number; remaining: number } | undefined;
+      const dist = data.distribution;
       if (dist && dist.remaining === 0) {
         setLaunchStatus(`Launched! Tokens distributed to all ${dist.distributed} backers.`);
       } else if (dist && dist.remaining > 0) {
-        setLaunchStatus(`Launched! ${dist.distributed} distributed, ${dist.remaining} auto-retrying…`);
+        setLaunchStatus(`Launched! ${dist.distributed} distributed, ${dist.remaining} auto-retrying — refresh in 60s to verify.`);
       } else {
-        setLaunchStatus('Token launched successfully!');
+        setLaunchStatus('Token launched successfully! Refresh to see distribution status.');
       }
       await Promise.all([refetchMeme(), refetchBackings()]);
-      setTimeout(() => setLaunchStatus(null), 5000);
+      setTimeout(() => setLaunchStatus(null), 8000);
     } catch (err) {
       console.error('Launch failed:', err);
-      setLaunchStatus(`Error: ${err instanceof Error ? err.message : 'Launch failed'}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      // Never surface an empty error — that reads as "site is broken" when
+      // the underlying tx may have actually landed. Guide the user to
+      // refresh + check on-chain rather than click launch a second time.
+      const safeMsg = (msg && msg.trim()) || 'Request timed out or dropped. The tx may still have landed on-chain — REFRESH THE PAGE before clicking Launch again (double-launch will error out safely, but wastes gas).';
+      setLaunchStatus(`Error: ${safeMsg}`);
     } finally {
       setLaunching(false);
     }
