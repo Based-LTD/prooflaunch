@@ -4,22 +4,34 @@ import { createServerClient } from '@/lib/supabase';
 import { rateLimiters } from '@/lib/rateLimit';
 import { verifySignedAuthMessage } from '@/lib/crypto';
 
-// Sanitize message to prevent XSS attacks
+// Sanitize message to prevent XSS attacks. NOTE: do NOT HTML-entity-encode
+// here — the client renders messages via {msg.message}, which React already
+// escapes on output. Encoding at write time causes entities like &#x27; to
+// display literally instead of rendering as ' (see decodeHtmlEntities below
+// for the read-side fix that heals rows written before this change).
 function sanitizeMessage(message: string): string {
   return message
-    // Remove HTML tags
+    // Strip any HTML tags (enforces "no rich text" — not XSS defense)
     .replace(/<[^>]*>/g, '')
-    // Encode special HTML characters
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    // Remove potential script injection patterns
+    // Remove potential script injection patterns (defense-in-depth in case
+    // the message is ever placed in an href or similar)
     .replace(/javascript:/gi, '')
     .replace(/on\w+=/gi, '')
-    // Trim whitespace
     .trim();
+}
+
+// Decode HTML entities so messages persisted before the sanitize-fix
+// (which used to encode ' → &#x27; etc.) render correctly in the client.
+// Applied on GET only.
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x22;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }
 
 // GET /api/chat - Get chat messages for a meme
@@ -45,7 +57,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 });
     }
 
-    return NextResponse.json({ messages: data || [] });
+    const decoded = (data || []).map(m => ({
+      ...m,
+      message: typeof m.message === 'string' ? decodeHtmlEntities(m.message) : m.message,
+    }));
+    return NextResponse.json({ messages: decoded });
   } catch (error) {
     console.error('Chat GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
