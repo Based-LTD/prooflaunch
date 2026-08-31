@@ -77,9 +77,15 @@ export async function GET(_request: NextRequest) {
   const escrowPub = derivePub(process.env.ESCROW_WALLET_PRIVATE_KEY);
   checks.escrow_gas = await checkWalletGas(conn, escrowPub, 0.1, 0.02, 'escrow');
 
-  // 2. Holder-rewards wallet gas (drives daily airdrops + emergency-loan buffer)
+  // 2. Holder-rewards wallet. NOT a reservoir — the daily airdrop drains it
+  //    to its 0.005 SOL RESERVE_LAMPORTS by design, then fee cuts refill it.
+  //    Original thresholds (0.05/0.02) treated it like escrow and went red
+  //    every day the airdrop SUCCEEDED — a permanently-red alarm that masked
+  //    real problems. It only needs batch tx fees (~0.00025/batch): red
+  //    below 0.002 (can't pay batch fees at all), yellow below the 0.005
+  //    design reserve, green at/above reserve.
   const rewardsPub = derivePub(process.env.HOLDER_REWARDS_WALLET_PRIVATE_KEY);
-  checks.holder_rewards_gas = await checkWalletGas(conn, rewardsPub, 0.05, 0.02, 'holder-rewards');
+  checks.holder_rewards_gas = await checkWalletGas(conn, rewardsPub, 0.005, 0.002, 'holder-rewards');
 
   // 3. Stuck backings — confirmed on live memes ≥ 10 min old
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
