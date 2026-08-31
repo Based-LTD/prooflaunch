@@ -64,6 +64,9 @@ const EXCLUDED_WALLETS = new Set<string>([
   'CZnvVTTutAF7QTh5reQqRHE5i8J9cm1CWwaiQXi3QaXm', // PLATFORM_WALLET (slot 4)
   '8wDY912FsVPxuiZhifXeMQbNt6BvLet1AV8bh74FJnvw', // founder locked-supply (Streamflow recipient)
   'EsA8NH8588FFdhUzvxPUn9bPzr8rZi9nPz5E136bLAir', // founder slot 1 (Streamflow sender)
+  'ELFjjx7Ax5kaWnmNCJqwwPirYj5Mne4Gphy5MLzgX5SE', // PROOF Buyback wallet (Streamflow sender of locked buyback PROOF) — platform wallet, must not receive holder rewards. Missed in May 2026 rotation; was taking the largest airdrop slice until 2026-08-30.
+  'DRwYbZuhD8VLvgU18TKx4jm8rZaoUudoMQQzuziGqnrx', // current platform escrow (post 2026-07-25 rotation) — defensive; old escrow excluded above
+  '6y87wcKcjGM2bSqXFtuqKTfEmkmQHkHu75hSGu3uAj1Z', // pre-rotation buyback wallet — defensive (dead, 0 SOL)
   '11111111111111111111111111111111',              // burn / system
 ]);
 
