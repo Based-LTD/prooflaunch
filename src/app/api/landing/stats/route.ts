@@ -74,12 +74,24 @@ async function burnedProofTotal(supabase: ReturnType<typeof createServerClient>)
 }
 
 async function distributedSolTotal(supabase: ReturnType<typeof createServerClient>): Promise<number> {
-  const { data, error } = await supabase
-    .from('holder_distribution_payouts')
-    .select('share_lamports')
-    .eq('status', 'sent');
-  if (error) throw error;
-  const lamports = (data || []).reduce((s, p) => s + Number(p.share_lamports || 0), 0);
+  // PAGINATED — payout rows passed the 1000-row Supabase cap in Aug 2026;
+  // the unpaginated version summed an arbitrary 1000-row subset and showed
+  // 8.31 on the landing hero while the true total was 9.27. Duplicate of
+  // the same fix in /api/proof/paid-out (keep both in sync).
+  const PAGE = 1000;
+  let lamports = 0;
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabase
+      .from('holder_distribution_payouts')
+      .select('share_lamports')
+      .eq('status', 'sent')
+      .order('id', { ascending: true })
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    for (const p of data) lamports += Number(p.share_lamports || 0);
+    if (data.length < PAGE) break;
+  }
   return lamports / LAMPORTS_PER_SOL;
 }
 
