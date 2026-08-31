@@ -59,11 +59,15 @@ jobs:
           set -e
           echo "--- step 1: enumerate live bots ---"
           RAW=$(curl -sS -X GET "https://prooflaunch.fun/api/buyback/process" \
-            -H "x-vercel-cron: 1" --max-time 30)
+            -H "x-vercel-cron: 1" --max-time 30 || echo "")
           echo "$RAW" | head -c 600; echo
-          BOT_IDS=$(echo "$RAW" | python3 -c "import json,sys;print(' '.join(json.load(sys.stdin).get('bots',[])))")
-          if [ -z "$BOT_IDS" ]; then
-            echo "no live bots — nothing to do"
+          # jq (preinstalled on runners) instead of python json.load: a
+          # transient Cloudflare 522/HTML body used to crash the parse and
+          # fail the whole run under set -e (2026-08-14). Non-JSON now
+          # logs + exits 0; the next 5-min tick retries.
+          BOT_IDS=$(echo "$RAW" | jq -r '.bots[]?' 2>/dev/null | tr '\n' ' ' || true)
+          if [ -z "${BOT_IDS// /}" ]; then
+            echo "no live bots (or non-JSON edge response — will retry next tick)"
             exit 0
           fi
           COUNT=$(echo "$BOT_IDS" | wc -w | tr -d ' ')
@@ -74,13 +78,13 @@ jobs:
             res=$(curl -sS -X POST "https://prooflaunch.fun/api/buyback/process" \
               -H "x-vercel-cron: 1" -H "Content-Type: application/json" \
               -d "{\"bot_id\":\"{}\"}" --max-time 120 || echo "{\"ok\":false,\"error\":\"curl_failed\"}")
-            ok=$(echo "$res" | python3 -c "import json,sys;print(json.load(sys.stdin).get(\"ok\",False))")
-            action=$(echo "$res" | python3 -c "import json,sys;print(json.load(sys.stdin).get(\"action\",\"?\"))")
-            symbol=$(echo "$res" | python3 -c "import json,sys;print(json.load(sys.stdin).get(\"symbol\",\"?\"))")
-            if [ "$ok" = "True" ]; then
+            ok=$(echo "$res" | jq -r ".ok // false" 2>/dev/null || echo false)
+            action=$(echo "$res" | jq -r ".action // \"?\"" 2>/dev/null || echo "?")
+            symbol=$(echo "$res" | jq -r ".symbol // \"?\"" 2>/dev/null || echo "?")
+            if [ "$ok" = "true" ]; then
               echo "OK  {} [$symbol/$action]"
             else
-              err=$(echo "$res" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get(\"error\",\"?\")[:120])")
+              err=$(echo "$res" | jq -r "(.error // \"non-JSON response\") | .[0:120]" 2>/dev/null || echo "non-JSON response")
               echo "ERR {} [$symbol/$action]: $err"
             fi
           '

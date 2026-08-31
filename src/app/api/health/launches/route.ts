@@ -135,6 +135,48 @@ export async function GET(_request: NextRequest) {
       : `${errorCount} launch_events with event=reconcile_error in last 24h`,
   };
 
+  // 6. Escrow solvency — the drain cron centralizes backer fee credits
+  //    (backings.claimable_fees_sol) into the shared escrow, and
+  //    /api/fees/claim pays claims FROM escrow. If escrow balance drops
+  //    below the sum owed, the next large claim bounces. This drifted to
+  //    -1.48 SOL unnoticed over ~3 months (CEGG theft + ops gas paid from
+  //    the same pot) before being caught manually on 2026-08-31 — this
+  //    check exists so that never happens silently again.
+  //    Paginated: same 1000-row cap that broke /api/proof/paid-out.
+  {
+    let owedSol = 0;
+    let owedRows = 0;
+    const PAGE = 1000;
+    for (let page = 0; ; page++) {
+      const { data: creditRows, error: owedErr } = await supabase
+        .from('backings')
+        .select('claimable_fees_sol')
+        .gt('claimable_fees_sol', 0)
+        .order('id', { ascending: true })
+        .range(page * PAGE, page * PAGE + PAGE - 1);
+      if (owedErr || !creditRows || creditRows.length === 0) break;
+      for (const r of creditRows) owedSol += Number(r.claimable_fees_sol || 0);
+      owedRows += creditRows.length;
+      if (creditRows.length < PAGE) break;
+    }
+    const escrowSol = typeof checks.escrow_gas.sol === 'number' ? checks.escrow_gas.sol : null;
+    const GAS_BUFFER_SOL = 0.1;
+    checks.escrow_solvency = escrowSol === null
+      ? { status: 'red', detail: 'escrow balance unavailable — cannot verify solvency' }
+      : {
+          status: escrowSol < owedSol ? 'red' : escrowSol < owedSol + GAS_BUFFER_SOL ? 'yellow' : 'green',
+          escrow_sol: escrowSol,
+          owed_to_backers_sol: Number(owedSol.toFixed(6)),
+          owed_rows: owedRows,
+          surplus_sol: Number((escrowSol - owedSol).toFixed(6)),
+          detail: escrowSol < owedSol
+            ? `INSOLVENT: escrow ${escrowSol.toFixed(4)} < ${owedSol.toFixed(4)} owed to backers — large claims WILL bounce; top up ${(owedSol - escrowSol + GAS_BUFFER_SOL).toFixed(2)} SOL`
+            : escrowSol < owedSol + GAS_BUFFER_SOL
+            ? `tight: escrow ${escrowSol.toFixed(4)} covers ${owedSol.toFixed(4)} owed but gas buffer < ${GAS_BUFFER_SOL}`
+            : `solvent: escrow ${escrowSol.toFixed(4)} ≥ ${owedSol.toFixed(4)} owed + ${GAS_BUFFER_SOL} buffer`,
+        };
+  }
+
   // Overall status = worst of any individual check
   const rank = { green: 0, yellow: 1, red: 2 };
   const worst = Object.values(checks).reduce<Check['status']>((w, c) => rank[c.status] > rank[w] ? c.status : w, 'green');
