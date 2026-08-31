@@ -19,24 +19,34 @@ export async function GET() {
   try {
     const supabase = createServerClient();
 
-    // Aggregate via JS: payouts are small (one row per holder per day) so
-    // pulling them is cheap and avoids needing a SQL aggregate RPC.
-    const { data: payouts, error } = await supabase
-      .from('holder_distribution_payouts')
-      .select('share_lamports')
-      .eq('status', 'sent');
-    if (error) throw error;
-
-    const totalLamports = (payouts || []).reduce(
-      (sum, p) => sum + Number(p.share_lamports || 0),
-      0,
-    );
+    // Aggregate via JS, PAGINATED. Supabase caps any single query at 1000
+    // rows; once the table crossed 1000 payouts (~2026-08) the old
+    // unpaginated version summed an arbitrary 1000-row subset, so the
+    // public counter UNDERCOUNTED and even wobbled downward as inserts
+    // shifted which rows came back (8.33 → 8.31 while the true total was
+    // 9.27). A monotonic counter that decreases = row-cap bug.
+    const PAGE = 1000;
+    let totalLamports = 0;
+    let payoutCount = 0;
+    for (let page = 0; ; page++) {
+      const { data, error } = await supabase
+        .from('holder_distribution_payouts')
+        .select('share_lamports')
+        .eq('status', 'sent')
+        .order('id', { ascending: true })
+        .range(page * PAGE, page * PAGE + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      for (const p of data) totalLamports += Number(p.share_lamports || 0);
+      payoutCount += data.length;
+      if (data.length < PAGE) break;
+    }
     const totalPaidOutSol = totalLamports / LAMPORTS_PER_SOL;
 
     return NextResponse.json(
       {
         totalPaidOutSol,
-        payoutCount: payouts?.length || 0,
+        payoutCount,
       },
       {
         headers: {
