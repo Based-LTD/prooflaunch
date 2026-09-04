@@ -1,148 +1,117 @@
 name: External cron pinger
 
 # Vercel-side cron scheduling has been silent for unclear reasons
-# (registered correctly but not firing — see 2026-06-15 incident).
-# This workflow pings the same GET endpoints Vercel cron would hit,
-# on the same cadence, via GitHub Actions. The endpoint handlers
-# check for `x-vercel-cron: 1` header and run the cron body when
-# present (same code path as Vercel's invocation).
+# (registered correctly but not firing — see 2026-06-15 incident), and
+# GitHub throttles *scheduled* workflow triggers on this repo to one
+# every 2-5 hours (observed Aug-Sep 2026), which starved time-sensitive
+# paths (new-coin bot ticks, reconcile) far below the intended 5-minute
+# cadence.
 #
-# We keep vercel.json's cron config intact so we have belt + braces
-# when Vercel's scheduling comes back. Both firing one cron tick is
-# safe — the underlying logic is idempotent (subescrow drain only
-# does work when there's something to drain, buyback dispatcher
-# enumerates current bot stack each call, etc.).
+# Fix (2026-09-04): GitHub throttles trigger CREATION, not running jobs.
+# Each run is now a long-lived pinger: it loops for ~5.5 hours firing
+# every endpoint on its 5-minute cadence, then dispatches its own
+# successor via workflow_dispatch. The */5 schedule remains as a backup
+# trigger — queued runs wait behind the active loop (concurrency group)
+# and take over if a run dies mid-loop or the self-dispatch fails.
+#
+# Endpoint handlers check `x-vercel-cron: 1` and run the cron body when
+# present (same code path as Vercel's invocation). Everything pinged is
+# idempotent, so overlap or double-fire is safe.
+#
+# To STOP the chain: disable the workflow in the Actions UI (a finishing
+# run cannot dispatch a disabled workflow).
 
 on:
   schedule:
-    # Every 5 minutes — matches Vercel's */5 schedule for fees + process-memes
+    # Backup trigger only — the active loop provides the real cadence.
     - cron: '*/5 * * * *'
   workflow_dispatch: {}
 
+permissions:
+  actions: write # lets a finishing run dispatch its successor
+
 concurrency:
-  # If a tick takes >5min, the next tick skips rather than piling on
   group: external-cron
   cancel-in-progress: false
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 355
     steps:
-      - name: Determine current minute mod 5
-        id: now
+      - name: 5-minute pinger loop (~5.5h per run, self-chaining)
         run: |
-          MIN=$(date -u +%M)
-          MIN=${MIN#0}
-          [ -z "$MIN" ] && MIN=0
-          MOD=$((MIN % 5))
-          echo "minute_mod_5=$MOD" >> $GITHUB_OUTPUT
+          # No `set -e`: a failed tick must never kill the loop. Every
+          # parse is jq-guarded (a Cloudflare 522 HTML body used to crash
+          # python json.load and fail the whole run — 2026-08-14).
+          BASE="https://prooflaunch.fun"
 
-      - name: fees/process (every 5 min, on the :00 :05 :10 ... mark)
-        run: |
-          curl -sS -X GET "https://prooflaunch.fun/api/fees/process" \
-            -H "x-vercel-cron: 1" --max-time 110 \
-            -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 800
+          ping() { # $1 = path, $2 = label
+            echo "── $2"
+            curl -sS -X GET "$BASE$1" -H "x-vercel-cron: 1" --max-time 110 \
+              -w "\nHTTP %{http_code} time=%{time_total}s\n" 2>&1 | tail -c 500 || echo "(curl failed — continuing)"
+          }
 
-      - name: process-memes (every 5 min)
-        run: |
-          curl -sS -X GET "https://prooflaunch.fun/api/process-memes" \
-            -H "x-vercel-cron: 1" --max-time 110 \
-            -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 800
-
-      - name: buyback/process (enumerate live bots and fire each directly)
-        run: |
-          # The deployed app's fan-out via after()+self-POST is silently
-          # broken (2026-06-15) — bots queued but never executed. Workaround:
-          # GET the bot list, then POST each bot_id externally. Direct POST
-          # path works reliably via x-vercel-cron header.
-          set -e
-          echo "--- step 1: enumerate live bots ---"
-          RAW=$(curl -sS -X GET "https://prooflaunch.fun/api/buyback/process" \
-            -H "x-vercel-cron: 1" --max-time 30 || echo "")
-          echo "$RAW" | head -c 600; echo
-          # jq (preinstalled on runners) instead of python json.load: a
-          # transient Cloudflare 522/HTML body used to crash the parse and
-          # fail the whole run under set -e (2026-08-14). Non-JSON now
-          # logs + exits 0; the next 5-min tick retries.
-          BOT_IDS=$(echo "$RAW" | jq -r '.bots[]?' 2>/dev/null | tr '\n' ' ' || true)
-          if [ -z "${BOT_IDS// /}" ]; then
-            echo "no live bots (or non-JSON edge response — will retry next tick)"
-            exit 0
-          fi
-          COUNT=$(echo "$BOT_IDS" | wc -w | tr -d ' ')
-          echo "--- step 2: firing $COUNT bots in parallel (max 5 concurrent) ---"
-          # Bound concurrency to 5 to avoid blasting Vercel; each bot
-          # finishes in 5-30s typically.
-          printf '%s\n' $BOT_IDS | xargs -P 5 -I {} sh -c '
-            res=$(curl -sS -X POST "https://prooflaunch.fun/api/buyback/process" \
-              -H "x-vercel-cron: 1" -H "Content-Type: application/json" \
-              -d "{\"bot_id\":\"{}\"}" --max-time 120 || echo "{\"ok\":false,\"error\":\"curl_failed\"}")
-            ok=$(echo "$res" | jq -r ".ok // false" 2>/dev/null || echo false)
-            action=$(echo "$res" | jq -r ".action // \"?\"" 2>/dev/null || echo "?")
-            symbol=$(echo "$res" | jq -r ".symbol // \"?\"" 2>/dev/null || echo "?")
-            if [ "$ok" = "true" ]; then
-              echo "OK  {} [$symbol/$action]"
-            else
-              err=$(echo "$res" | jq -r "(.error // \"non-JSON response\") | .[0:120]" 2>/dev/null || echo "non-JSON response")
-              echo "ERR {} [$symbol/$action]: $err"
+          buyback_fanout() {
+            echo "── buyback fan-out"
+            RAW=$(curl -sS -X GET "$BASE/api/buyback/process" -H "x-vercel-cron: 1" --max-time 30 || echo "")
+            BOT_IDS=$(echo "$RAW" | jq -r '.bots[]?' 2>/dev/null | tr '\n' ' ' || true)
+            if [ -z "${BOT_IDS// /}" ]; then
+              echo "no live bots (or non-JSON edge response)"
+              return 0
             fi
-          '
-          echo "--- buyback fan-out complete ---"
+            printf '%s\n' $BOT_IDS | xargs -P 5 -I {} sh -c '
+              res=$(curl -sS -X POST "'"$BASE"'/api/buyback/process" \
+                -H "x-vercel-cron: 1" -H "Content-Type: application/json" \
+                -d "{\"bot_id\":\"{}\"}" --max-time 120 || echo "{\"ok\":false,\"error\":\"curl_failed\"}")
+              ok=$(echo "$res" | jq -r ".ok // false" 2>/dev/null || echo false)
+              action=$(echo "$res" | jq -r ".action // \"?\"" 2>/dev/null || echo "?")
+              symbol=$(echo "$res" | jq -r ".symbol // \"?\"" 2>/dev/null || echo "?")
+              if [ "$ok" = "true" ]; then
+                echo "OK  {} [$symbol/$action]"
+              else
+                err=$(echo "$res" | jq -r "(.error // \"non-JSON response\") | .[0:120]" 2>/dev/null || echo "non-JSON response")
+                echo "ERR {} [$symbol/$action]: $err"
+              fi
+            ' || true
+          }
 
-      - name: reconcile (every 15 min — only on :00, :15, :30, :45)
-        if: ${{ steps.now.outputs.minute_mod_5 == '0' }}
-        run: |
-          MIN=$(date -u +%M)
-          if [ $((10#$MIN % 15)) -eq 0 ]; then
-            curl -sS -X GET "https://prooflaunch.fun/api/reconcile" \
-              -H "x-vercel-cron: 1" --max-time 110 \
-              -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 600
-          else
-            echo "skipped — not a 15-min mark"
-          fi
+          # ~5.5h of 5-minute ticks, then hand off to the successor run.
+          END=$((SECONDS + 330 * 60))
+          while [ $SECONDS -lt $END ]; do
+            NOW=$(date -u +%H:%M)
+            MIN=$(date -u +%M); MIN=$((10#$MIN))
+            HR=$(date -u +%H)
+            echo ""
+            echo "════ tick $NOW UTC ════"
 
-      - name: keycard/sync (every 10 min — only on :00, :10, :20...)
-        run: |
-          MIN=$(date -u +%M)
-          if [ $((10#$MIN % 10)) -eq 0 ]; then
-            curl -sS -X GET "https://prooflaunch.fun/api/keycard/sync" \
-              -H "x-vercel-cron: 1" --max-time 110 \
-              -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 600
-          else
-            echo "skipped — not a 10-min mark"
-          fi
+            ping "/api/fees/process" "fees/process"
+            ping "/api/process-memes" "process-memes"
+            buyback_fanout
 
-      - name: airdrop/daily (top of the hour)
-        run: |
-          MIN=$(date -u +%M)
-          if [ "$MIN" = "00" ]; then
-            curl -sS -X GET "https://prooflaunch.fun/api/airdrop/daily" \
-              -H "x-vercel-cron: 1" --max-time 110 \
-              -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 600
-          else
-            echo "skipped — not on the hour"
-          fi
+            if [ $((MIN % 15)) -lt 5 ]; then
+              ping "/api/reconcile" "reconcile (15m)"
+            fi
+            if [ $((MIN % 10)) -lt 5 ]; then
+              ping "/api/keycard/sync" "keycard/sync (10m)"
+            fi
+            if [ $MIN -lt 5 ]; then
+              ping "/api/airdrop/daily" "airdrop/daily (hourly)"
+              ping "/api/wallet-claim/burn" "wallet-claim/burn (hourly)"
+            fi
+            if [ "$HR" = "13" ] && [ $MIN -lt 5 ]; then
+              ping "/api/health/drift" "health/drift (daily 13:00)"
+            fi
 
-      - name: wallet-claim/burn (top of the hour)
-        run: |
-          MIN=$(date -u +%M)
-          if [ "$MIN" = "00" ]; then
-            curl -sS -X GET "https://prooflaunch.fun/api/wallet-claim/burn" \
-              -H "x-vercel-cron: 1" --max-time 110 \
-              -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 600
-          else
-            echo "skipped — not on the hour"
-          fi
+            sleep 300
+          done
+          echo "loop window complete — handing off to successor"
 
-      - name: health/drift (daily 13:00 UTC)
+      - name: dispatch successor run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          HR=$(date -u +%H)
-          MIN=$(date -u +%M)
-          if [ "$HR" = "13" ] && [ "$MIN" = "00" ]; then
-            curl -sS -X GET "https://prooflaunch.fun/api/health/drift" \
-              -H "x-vercel-cron: 1" --max-time 110 \
-              -w "\nHTTP %{http_code} time=%{time_total}s\n" | tail -c 600
-          else
-            echo "skipped — only fires at 13:00 UTC daily"
-          fi
+          gh workflow run external-cron.yml -R "${{ github.repository }}" \
+            && echo "successor dispatched" \
+            || echo "dispatch failed — */5 schedule will pick up (throttled backup)"
