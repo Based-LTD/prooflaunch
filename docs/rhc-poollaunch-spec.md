@@ -196,3 +196,47 @@ immutable-by-us, (b) initial buy can carry ≥ realistic campaign sizes,
 buy caps out below viable campaign size, or ToS forbids aggregation —
 any one of these kills the trustless story, which is the entire point of
 going.
+
+---
+
+## 8. P0 VERIFICATION RESULTS — 2026-09-07 · ALL GATES PASSED → BUILD
+
+Method: function surfaces extracted from deployed bytecode (whatsabi +
+selector DBs), semantics confirmed by decoding a real launch tx, auth
+tested by `eth_call` simulation against the LIVE chain (with state
+overrides for funding) — stronger evidence than reading source.
+
+### Corrected addresses (docs + almanac are BOTH stale)
+The documented "active" factory (`0xA5aA...`) has `launchEnabled=false`
+and zero recent launches. The real active pair, found by chain-wide
+`TokenLaunched` topic scan:
+- **Factory: `0xf4fc0cd27fc8ecf17e55ee4c3f7201897df3eb75`** (launchEnabled=true)
+- **Locker: `0x10F2756e373bAb14999fdC9177587D51D30a1Cf5`** (protocolFeeShare=30)
+
+Three factory generations in two months, and even Pons's own docs lag.
+→ Integration MUST discover the live factory dynamically (scan for the
+`TokenLaunched` topic + check `launchEnabled`) and alert on churn. Our
+identity-drift sensor pattern, applied to someone else's contracts.
+
+### Gate results
+| §7 gate | Result | Evidence |
+|---|---|---|
+| Launch permissionless | ✅ PASS | sample deployer `whitelistedLaunchers=false`, launched via EOA; simulated `launchToken` from an arbitrary address succeeds. Whitelist exists but is not required. |
+| Fee redirect un-strippable | ✅ PASS | `setFeeRedirect` from random addr reverts (`0xea8e4eb5`); succeeds only from the token's deployer — which will be our Campaign contract, which exposes no path to call it. (Pons locker owner CAN redirect any token — ecosystem-wide admin power, disclose as a trust note.) |
+| Initial buy carries a pooled raise | ✅ PASS | simulated launches with 0.1 / 1 / 3 / **4.5 ETH** initial buys all succeed — above the 4.2 ETH graduation threshold, so a large campaign may graduate at launch. No cap encountered at viable sizes. |
+| ToS permits aggregation | ✅ PASS | terms are brand-hygiene only: no impersonation, no implied endorsement, lowercase "pons" + link attribution. Integration section explicitly supports builders. |
+
+### Exact signatures (from live calldata decode)
+- `launchToken((name, symbol, logo, description, (5 social strings), address feeWallet), uint256 launchConfigId, uint256 dexId, bytes32 salt)` — payable; selector `0x686399cb`; initial buy = `msg.value − launchFee` (0.0005 ETH); `predictTokenAddress(...)` gives the CREATE2 address pre-launch.
+- Locker: `setFeeRedirect(token, addr)` deployer-only; `collectFees(token)` deployer-authorized (verified on a fee-bearing token: random ❌, deployer ✅) — NOT public as third parties reported. **Design tweak: Campaign exposes a public `pokeCollect()` crank that calls `locker.collectFees(token)` as the deployer — permissionless collection restored one hop up.**
+- `MAX_PROTOCOL_FEE_SHARE = 50` on-chain: protocol split (currently 30) can rise to at most 50 for FUTURE tokens; per-token snapshot protects launched ones.
+
+### Honest data point for the strategy
+Current-factory launch rate is ~20-30 tokens/day — far below headline
+froth. The DEX/trading volume is where RHC is exploding; launch counts
+have cooled. Good for us (fee revenue comes from trading, and less
+launch spam = less noise to compete with), but size expectations off
+trading volume, not launch counts.
+
+**Verdict: build criteria met. Proceed to P1 (contracts + Foundry fork
+tests) on founder go.**
