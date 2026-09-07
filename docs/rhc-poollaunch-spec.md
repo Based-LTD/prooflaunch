@@ -240,3 +240,36 @@ trading volume, not launch counts.
 
 **Verdict: build criteria met. Proceed to P1 (contracts + Foundry fork
 tests) on founder go.**
+
+---
+
+## 9. P1 STATUS — contracts built, 17/17 tests green (2026-09-08)
+
+`contracts/rhc/` (Foundry): `CampaignFactory` + `Campaign` + `FeeSplitter`,
+zero external dependencies, no owner/admin/pause/upgrade anywhere. 15
+unit/adversarial tests (reentrancy, double-claim, launch gating, grace
+refunds, split accumulation) + 2 fork tests that launch a REAL token
+through the live pons factory on a fork of RHC and verify pro-rata
+claims + fee routing end-to-end.
+
+### Fork discoveries (things no doc mentions)
+1. **pons delivers the launch-time initial-buy tokens to `feeWallet`,
+   not to the launch caller.** Fix shipped: `FeeSplitter.drainTo()`
+   (campaign-only) sweeps the launch allocation to the Campaign inside
+   the same tx as `launchToken` — atomicity guarantees it can never
+   catch fee flow.
+2. **The live locker RECORDS the feeWallet as `feeRedirects(token)` at
+   launch** (docs described zero-until-redirected). Resolved recipient
+   verified == our splitter on-fork.
+3. **Curve economics: a 1.5 ETH initial buy bought ~52% of supply.**
+   Pooled raises are proportionally enormous on this curve vs Solana
+   (where backers got ~20%). Product guidance needed: either cap v1
+   campaign goals (~1-2 ETH) or embrace majority-community-owned floats
+   as the differentiator. OPEN P2 ITEM: fork-test a raise far above the
+   4.2 ETH graduation threshold and verify where excess ETH goes
+   (refund? post-grad buying?) before allowing big goals.
+
+### Remaining for P2/P3
+Wagmi frontend path + indexer; fork test of oversized raises (above);
+WETH fee-flow fork test after real swaps; independent review/audit
+before uncapped goals; dynamic factory discovery + churn alarm in ops.
