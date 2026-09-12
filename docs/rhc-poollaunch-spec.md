@@ -273,3 +273,41 @@ claims + fee routing end-to-end.
 Wagmi frontend path + indexer; fork test of oversized raises (above);
 WETH fee-flow fork test after real swaps; independent review/audit
 before uncapped goals; dynamic factory discovery + churn alarm in ops.
+
+---
+
+## 10. P2 CONTRACT VERIFICATION — 19/19, money path fully proven (2026-09-12)
+
+Plan of record per founder: full build to live; split = **backers 90% /
+platform 7% / holder-rewards 3%** (deploy-time factory config); platform
+token launches on RHC through our own contracts as a real campaign once
+live.
+
+### Unknown #1 CLOSED — oversized raises are safe
+A 6.5 ETH pooled buy (goal 6, threshold 4.2): zero ETH stranded or
+refunded, the pool absorbed everything and **graduated at birth**
+(6.43 collected vs 4.2), backers received **~82.6% of supply**. No goal
+caps needed for safety — only for float-design taste. "Graduated at
+launch, community owns the float" is a legitimate campaign flex.
+
+### Unknown #2 CLOSED — real fee flow verified at 90/7/3
+On-fork: real v3 swaps on the live pool (buy + sell through a callback
+swapper), `pokeCollect()` pulled 0.0108 WETH + 28.6k tokens of creator
+fees into the FeeSplitter, `distribute()` + claims paid backer/platform/
+rewards at exactly 90/7/3 in BOTH assets.
+
+### New pons gotchas (recorded so nobody relearns them)
+- **Pons tokens have transfer hooks**: every transfer probes the
+  counterparties (`getPool` + `.fee()` staticcalls, try/caught) to
+  enforce restrictions. Benign for us (probe-reverts are caught), but
+  transfers cost extra gas and traces look scary.
+- **`restrictionsEndBlock` is NOT on the `block.number` clock**
+  (Arbitrum-stack L1/L2 block split: event said ~25.9M when
+  block.number was ~61.3M). Never compare or roll against it naively.
+- The factory emits other 4-topic events; match `TokenLaunched` by
+  topic0 (`0xdb51ea9a…c4235a`), never by shape.
+
+**Contracts are DONE pending review: 19/19 (15 unit/adversarial + 4
+fork incl. launch, oversized raise, real fee flow, CREATE2 prediction).
+Remaining to live: deploy script + founder's RHC deployer wallet,
+frontend, factory-churn sensor, then capped soft launch.**
