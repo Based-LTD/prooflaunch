@@ -183,6 +183,52 @@ export async function GET(_request: NextRequest) {
         };
   }
 
+  // 7. Robinhood Chain / PoolLaunch integration. pons rotates launch
+  //    factories without notice (3 generations in its first 2 months, and
+  //    their own docs lag) — if launchEnabled() goes false on the factory
+  //    our campaigns target, every Campaign.launch() will revert until we
+  //    rediscover the live factory (TokenLaunched topic scan) and ship new
+  //    campaigns against it. Red here = new RHC launches broken; existing
+  //    campaigns/claims/fees are unaffected (contracts are self-contained).
+  {
+    const RHC_RPC = 'https://rpc.mainnet.chain.robinhood.com';
+    const PONS_FACTORY = '0xF4fC0CD27fC8EcF17E55eE4c3f7201897dF3eb75';
+    const POOLLAUNCH_FACTORY = '0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d';
+    try {
+      const ethCall = async (to: string, data: string): Promise<string> => {
+        const r = await fetch(RHC_RPC, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] }),
+          signal: AbortSignal.timeout(8000),
+        });
+        const j = await r.json();
+        if (j.error) throw new Error(j.error.message);
+        return j.result as string;
+      };
+      const enabledHex = await ethCall(PONS_FACTORY, '0x236a4afb'); // launchEnabled()
+      const countHex = await ethCall(POOLLAUNCH_FACTORY, '0x7274e30d'); // campaignCount()
+      const ponsEnabled = BigInt(enabledHex) === 1n;
+      const campaignCount = Number(BigInt(countHex));
+      checks.rhc_pons_factory = {
+        status: ponsEnabled ? 'green' : 'red',
+        pons_factory: PONS_FACTORY,
+        poollaunch_factory: POOLLAUNCH_FACTORY,
+        campaign_count: campaignCount,
+        detail: ponsEnabled
+          ? `pons factory live (launchEnabled=true); PoolLaunch campaigns: ${campaignCount}`
+          : `pons factory DISABLED — they rotated again. New RHC launches will revert; rediscover the live factory (TokenLaunched topic scan, see docs/rhc-poollaunch-spec.md §8) and update config.`,
+      };
+    } catch (e) {
+      // RPC unreachable = degraded visibility, not a confirmed failure;
+      // Solana ops are unaffected either way.
+      checks.rhc_pons_factory = {
+        status: 'yellow',
+        detail: `RHC RPC unreachable — cannot verify pons factory (${e instanceof Error ? e.message : String(e)})`,
+      };
+    }
+  }
+
   // Overall status = worst of any individual check
   const rank = { green: 0, yellow: 1, red: 2 };
   const worst = Object.values(checks).reduce<Check['status']>((w, c) => rank[c.status] > rank[w] ? c.status : w, 'green');
