@@ -35,7 +35,7 @@ contract Smoke is Script {
                 PonsSocials("", "", "https://prooflaunch.fun", "", ""),
                 address(0)
             ),
-            0, new address[](0), new uint16[](0)
+            0, 0, new address[](0), new uint16[](0)
         );
         console2.log("campaign:", address(c));
         console2.log("splitter:", address(c.feeSplitter()));

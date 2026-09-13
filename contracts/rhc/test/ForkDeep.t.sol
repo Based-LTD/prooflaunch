@@ -5,9 +5,15 @@ import {Test, console2} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Campaign} from "../src/Campaign.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
+import {LegDeployer} from "../src/LegDeployer.sol";
 import {FeeSplitter} from "../src/FeeSplitter.sol";
 import {IPonsFactory, IERC20, PonsTokenMeta, PonsSocials} from "../src/interfaces/IPons.sol";
 import {BurnLeg, IUniV3FactoryMin} from "../src/BurnLeg.sol";
+import {FeedLPLeg} from "../src/FeedLPLeg.sol";
+
+interface IPoolPositions {
+    function positions(bytes32 key) external view returns (uint128 liquidity, uint256, uint256, uint128, uint128);
+}
 
 interface IWETH {
     function deposit() external payable;
@@ -65,6 +71,7 @@ contract TestSwapper {
 
 contract ForkDeep is Test {
     uint16 burnBpsForNext = 0;
+    uint16 lpBpsForNext = 0;
     address constant PONS = 0xF4fC0CD27fC8EcF17E55eE4c3f7201897dF3eb75;
     string constant RPC = "https://rpc.mainnet.chain.robinhood.com";
 
@@ -76,7 +83,7 @@ contract ForkDeep is Test {
 
     function _campaign(uint256 goal) internal returns (Campaign c) {
         // plan of record: backers 90% / platform 7% / holder-rewards 3%
-        CampaignFactory cf = new CampaignFactory(platform, rewards, 700, 300, 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73, IUniV3FactoryMin(0x1f7d7550B1b028f7571E69A784071F0205FD2EfA), 10000);
+        CampaignFactory cf = new CampaignFactory(platform, rewards, 700, 300, 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73, IUniV3FactoryMin(0x1f7d7550B1b028f7571E69A784071F0205FD2EfA), 10000, new LegDeployer());
         PonsTokenMeta memory meta = PonsTokenMeta(
             "Deep Probe", "DEEP", "", "fork test",
             PonsSocials("", "", "", "", ""), address(0)
@@ -84,7 +91,7 @@ contract ForkDeep is Test {
         vm.prank(creator);
         c = cf.createCampaign(IPonsFactory(PONS), goal, 0.1 ether, 0, 0,
             block.timestamp + 1 days, 0, 0, meta,
-            burnBpsForNext, new address[](0), new uint16[](0));
+            burnBpsForNext, lpBpsForNext, new address[](0), new uint16[](0));
     }
 
     /// UNKNOWN #1: what happens when the pooled buy exceeds the 4.2 ETH
@@ -240,5 +247,57 @@ contract ForkDeep is Test {
         console2.log("tokens burned:", deadAfter - deadBefore);
         assertGt(deadAfter, deadBefore, "burn crank destroyed nothing");
         assertGt(burn.totalTokensBurned(), 0);
+    }
+
+    /// POOL FEEDER, live-pool proof: a campaign with a 20% LP leg — real
+    /// launch, real volume, crank() mints full-range liquidity the leg
+    /// contract owns forever (no withdraw exists — locked by construction).
+    function test_fork_feedLpLeg() public {
+        vm.createSelectFork(RPC);
+        lpBpsForNext = 2000;
+        Campaign c = _campaign(1 ether);
+        lpBpsForNext = 0;
+        vm.deal(alice, 3 ether);
+        vm.prank(alice); c.deposit{value: 1.5 ether}();
+        vm.recordLogs();
+        vm.prank(creator); c.launch();
+        address token = c.token();
+
+        address weth; address pool;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint i = 0; i < logs.length; i++) {
+            if (logs[i].emitter == PONS && logs[i].topics[0] == 0xdb51ea9ad51ab453a65a4cb7e60c3cb378c9501bb002609f8f97778fb6c4235a) {
+                (address pairToken, address pool_,,,,, ) =
+                    abi.decode(logs[i].data, (address, address, uint256, uint256, uint256, uint256, uint256));
+                weth = pairToken; pool = pool_;
+            }
+        }
+        vm.roll(block.number + 5000);
+        vm.warp(block.timestamp + 1 hours);
+
+        // volume both directions so the leg accrues BOTH assets
+        TestSwapper swapper = new TestSwapper();
+        vm.deal(address(this), 5 ether);
+        IWETH(weth).deposit{value: 2 ether}();
+        IWETH(weth).transfer(address(swapper), 2 ether);
+        swapper.buyToken(IUniV3Pool(pool), weth, 0.05 ether);
+        uint256 bought = IERC20(token).balanceOf(address(swapper));
+        swapper.sellToken(IUniV3Pool(pool), token, bought / 2);
+
+        c.pokeCollect();
+        FeeSplitter fs = c.feeSplitter();
+        FeedLPLeg lp = FeedLPLeg(fs.legRecipients(1)); // [rewards, lp, platform]
+        assertEq(address(lp.campaign()), address(c), "lp leg not wired");
+
+        lp.crank();
+        assertGt(lp.totalLiquidityAdds(), 0, "no liquidity minted");
+        // the position exists on the REAL pool, owned by the leg forever
+        bytes32 key = keccak256(abi.encodePacked(address(lp), int24(-887200), int24(887200)));
+        (uint128 liquidity,,,,) = IPoolPositions(pool).positions(key);
+        console2.log("locked liquidity:", liquidity);
+        assertGt(liquidity, 0, "position not found on pool");
+
+        // second crank must not revert (compound path with 0-fee round)
+        lp.crank();
     }
 }

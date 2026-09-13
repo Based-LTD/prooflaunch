@@ -40,7 +40,7 @@ contract BurnLeg {
     uint160 private constant MIN_SQRT = 4295128740;
     uint160 private constant MAX_SQRT = 1461446703485210103287273052203988822378723970341;
 
-    address public immutable factory; // CampaignFactory, may init() once
+    address public immutable initializer; // CampaignFactory, may init() once
     address public immutable weth;
     IUniV3FactoryMin public immutable v3Factory;
     uint24 public immutable poolFee;
@@ -61,8 +61,8 @@ contract BurnLeg {
     error NoPool();
     error BadCallback();
 
-    constructor(address weth_, IUniV3FactoryMin v3Factory_, uint24 poolFee_) {
-        factory = msg.sender;
+    constructor(address initializer_, address weth_, IUniV3FactoryMin v3Factory_, uint24 poolFee_) {
+        initializer = initializer_;
         weth = weth_;
         v3Factory = v3Factory_;
         poolFee = poolFee_;
@@ -71,7 +71,7 @@ contract BurnLeg {
     /// Wired once by the factory right after the Campaign (and its
     /// splitter) exist — the deploy order makes a constructor circular.
     function init(ICampaignView campaign_, IFeeSplitterLeg splitter_) external {
-        if (msg.sender != factory) revert OnlyFactory();
+        if (msg.sender != initializer) revert OnlyFactory();
         if (address(campaign) != address(0)) revert AlreadyInit();
         campaign = campaign_;
         splitter = splitter_;

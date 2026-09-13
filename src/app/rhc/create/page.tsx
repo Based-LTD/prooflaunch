@@ -30,8 +30,9 @@ export default function CreateCampaignPage() {
   // ownerless BurnLeg contract; vaults are named wallets that pull their
   // leg of fees anytime. All carved from the backer share.
   const [burnPct, setBurnPct] = useState('0');
+  const [lpPct, setLpPct] = useState('0');
   const [vaults, setVaults] = useState<{ addr: string; pct: string }[]>([]);
-  const botsPct = (Number(burnPct) || 0) + vaults.reduce((s, v) => s + (Number(v.pct) || 0), 0);
+  const botsPct = (Number(burnPct) || 0) + (Number(lpPct) || 0) + vaults.reduce((s, v) => s + (Number(v.pct) || 0), 0);
   const backerPct = 90 - botsPct;
   const vaultsValid = vaults.every(v => (Number(v.pct) || 0) >= 0 && (/^0x[0-9a-fA-F]{40}$/.test(v.addr) || v.pct === '' || v.pct === '0'));
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
@@ -71,6 +72,7 @@ export default function CreateCampaignPage() {
           feeWallet: '0x0000000000000000000000000000000000000000', // overwritten by the contract → FeeSplitter
         },
         Math.round((Number(burnPct) || 0) * 100),
+        Math.round((Number(lpPct) || 0) * 100),
         vaults.filter(v => Number(v.pct) > 0).map(v => v.addr as `0x${string}`),
         vaults.filter(v => Number(v.pct) > 0).map(v => Math.round(Number(v.pct) * 100)),
       ],
@@ -167,6 +169,19 @@ export default function CreateCampaignPage() {
                 />
                 <span className="block mt-1 normal-case tracking-normal text-[var(--muted-soft)]">
                   Runs as an ownerless contract. Anyone can crank it; nobody can stop it.
+                </span>
+              </label>
+              <label className={labelClass}>
+                🌊 Pool Feeder — % of fees that become locked liquidity
+                <input
+                  value={lpPct}
+                  onChange={(e) => setLpPct(e.target.value)}
+                  placeholder="0"
+                  className={`${inputClass} mt-1.5`}
+                />
+                <span className="block mt-1 normal-case tracking-normal text-[var(--muted-soft)]">
+                  Full-range LP the contract owns forever — no withdraw function exists.
+                  World-first: liquidity locked by construction, compounds its own fees.
                 </span>
               </label>
               <div>
