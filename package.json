@@ -34,6 +34,7 @@
     "@streamflow/stream": "^12.1.1",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.90.1",
+    "@tanstack/react-query": "^5.102.8",
     "@types/libsodium-wrappers": "^0.7.14",
     "bs58": "^6.0.0",
     "libsodium-wrappers": "^0.8.4",
@@ -42,7 +43,9 @@
     "pumpdotfun-sdk": "^1.4.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "viem": "^2.56.5",
+    "wagmi": "^3.7.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
