@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Campaign} from "../src/Campaign.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
+import {LegDeployer} from "../src/LegDeployer.sol";
 import {FeeSplitter} from "../src/FeeSplitter.sol";
 import {IPonsFactory, PonsTokenMeta, PonsSocials} from "../src/interfaces/IPons.sol";
 import {IUniV3FactoryMin} from "../src/BurnLeg.sol";
@@ -79,7 +80,7 @@ contract CampaignTest is Test {
 
     function setUp() public {
         pons = new MockPons();
-        cf = new CampaignFactory(platform, rewards, 500, 500, address(0xBEEF), IUniV3FactoryMin(address(0)), 10000);
+        cf = new CampaignFactory(platform, rewards, 500, 500, address(0xBEEF), IUniV3FactoryMin(address(0)), 10000, new LegDeployer());
         vm.prank(creator);
         c = cf.createCampaign(
             IPonsFactory(address(pons)),
@@ -89,7 +90,7 @@ contract CampaignTest is Test {
             10,           // slots
             block.timestamp + 3 days,
             0, 0, _meta(),
-            0, new address[](0), new uint16[](0)
+            0, 0, new address[](0), new uint16[](0)
         );
         vm.deal(alice, 10 ether);
         vm.deal(bob, 10 ether);

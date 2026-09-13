@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Script, console2} from "forge-std/Script.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
 import {IUniV3FactoryMin} from "../src/BurnLeg.sol";
+import {LegDeployer} from "../src/LegDeployer.sol";
 
 /// Deploys the PoolLaunch CampaignFactory to Robinhood Chain (4663).
 ///
@@ -29,6 +30,7 @@ contract Deploy is Script {
         address rewardsRecipient = vm.envAddress("REWARDS_RECIPIENT");
 
         vm.startBroadcast();
+        LegDeployer legs = new LegDeployer();
         CampaignFactory f = new CampaignFactory(
             platformRecipient,
             rewardsRecipient,
@@ -36,10 +38,12 @@ contract Deploy is Script {
             300, // holder-rewards 3%
             0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73, // WETH on RHC
             IUniV3FactoryMin(0x1f7d7550B1b028f7571E69A784071F0205FD2EfA), // pons v3 factory
-            10000 // 1% pool fee tier
+            10000, // 1% pool fee tier
+            legs
         );
         vm.stopBroadcast();
 
+        console2.log("LegDeployer deployed:", address(legs));
         console2.log("CampaignFactory deployed:", address(f));
         console2.log("  platform leg (7%):", platformRecipient);
         console2.log("  rewards leg (3%):", rewardsRecipient);
