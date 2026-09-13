@@ -42,25 +42,15 @@ export function ConnectButton() {
 }
 
 export function RhcHeader() {
+  // Brand + nav live in the global Navbar (chain-aware); this row carries
+  // the world tagline and the EVM wallet button (wagmi context is scoped
+  // to /rhc, so the button can't live in the global navbar).
   return (
-    <div className="flex items-center justify-between mb-8">
-      <div>
-        <a href="/rhc" className="font-mono text-xl text-orange-400 uppercase tracking-widest">
-          PROOF/LAUNCH <span className="text-neutral-500">· robinhood chain</span>
-        </a>
-        <p className="font-mono text-xs text-neutral-500 mt-1">
-          pool the raise · own the float · earn the fees — enforced by ownerless contracts
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
-        <a
-          href="/rhc/create"
-          className="border border-neutral-600 px-4 py-2 font-mono text-sm uppercase tracking-wider text-neutral-300 hover:border-orange-500 hover:text-orange-400 transition-colors"
-        >
-          + create
-        </a>
-        <ConnectButton />
-      </div>
+    <div className="flex items-center justify-between mb-8 gap-4">
+      <p className="font-mono text-xs text-neutral-500">
+        pool the raise · own the float · earn the fees — enforced by ownerless contracts
+      </p>
+      <ConnectButton />
     </div>
   );
 }

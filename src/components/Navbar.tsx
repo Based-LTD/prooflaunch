@@ -21,17 +21,48 @@ const navLinks = [
   { href: '/submit', label: 'Submit' },
   { href: '/launched', label: 'Launched' },
   { href: '/portfolio', label: 'Portfolio' },
-  // PoolLaunch on Robinhood Chain — descriptive naming only ("RHC"), never
-  // "Robinhood" alone in nav/marketing (trademark care, spec §6)
-  { href: '/rhc', label: 'RHC' },
   { href: '/docs', label: 'Docs' },
   { href: '/roadmap', label: 'Roadmap' },
   { href: '/proof', label: 'Audit' },
 ];
 
+// The RHC world gets its own nav — two clearly-scoped worlds, one brand.
+// Naming stays descriptive ("RHC"), never "Robinhood" alone (trademark
+// care, docs/rhc-poollaunch-spec.md §6).
+const rhcNavLinks = [
+  { href: '/rhc', label: 'Campaigns' },
+  { href: '/rhc/create', label: 'Create' },
+  { href: '/docs', label: 'Docs' },
+];
+
+// Persistent chain switcher: one click between worlds, remembered so the
+// landing gate on "/" stops asking once you've chosen.
+const ChainToggle: FC<{ isRhc: boolean }> = ({ isRhc }) => (
+  <div className="hidden sm:flex items-center border border-[var(--border)] font-mono text-[10px] uppercase tracking-widest">
+    <Link
+      href="/"
+      onClick={() => { try { localStorage.setItem('pl-chain', 'sol'); } catch {} }}
+      className={`px-2.5 py-1 transition-colors ${!isRhc ? 'bg-[var(--accent)] text-black' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+    >
+      SOL
+    </Link>
+    <Link
+      href="/rhc"
+      onClick={() => { try { localStorage.setItem('pl-chain', 'rhc'); } catch {} }}
+      className={`px-2.5 py-1 transition-colors ${isRhc ? 'bg-cyan-400 text-black' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+    >
+      RHC
+    </Link>
+  </div>
+);
+
 export const Navbar: FC = () => {
   const pathname = usePathname();
   const isDemo = pathname?.startsWith('/demo');
+  const isRhc = pathname?.startsWith('/rhc') ?? false;
+  const links = isRhc ? rhcNavLinks : navLinks;
+  // RHC world uses a cyan accent so you always know which chain you're on
+  const accent = isRhc ? 'text-cyan-400' : 'text-[var(--accent)]';
   const [walletsOpen, setWalletsOpen] = useState(false);
   // Demo routes still need the translucent + blurred bar since they
   // bring their own backgrounds. All other routes (flat shell now,
@@ -51,10 +82,11 @@ export const Navbar: FC = () => {
               Proof<span className="text-[var(--accent)]">/</span>Launch
             </span>
           </Link>
+          <ChainToggle isRhc={isRhc} />
 
           {/* Nav links */}
           <div className="hidden md:flex items-center">
-            {navLinks.map((link) => {
+            {links.map((link) => {
               const isActive = pathname === link.href;
               return (
                 <Link
@@ -62,7 +94,7 @@ export const Navbar: FC = () => {
                   href={link.href}
                   className={`px-4 py-2 text-xs font-mono uppercase tracking-widest transition-colors border-l border-[var(--border)] ${
                     isActive
-                      ? 'text-[var(--accent)]'
+                      ? accent
                       : 'text-[var(--muted)] hover:text-[var(--foreground)]'
                   }`}
                 >
@@ -72,14 +104,14 @@ export const Navbar: FC = () => {
               );
             })}
             {/* Platform Wallets — opens a modal instead of navigating */}
-            <button
+            {!isRhc && <button
               type="button"
               onClick={() => setWalletsOpen(true)}
               aria-haspopup="dialog"
               className="px-4 py-2 text-xs font-mono uppercase tracking-widest transition-colors border-l border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
             >
               Wallets
-            </button>
+            </button>}
           </div>
 
           {/* X + Dexscreener + GitHub + Wallet */}
@@ -118,7 +150,7 @@ export const Navbar: FC = () => {
                 <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
               </svg>
             </a>
-            <WalletMultiButton />
+            {!isRhc && <WalletMultiButton />}
           </div>
         </div>
       </div>
@@ -126,7 +158,7 @@ export const Navbar: FC = () => {
       {/* Mobile nav */}
       <div className="md:hidden border-t border-[var(--border)]">
         <div className="flex">
-          {navLinks.map((link) => {
+          {links.map((link) => {
             const isActive = pathname === link.href;
             return (
               <Link
