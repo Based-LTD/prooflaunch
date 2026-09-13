@@ -1,8 +1,10 @@
 'use client';
 
-// Campaign list — reads the chain directly, no backend, no indexer.
-// At beta scale (few campaigns) a multicall per page load is nothing.
+// Campaign list — house style: MemeCard-pattern shells, section headers
+// with the "// LABEL" convention, CSS-variable palette throughout.
+// Reads the chain directly; no backend, no indexer.
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   rhcPublicClient, POOLLAUNCH_FACTORY, factoryAbi, campaignAbi, fmtEth,
 } from '@/lib/rhc';
@@ -53,7 +55,7 @@ export default function RhcListPage() {
                 { ...c, functionName: 'refundable' },
               ],
               allowFailure: false,
-            }) as [
+            }) as unknown as [
               { name: string; symbol: string }, bigint, bigint, bigint, bigint, boolean, boolean, boolean
             ];
           out.push({
@@ -69,63 +71,83 @@ export default function RhcListPage() {
   }, []);
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
+    <div className="max-w-6xl mx-auto pb-8">
       <RhcHeader />
 
-      {error && (
-        <p className="font-mono text-sm text-red-400 border border-red-500 p-4">
-          chain read failed: {error} — refresh to retry
-        </p>
-      )}
-      {!rows && !error && (
-        <p className="font-mono text-sm text-neutral-500 animate-pulse">reading robinhood chain…</p>
-      )}
-      {rows && rows.length === 0 && (
-        <p className="font-mono text-sm text-neutral-500">
-          no campaigns yet — <a href="/rhc/create" className="text-orange-400 underline">create the first</a>
-        </p>
-      )}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        {/* Column header — same convention as the Proving board */}
+        <div className="border-b border-[var(--border)] px-3 py-2 flex items-center justify-between gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            {'// '}CAMPAIGNS
+          </span>
+          <Link
+            href="/rhc/create"
+            className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors"
+          >
+            + Create
+          </Link>
+        </div>
 
-      <div className="space-y-3">
-        {rows?.map((r) => {
-          const pct = r.goal > 0n ? Number((r.totalRaised * 100n) / r.goal) : 0;
-          return (
-            <a
-              key={r.address}
-              href={`/rhc/campaign/${r.address}`}
-              className="block border border-neutral-700 p-4 hover:border-orange-500 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="font-mono">
-                  <span className="text-orange-400 text-lg">${r.symbol}</span>
-                  <span className="text-neutral-400 ml-3">{r.name}</span>
+        <div className="p-3 space-y-3">
+          {error && (
+            <p className="text-xs font-mono text-[var(--error)] border border-[var(--error)]/40 bg-[var(--error)]/5 p-3">
+              CHAIN READ FAILED: {error} — refresh to retry
+            </p>
+          )}
+          {!rows && !error && (
+            <p className="text-xs font-mono text-[var(--muted)] animate-pulse py-6 text-center">
+              reading robinhood chain…
+            </p>
+          )}
+          {rows && rows.length === 0 && (
+            <p className="text-xs font-mono text-[var(--muted)] py-6 text-center">
+              No campaigns yet —{' '}
+              <Link href="/rhc/create" className="text-[var(--accent)] hover:text-[var(--accent-hover)]">
+                create the first
+              </Link>
+            </p>
+          )}
+
+          {rows?.map((r) => {
+            const pct = r.goal > 0n ? Number((r.totalRaised * 100n) / r.goal) : 0;
+            return (
+              <Link key={r.address} href={`/rhc/campaign/${r.address}`} className="block">
+                <div className="border border-[var(--border)] bg-[var(--background)] hover:border-[var(--accent)] transition-colors">
+                  <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5 gap-2">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
+                      ${r.symbol}
+                    </span>
+                    <StatusPill {...r} />
+                  </div>
+                  <div className="px-3 py-2.5">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-mono text-sm text-[var(--foreground)] truncate">{r.name}</span>
+                      <span className="font-mono text-xs text-[var(--muted)] shrink-0">
+                        <span className="text-[var(--foreground)]">{fmtEth(r.totalRaised, 3)}</span>
+                        {' / '}{fmtEth(r.goal, 3)} ETH
+                      </span>
+                    </div>
+                    <div className="mt-2 h-1 bg-[var(--border)]">
+                      <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(100, pct)}%` }} />
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                      <span>{r.backerCount.toString()} backer{r.backerCount === 1n ? '' : 's'}</span>
+                      <span>
+                        {r.launched ? 'LIVE' : `ends ${new Date(Number(r.deadline) * 1000).toLocaleDateString()}`}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <StatusPill {...r} />
-              </div>
-              <div className="mt-3 flex items-center gap-6 font-mono text-xs text-neutral-400">
-                <span>
-                  <span className="text-neutral-200">{fmtEth(r.totalRaised)}</span> / {fmtEth(r.goal)} ETH
-                </span>
-                <span>{r.backerCount.toString()} backer{r.backerCount === 1n ? '' : 's'}</span>
-                <span>
-                  {r.launched ? 'live' : `deadline ${new Date(Number(r.deadline) * 1000).toLocaleString()}`}
-                </span>
-              </div>
-              <div className="mt-2 h-1.5 bg-neutral-800">
-                <div
-                  className="h-full bg-orange-500"
-                  style={{ width: `${Math.min(100, pct)}%` }}
-                />
-              </div>
-            </a>
-          );
-        })}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
-      <p className="mt-10 font-mono text-xs text-neutral-600">
-        90% of creator trading fees to backers · 7% platform · 3% holder rewards — immutable per
-        campaign, enforced on-chain. The platform never holds funds.
+      <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
+        90% of creator fees → backers · 7% platform · 3% holder rewards — immutable per campaign ·
+        the platform never holds funds
       </p>
-    </main>
+    </div>
   );
 }

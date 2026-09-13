@@ -49,7 +49,7 @@ const ChainToggle: FC<{ isRhc: boolean }> = ({ isRhc }) => (
     <Link
       href="/rhc"
       onClick={() => { try { localStorage.setItem('pl-chain', 'rhc'); } catch {} }}
-      className={`px-2.5 py-1 transition-colors ${isRhc ? 'bg-cyan-400 text-black' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+      className={`px-2.5 py-1 transition-colors ${isRhc ? 'bg-[var(--accent-gold)] text-black' : 'text-[var(--muted)] hover:text-[var(--foreground)]'}`}
     >
       RHC
     </Link>
@@ -62,7 +62,7 @@ export const Navbar: FC = () => {
   const isRhc = pathname?.startsWith('/rhc') ?? false;
   const links = isRhc ? rhcNavLinks : navLinks;
   // RHC world uses a cyan accent so you always know which chain you're on
-  const accent = isRhc ? 'text-cyan-400' : 'text-[var(--accent)]';
+  const accent = isRhc ? 'text-[var(--accent-gold)]' : 'text-[var(--accent)]';
   const [walletsOpen, setWalletsOpen] = useState(false);
   // Demo routes still need the translucent + blurred bar since they
   // bring their own backgrounds. All other routes (flat shell now,

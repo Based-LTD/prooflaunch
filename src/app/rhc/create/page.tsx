@@ -1,18 +1,23 @@
 'use client';
 
-// Create a pooled campaign. The creator sets terms once; everything becomes
-// immutable at creation — including fee routing, which no one (us included)
-// can ever change.
+// Create a pooled campaign — mirrors the SOL submit form's styling:
+// shared input/label classes, bordered card sections, btn-primary CTA.
+// Terms become immutable at creation, fee routing included.
 import { useState, useEffect } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, decodeEventLog } from 'viem';
-import { POOLLAUNCH_FACTORY, PONS_FACTORY, factoryAbi, rhcPublicClient } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, PONS_FACTORY, factoryAbi } from '@/lib/rhc';
 import { RhcHeader } from '../components';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
 // proven safe — they graduate at birth), but until the external contract
 // review completes we cap UI-created campaigns. Raise/remove after P3.
 const BETA_GOAL_CAP_ETH = 2;
+
+const inputClass =
+  'w-full px-3 py-2.5 bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono';
+const labelClass =
+  'block text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5';
 
 export default function CreateCampaignPage() {
   const { isConnected } = useAccount();
@@ -61,92 +66,110 @@ export default function CreateCampaignPage() {
     });
   };
 
-  const input = (key: keyof typeof f, label: string, placeholder = '', width = '') => (
-    <label className={`block font-mono text-xs text-neutral-400 ${width}`}>
-      {label}
+  const input = (key: keyof typeof f, lbl: string, placeholder = '') => (
+    <label className={labelClass}>
+      {lbl}
       <input
         value={f[key]}
         onChange={(e) => setF({ ...f, [key]: e.target.value })}
         placeholder={placeholder}
-        className="mt-1 w-full bg-black border border-neutral-600 px-3 py-2 font-mono text-sm text-neutral-200 focus:border-orange-500 outline-none"
+        className={`${inputClass} mt-1.5 normal-case tracking-normal`}
       />
     </label>
   );
 
   if (created) {
     return (
-      <main className="mx-auto max-w-2xl px-4 py-8">
+      <div className="max-w-2xl mx-auto pb-8">
         <RhcHeader />
-        <div className="border border-green-600 p-6 font-mono">
-          <p className="text-green-400 text-lg uppercase tracking-wider">campaign live</p>
-          <p className="mt-2 text-sm text-neutral-300">
-            share this link with your backers:
-          </p>
-          <a href={`/rhc/campaign/${created}`} className="mt-2 block text-orange-400 underline break-all">
-            prooflaunch.fun/rhc/campaign/{created}
-          </a>
+        <div className="border border-[var(--success)]/50 bg-[var(--card)]">
+          <div className="border-b border-[var(--border)] px-3 py-1.5">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
+              {'// '}CAMPAIGN LIVE
+            </span>
+          </div>
+          <div className="p-4">
+            <p className="text-sm font-mono text-[var(--muted)]">Share this link with your backers:</p>
+            <a
+              href={`/rhc/campaign/${created}`}
+              className="mt-2 block font-mono text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] break-all"
+            >
+              prooflaunch.fun/rhc/campaign/{created}
+            </a>
+          </div>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <div className="max-w-2xl mx-auto pb-8">
       <RhcHeader />
-      <h1 className="font-mono text-lg text-neutral-200 uppercase tracking-widest mb-6">create pooled launch</h1>
 
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          {input('name', 'token name', 'e.g. Proof Coin')}
-          {input('symbol', 'symbol', 'e.g. PROOF')}
-        </div>
-        {input('logo', 'logo url (https)', 'https://…/logo.png')}
-        <label className="block font-mono text-xs text-neutral-400">
-          description
-          <textarea
-            value={f.description}
-            onChange={(e) => setF({ ...f, description: e.target.value })}
-            rows={3}
-            className="mt-1 w-full bg-black border border-neutral-600 px-3 py-2 font-mono text-sm text-neutral-200 focus:border-orange-500 outline-none"
-          />
-        </label>
-        <div className="grid grid-cols-3 gap-4">
-          {input('twitter', 'x / twitter', 'https://x.com/…')}
-          {input('telegram', 'telegram', '')}
-          {input('website', 'website', '')}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 border-t border-neutral-800 pt-4">
-          {input('goal', 'goal (eth)')}
-          {input('min', 'min/backer')}
-          {input('max', 'max/backer (0=∞)')}
-          {input('slots', 'slots (0=∞)')}
-          {input('days', 'deadline (days)')}
+      <div className="border border-[var(--border)] bg-[var(--card)]">
+        <div className="border-b border-[var(--border)] px-3 py-1.5">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            {'// '}CREATE POOLED LAUNCH
+          </span>
         </div>
 
-        <div className="border border-neutral-800 p-3 font-mono text-xs text-neutral-500">
-          fixed at creation, forever: 90% of creator trading fees → backers pro-rata ·
-          7% platform · 3% holder rewards. launch fires the pooled buy snipe-exempt on
-          the launch block. if the goal isn&apos;t met by deadline, refunds open automatically.
-        </div>
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {input('name', 'Token Name', 'e.g. Proof Coin')}
+            {input('symbol', 'Symbol', 'e.g. PROOF')}
+          </div>
+          {input('logo', 'Logo URL (https)', 'https://…/logo.png')}
+          <label className={labelClass}>
+            Description
+            <textarea
+              value={f.description}
+              onChange={(e) => setF({ ...f, description: e.target.value })}
+              rows={3}
+              className={`${inputClass} mt-1.5 normal-case tracking-normal resize-none`}
+            />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {input('twitter', 'X / Twitter', 'https://x.com/…')}
+            {input('telegram', 'Telegram')}
+            {input('website', 'Website')}
+          </div>
 
-        {Number(f.goal) > BETA_GOAL_CAP_ETH && (
-          <p className="font-mono text-xs text-orange-400">
-            beta cap: goals are limited to {BETA_GOAL_CAP_ETH} ETH until the external contract
-            review completes. (A {f.goal} ETH raise would work — oversized raises graduate at
-            launch — we&apos;re just walking before running.)
-          </p>
-        )}
-        <button
-          onClick={submit}
-          disabled={!isConnected || isPending || !f.name || !f.symbol || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH}
-          className="border border-orange-500 px-8 py-3 font-mono text-sm uppercase tracking-widest text-orange-400 hover:bg-orange-500 hover:text-black transition-colors disabled:opacity-40"
-        >
-          {isPending ? 'confirm in wallet…' : isConnected ? 'create campaign' : 'connect wallet first'}
-        </button>
-        {error && (
-          <p className="font-mono text-xs text-red-400">{(error as Error).message.split('\n')[0].slice(0, 160)}</p>
-        )}
+          <div className="border-t border-[var(--border)] pt-4 grid grid-cols-2 sm:grid-cols-5 gap-4">
+            {input('goal', 'Goal (ETH)')}
+            {input('min', 'Min / Backer')}
+            {input('max', 'Max (0 = ∞)')}
+            {input('slots', 'Slots (0 = ∞)')}
+            {input('days', 'Deadline (Days)')}
+          </div>
+
+          <div className="border border-[var(--border)] bg-[var(--background)] p-3 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] leading-relaxed">
+            Fixed at creation, forever: 90% of creator trading fees → backers pro-rata ·
+            7% platform · 3% holder rewards. The pooled buy fires snipe-exempt on the
+            launch block. Goal unmet by deadline → refunds open automatically.
+          </div>
+
+          {Number(f.goal) > BETA_GOAL_CAP_ETH && (
+            <p className="text-xs font-mono text-[var(--warning)]">
+              BETA CAP: goals are limited to {BETA_GOAL_CAP_ETH} ETH until the external contract
+              review completes. (A {f.goal} ETH raise would work — oversized raises graduate at
+              launch — we&apos;re just walking before running.)
+            </p>
+          )}
+
+          <button
+            onClick={submit}
+            disabled={!isConnected || isPending || !f.name || !f.symbol || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH}
+            className="btn-primary"
+          >
+            {isPending ? 'Confirm in Wallet…' : isConnected ? 'Create Campaign' : 'Connect Wallet First'}
+          </button>
+          {error && (
+            <p className="text-xs font-mono text-[var(--error)]">
+              {(error as Error).message.split('\n')[0].slice(0, 160)}
+            </p>
+          )}
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
