@@ -32,44 +32,56 @@ export function ChainGate() {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center px-4">
+    <div className="fixed inset-0 z-[60] bg-[var(--background)]/97 backdrop-blur-sm flex items-center justify-center px-4">
       <div className="max-w-3xl w-full">
         <div className="text-center mb-10">
-          <p className="font-mono text-2xl tracking-wider uppercase">
+          <p className="font-mono text-2xl tracking-wider uppercase text-[var(--foreground)]">
             <span className="text-[var(--accent)]">▮</span> Proof<span className="text-[var(--accent)]">/</span>Launch
           </p>
-          <p className="font-mono text-sm text-neutral-500 mt-2">
-            community-pooled token launches · pick your chain (switch anytime)
+          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mt-2">
+            {'// '}community-pooled token launches · pick your chain · switch anytime
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-4">
           <button
             onClick={() => choose('sol')}
-            className="group border border-neutral-700 hover:border-orange-500 p-6 text-left transition-colors"
+            className="group border border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] text-left transition-colors"
           >
-            <p className="font-mono text-lg text-orange-400 uppercase tracking-widest">Solana</p>
-            <p className="font-mono text-xs text-neutral-400 mt-2 leading-relaxed">
-              The original. Pooled pump.fun launches with fee share to backers —
-              live tokens, $PROOF holder rewards, full launch history.
-            </p>
-            <p className="font-mono text-xs text-orange-400/70 mt-4 group-hover:text-orange-400">
-              enter with Phantom/Solflare →
-            </p>
+            <div className="border-b border-[var(--border)] px-3 py-1.5">
+              <span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent)]/60 text-[var(--accent)] bg-[var(--accent)]/5">
+                Solana
+              </span>
+            </div>
+            <div className="p-4">
+              <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">
+                The original. Pooled pump.fun launches with fee share to backers —
+                live tokens, $PROOF holder rewards, full launch history.
+              </p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-dim)] mt-4 group-hover:text-[var(--accent)] transition-colors">
+                {'> '}Enter with Phantom / Solflare
+              </p>
+            </div>
           </button>
 
           <button
             onClick={() => choose('rhc')}
-            className="group border border-neutral-700 hover:border-cyan-400 p-6 text-left transition-colors"
+            className="group border border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] text-left transition-colors"
           >
-            <p className="font-mono text-lg text-cyan-400 uppercase tracking-widest">Robinhood Chain</p>
-            <p className="font-mono text-xs text-neutral-400 mt-2 leading-relaxed">
-              The trustless one. Pool the raise, own the float, earn the fees —
-              enforced by ownerless contracts. Launches on pons. New.
-            </p>
-            <p className="font-mono text-xs text-cyan-400/70 mt-4 group-hover:text-cyan-400">
-              enter with Phantom/MetaMask →
-            </p>
+            <div className="border-b border-[var(--border)] px-3 py-1.5">
+              <span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent-gold)]/60 text-[var(--accent-gold)] bg-[var(--accent-gold)]/5">
+                Robinhood Chain
+              </span>
+            </div>
+            <div className="p-4">
+              <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">
+                The trustless one. Pool the raise, own the float, earn the fees —
+                enforced by ownerless contracts. Launches on pons. New.
+              </p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-dim)] mt-4 group-hover:text-[var(--accent)] transition-colors">
+                {'> '}Enter with Phantom / MetaMask
+              </p>
+            </div>
           </button>
         </div>
       </div>
