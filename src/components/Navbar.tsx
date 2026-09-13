@@ -21,6 +21,9 @@ const navLinks = [
   { href: '/submit', label: 'Submit' },
   { href: '/launched', label: 'Launched' },
   { href: '/portfolio', label: 'Portfolio' },
+  // PoolLaunch on Robinhood Chain — descriptive naming only ("RHC"), never
+  // "Robinhood" alone in nav/marketing (trademark care, spec §6)
+  { href: '/rhc', label: 'RHC' },
   { href: '/docs', label: 'Docs' },
   { href: '/roadmap', label: 'Roadmap' },
   { href: '/proof', label: 'Audit' },
