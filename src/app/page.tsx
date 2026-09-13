@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { MemeCard } from '@/components/MemeCard';
+import { ChainGate } from '@/components/ChainGate';
 import { LandingHero } from '@/components/LandingHero';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { useRealtimeMemes } from '@/hooks/useRealtimeMemes';
@@ -82,6 +83,9 @@ export default function Home() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
+      {/* First-visit chain chooser (SOL vs RHC). Remembers the choice;
+          the navbar toggle updates it thereafter. Deep links never gated. */}
+      <ChainGate />
       {/* Landing hero — MAINNET chip + headline + subtext + stats +
           SUBMIT TOKEN CTA. Self-contained; no scroll-to-grounds button
           (the board below scrolls into view naturally). */}

@@ -12,6 +12,12 @@ export const robinhoodChain = defineChain({
   blockExplorers: {
     default: { name: 'Blockscout', url: 'https://robinhoodchain.blockscout.com' },
   },
+  contracts: {
+    // Canonical multicall3 — verified deployed on RHC (eth_getCode,
+    // 2026-09-14). Without this, viem multicall throws "chain does not
+    // support contract multicall3" and every /rhc page dies on read.
+    multicall3: { address: '0xcA11bde05977b3631167028862bE2a173976CA11' },
+  },
 });
 
 // Deployed 2026-09-13 — see contracts/rhc/DEPLOYMENTS.md. pons rotates
