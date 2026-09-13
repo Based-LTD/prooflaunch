@@ -85,6 +85,66 @@ export function fmtEth(wei: bigint, digits = 4): string {
   return (Number(wei) / 1e18).toFixed(digits);
 }
 
+// One row per campaign, everything the UI needs, including the connected
+// wallet's position when `me` is provided. Reads the chain directly —
+// fine at beta scale, replace with an indexer when volume demands.
+export interface CampaignRow {
+  address: `0x${string}`;
+  name: string;
+  symbol: string;
+  goal: bigint;
+  totalRaised: bigint;
+  backerCount: bigint;
+  deadline: bigint;
+  launched: boolean;
+  cancelled: boolean;
+  refundable: boolean;
+  token: `0x${string}`;
+  myContribution: bigint;
+  myTokensClaimed: boolean;
+}
+
+export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow[]> {
+  const zero = '0x0000000000000000000000000000000000000000' as `0x${string}`;
+  const who = me ?? zero;
+  const count = await rhcPublicClient.readContract({
+    address: POOLLAUNCH_FACTORY, abi: factoryAbi, functionName: 'campaignCount',
+  });
+  const rows: CampaignRow[] = [];
+  for (let i = 0n; i < count; i++) {
+    const address = await rhcPublicClient.readContract({
+      address: POOLLAUNCH_FACTORY, abi: factoryAbi, functionName: 'campaigns', args: [i],
+    });
+    const c = { address, abi: campaignAbi } as const;
+    const [meta, goal, totalRaised, backerCount, deadline, launched, cancelled, refundable, token, myContribution, myTokensClaimed] =
+      await rhcPublicClient.multicall({
+        contracts: [
+          { ...c, functionName: 'tokenMeta' },
+          { ...c, functionName: 'goal' },
+          { ...c, functionName: 'totalRaised' },
+          { ...c, functionName: 'backerCount' },
+          { ...c, functionName: 'deadline' },
+          { ...c, functionName: 'launched' },
+          { ...c, functionName: 'cancelled' },
+          { ...c, functionName: 'refundable' },
+          { ...c, functionName: 'token' },
+          { ...c, functionName: 'contributionOf', args: [who] },
+          { ...c, functionName: 'tokensClaimed', args: [who] },
+        ],
+        allowFailure: false,
+      }) as unknown as [
+        { name: string; symbol: string }, bigint, bigint, bigint, bigint,
+        boolean, boolean, boolean, `0x${string}`, bigint, boolean
+      ];
+    rows.push({
+      address, name: meta.name, symbol: meta.symbol, goal, totalRaised,
+      backerCount, deadline, launched, cancelled, refundable, token,
+      myContribution, myTokensClaimed,
+    });
+  }
+  return rows.reverse(); // newest first
+}
+
 export function explorerUrl(addr: string): string {
   return `https://robinhoodchain.blockscout.com/address/${addr}`;
 }
