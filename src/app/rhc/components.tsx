@@ -1,11 +1,10 @@
 'use client';
 
-// Shared RHC UI — styled to match the SOL site's design system exactly:
-// same CSS variables, card shells, chip and label conventions. The only
-// RHC-specific signal is the small "ROBINHOOD CHAIN" chip in the header
-// (wayfinding), everything else is the house style.
+// Shared RHC UI — the SOL design system verbatim: same variables, card
+// shells, chip and label conventions. Same site, different chain.
+import Link from 'next/link';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
-import { robinhoodChain } from '@/lib/rhc';
+import { robinhoodChain, CampaignRow, fmtEth } from '@/lib/rhc';
 
 export function ConnectButton() {
   const { address, isConnected, chainId } = useAccount();
@@ -15,18 +14,27 @@ export function ConnectButton() {
 
   if (!isConnected) {
     return (
-      <button onClick={() => connect({ connector: connectors[0] })} disabled={isPending} className="btn-primary">
+      <button
+        // Connecting requests Robinhood Chain in the same step — users
+        // should never meet a separate "switch network" ceremony.
+        onClick={() => connect({ connector: connectors[0], chainId: robinhoodChain.id })}
+        disabled={isPending}
+        className="btn-primary"
+      >
         {isPending ? 'Connecting…' : 'Connect Wallet'}
       </button>
     );
   }
   if (chainId !== robinhoodChain.id) {
+    // Rare fallback (user hopped networks mid-session): fix it silently
+    // in one tap, styled like the normal wallet chip — no scary banner.
     return (
       <button
         onClick={() => switchChain({ chainId: robinhoodChain.id })}
-        className="px-4 py-2.5 text-xs font-mono uppercase tracking-widest border border-[var(--error)] text-[var(--error)] hover:bg-[var(--error)] hover:text-black transition-colors"
+        className="px-4 py-2.5 text-xs font-mono border border-[var(--warning)]/60 text-[var(--warning)] hover:bg-[var(--warning)] hover:text-black transition-colors"
+        title="Your wallet is on another network — click to hop back"
       >
-        Switch to Robinhood Chain
+        {address?.slice(0, 6)}…{address?.slice(-4)} ⚠
       </button>
     );
   }
@@ -42,13 +50,10 @@ export function ConnectButton() {
 }
 
 export function RhcHeader() {
-  // Brand + nav live in the global Navbar (chain-aware). This row carries
-  // the chain chip + tagline and the EVM wallet button (wagmi context is
-  // scoped to /rhc, so the button can't live in the global navbar).
   return (
     <div className="flex flex-wrap items-center justify-between mb-6 gap-3">
       <div className="flex items-center gap-2.5 min-w-0">
-        <span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent)]/60 text-[var(--accent)] bg-[var(--accent)]/5 shrink-0">
+        <span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--accent-gold)]/60 text-[var(--accent-gold)] bg-[var(--accent-gold)]/5 shrink-0">
           Robinhood Chain
         </span>
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
@@ -79,5 +84,65 @@ export function StatusPill({ launched, cancelled, refundable, deadline, totalRai
     >
       {label}
     </span>
+  );
+}
+
+// One campaign card — the MemeCard pattern, reused across the board
+// columns, /rhc/launched, and /rhc/portfolio.
+export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.ReactNode }) {
+  const pct = r.goal > 0n ? Number((r.totalRaised * 100n) / r.goal) : 0;
+  return (
+    <Link href={`/rhc/campaign/${r.address}`} className="block">
+      <div className="border border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] transition-colors">
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5 gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
+            ${r.symbol}
+          </span>
+          <StatusPill {...r} />
+        </div>
+        <div className="px-3 py-2.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-mono text-sm text-[var(--foreground)] truncate">{r.name}</span>
+            <span className="font-mono text-xs text-[var(--muted)] shrink-0">
+              <span className="text-[var(--foreground)]">{fmtEth(r.totalRaised, 3)}</span>
+              {' / '}{fmtEth(r.goal, 3)} ETH
+            </span>
+          </div>
+          <div className="mt-2 h-1 bg-[var(--border)]">
+            <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(100, pct)}%` }} />
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            <span>{r.backerCount.toString()} backer{r.backerCount === 1n ? '' : 's'}</span>
+            <span>{r.launched ? 'LIVE' : `ends ${new Date(Number(r.deadline) * 1000).toLocaleDateString()}`}</span>
+          </div>
+          {footer}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// A board column — same skeleton as the SOL Proving board's columns.
+export function BoardColumn({ label, icon, items, empty }: {
+  label: string; icon: string; items: CampaignRow[]; empty: string;
+}) {
+  return (
+    <div className="border border-[var(--border)] bg-[var(--card)] flex flex-col md:max-h-[75vh]">
+      <div className="border-b border-[var(--border)] px-3 py-2 flex items-center gap-2 shrink-0">
+        <span className="text-[var(--accent)] text-xs">{icon}</span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+          {'// '}{label}
+        </span>
+        <span className="ml-auto text-[10px] font-mono text-[var(--muted-soft)]">{items.length}</span>
+      </div>
+      <div className="p-2.5 space-y-2.5 overflow-y-auto">
+        {items.length === 0 && (
+          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] py-4 text-center">
+            {empty}
+          </p>
+        )}
+        {items.map((r) => <CampaignCard key={r.address} r={r} />)}
+      </div>
+    </div>
   );
 }

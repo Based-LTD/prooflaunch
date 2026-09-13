@@ -29,10 +29,16 @@ const navLinks = [
 // The RHC world gets its own nav — two clearly-scoped worlds, one brand.
 // Naming stays descriptive ("RHC"), never "Robinhood" alone (trademark
 // care, docs/rhc-poollaunch-spec.md §6).
+// Mirrors the SOL nav 1:1 — same labels, same order, same UX; targets are
+// the RHC world's equivalents. Same site, different chain.
 const rhcNavLinks = [
-  { href: '/rhc', label: 'Campaigns' },
-  { href: '/rhc/create', label: 'Create' },
+  { href: '/rhc', label: 'Proving' },
+  { href: '/rhc/create', label: 'Submit' },
+  { href: '/rhc/launched', label: 'Launched' },
+  { href: '/rhc/portfolio', label: 'Portfolio' },
   { href: '/docs', label: 'Docs' },
+  { href: '/roadmap', label: 'Roadmap' },
+  { href: '/rhc/audit', label: 'Audit' },
 ];
 
 // Persistent chain switcher: one click between worlds, remembered so the
@@ -112,6 +118,12 @@ export const Navbar: FC = () => {
             >
               Wallets
             </button>}
+            {isRhc && <Link
+              href="/rhc/audit"
+              className="px-4 py-2 text-xs font-mono uppercase tracking-widest transition-colors border-l border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              Wallets
+            </Link>}
           </div>
 
           {/* X + Dexscreener + GitHub + Wallet */}
