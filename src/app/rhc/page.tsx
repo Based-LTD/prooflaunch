@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAllCampaigns, CampaignRow } from '@/lib/rhc';
 import { RhcHeader, BoardColumn } from './components';
+import { RhcHero } from './RhcHero';
 
 export default function RhcBoardPage() {
   const [rows, setRows] = useState<CampaignRow[] | null>(null);
@@ -25,6 +26,7 @@ export default function RhcBoardPage() {
   return (
     <div className="max-w-6xl mx-auto pb-8">
       <RhcHeader />
+      <RhcHero rows={rows} />
 
       {error && (
         <p className="text-xs font-mono text-[var(--error)] border border-[var(--error)]/40 bg-[var(--error)]/5 p-3 mb-4">

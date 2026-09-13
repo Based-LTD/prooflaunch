@@ -6,6 +6,7 @@ import {Campaign} from "../src/Campaign.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
 import {FeeSplitter} from "../src/FeeSplitter.sol";
 import {IPonsFactory, PonsTokenMeta, PonsSocials} from "../src/interfaces/IPons.sol";
+import {IUniV3FactoryMin} from "../src/BurnLeg.sol";
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ contract CampaignTest is Test {
 
     function setUp() public {
         pons = new MockPons();
-        cf = new CampaignFactory(platform, rewards, 500, 500);
+        cf = new CampaignFactory(platform, rewards, 500, 500, address(0xBEEF), IUniV3FactoryMin(address(0)), 10000);
         vm.prank(creator);
         c = cf.createCampaign(
             IPonsFactory(address(pons)),
@@ -87,7 +88,8 @@ contract CampaignTest is Test {
             2 ether,      // max
             10,           // slots
             block.timestamp + 3 days,
-            0, 0, _meta()
+            0, 0, _meta(),
+            0, new address[](0), new uint16[](0)
         );
         vm.deal(alice, 10 ether);
         vm.deal(bob, 10 ether);

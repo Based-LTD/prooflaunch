@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Campaign} from "../src/Campaign.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
 import {IPonsFactory, IPonsLocker, IERC20, PonsTokenMeta, PonsSocials} from "../src/interfaces/IPons.sol";
+import {IUniV3FactoryMin} from "../src/BurnLeg.sol";
 
 /// Fork tests against the LIVE pons factory on Robinhood Chain.
 /// Run with:  forge test --match-contract Fork -vv
@@ -26,7 +27,7 @@ contract ForkTest is Test {
             vm.skip(true);
             return;
         }
-        cf = new CampaignFactory(address(0xFEE), address(0x4EAA), 500, 500);
+        cf = new CampaignFactory(address(0xFEE), address(0x4EAA), 500, 500, 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73, IUniV3FactoryMin(0x1f7d7550B1b028f7571E69A784071F0205FD2EfA), 10000);
         PonsTokenMeta memory meta = PonsTokenMeta(
             "PoolLaunch Fork Probe", "PLFP", "", "fork test - never mainnet",
             PonsSocials("", "", "", "", ""), address(0)
@@ -36,7 +37,8 @@ contract ForkTest is Test {
             IPonsFactory(PONS_FACTORY),
             1 ether, 0.1 ether, 2 ether, 24,
             block.timestamp + 1 days,
-            0, 0, meta
+            0, 0, meta,
+            0, new address[](0), new uint16[](0)
         );
         vm.deal(alice, 5 ether);
         vm.deal(bob, 5 ether);
