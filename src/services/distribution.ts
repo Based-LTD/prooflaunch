@@ -279,7 +279,16 @@ const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-b
 // Default split when a meme has no per-meme fee config (legacy / pre-Phase-2):
 // 10% platform / 90% backers. Phase-2+ memes override via meme.fee_backer_pct.
 const DEFAULT_PLATFORM_FEE_CUT = 0.10;
-const COLLECT_THRESHOLD_LAMPORTS = 50_000; // skip if vault < this (~$0.0075) — amortizes 2 × 5k tx fees with safety margin
+// Collection floor. Originally 50k lamports, sized to amortize ~10k of TX
+// FEES — but the 2026-09-13 escrow forensic (tools/audit-escrow-pnl.mjs)
+// showed the real per-cycle cost is ATA RENT CHURN: each drain cycle can
+// create wSOL/temp token accounts at ~1.5-2M lamports rent, and when those
+// accounts close, rent returns to their OWNERS — which is not always the
+// escrow. At the 5-minute cron cadence (288 cycles/day) this quietly gifted
+// ~0.66 SOL of rent over 12 days while fees earned only ~0.08. Floor raised
+// 100x so a cycle only fires when the drain clearly exceeds its worst-case
+// rent cost. Fees below the floor sit safely in the vaults and accumulate.
+const COLLECT_THRESHOLD_LAMPORTS = 5_000_000; // 0.005 SOL
 
 function loadEscrow(): Keypair {
   const k = process.env.ESCROW_WALLET_PRIVATE_KEY;
