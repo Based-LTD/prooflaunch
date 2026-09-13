@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {CampaignFactory} from "../src/CampaignFactory.sol";
+import {IUniV3FactoryMin} from "../src/BurnLeg.sol";
 
 /// Deploys the PoolLaunch CampaignFactory to Robinhood Chain (4663).
 ///
@@ -32,7 +33,10 @@ contract Deploy is Script {
             platformRecipient,
             rewardsRecipient,
             700, // platform 7%
-            300  // holder-rewards 3%
+            300, // holder-rewards 3%
+            0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73, // WETH on RHC
+            IUniV3FactoryMin(0x1f7d7550B1b028f7571E69A784071F0205FD2EfA), // pons v3 factory
+            10000 // 1% pool fee tier
         );
         vm.stopBroadcast();
 

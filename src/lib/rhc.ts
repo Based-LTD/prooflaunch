@@ -23,7 +23,8 @@ export const robinhoodChain = defineChain({
 // Deployed 2026-09-13 — see contracts/rhc/DEPLOYMENTS.md. pons rotates
 // factories; OUR factory is stable, the pons target is baked into each
 // campaign at creation.
-export const POOLLAUNCH_FACTORY = '0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d' as const;
+export const POOLLAUNCH_FACTORY = '0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5' as const; // v2 — bot legs
+export const POOLLAUNCH_FACTORY_V1 = '0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d' as const; // legacy, read-only
 export const PONS_FACTORY = '0xF4fC0CD27fC8EcF17E55eE4c3f7201897dF3eb75' as const;
 
 export const rhcPublicClient = createPublicClient({
@@ -36,7 +37,7 @@ export const factoryAbi = parseAbi([
   'function campaigns(uint256) view returns (address)',
   'function platformBps() view returns (uint16)',
   'function holderRewardsBps() view returns (uint16)',
-  'function createCampaign(address ponsFactory, uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint256 dexId, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta) returns (address)',
+  'function createCampaign(address ponsFactory, uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint256 dexId, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta, uint16 burnBps, address[] vaultRecipients, uint16[] vaultBps) returns (address)',
   'event CampaignCreated(address indexed campaign, address indexed creator, address feeSplitter, uint256 goal, uint256 deadline, string symbol)',
 ]);
 
@@ -107,14 +108,21 @@ export interface CampaignRow {
 export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow[]> {
   const zero = '0x0000000000000000000000000000000000000000' as `0x${string}`;
   const who = me ?? zero;
-  const count = await rhcPublicClient.readContract({
-    address: POOLLAUNCH_FACTORY, abi: factoryAbi, functionName: 'campaignCount',
-  });
-  const rows: CampaignRow[] = [];
-  for (let i = 0n; i < count; i++) {
-    const address = await rhcPublicClient.readContract({
-      address: POOLLAUNCH_FACTORY, abi: factoryAbi, functionName: 'campaigns', args: [i],
+  // v2 first (current), then v1 (legacy campaigns stay visible forever —
+  // their contracts are immutable and keep working regardless of factory).
+  const addrs: `0x${string}`[] = [];
+  for (const factory of [POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V1]) {
+    const count = await rhcPublicClient.readContract({
+      address: factory, abi: factoryAbi, functionName: 'campaignCount',
     });
+    for (let i = 0n; i < count; i++) {
+      addrs.push(await rhcPublicClient.readContract({
+        address: factory, abi: factoryAbi, functionName: 'campaigns', args: [i],
+      }));
+    }
+  }
+  const rows: CampaignRow[] = [];
+  for (const address of addrs) {
     const c = { address, abi: campaignAbi } as const;
     const [meta, goal, totalRaised, backerCount, deadline, launched, cancelled, refundable, token, myContribution, myTokensClaimed] =
       await rhcPublicClient.multicall({

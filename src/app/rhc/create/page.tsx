@@ -26,6 +26,14 @@ export default function CreateCampaignPage() {
     twitter: '', telegram: '', website: '',
     goal: '1', min: '0.05', max: '0', slots: '0', days: '3',
   });
+  // Bot stack — the RHC twin of the SOL launch bots. Burn runs as an
+  // ownerless BurnLeg contract; vaults are named wallets that pull their
+  // leg of fees anytime. All carved from the backer share.
+  const [burnPct, setBurnPct] = useState('0');
+  const [vaults, setVaults] = useState<{ addr: string; pct: string }[]>([]);
+  const botsPct = (Number(burnPct) || 0) + vaults.reduce((s, v) => s + (Number(v.pct) || 0), 0);
+  const backerPct = 90 - botsPct;
+  const vaultsValid = vaults.every(v => (Number(v.pct) || 0) >= 0 && (/^0x[0-9a-fA-F]{40}$/.test(v.addr) || v.pct === '' || v.pct === '0'));
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { data: receipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const [created, setCreated] = useState<string | null>(null);
@@ -62,6 +70,9 @@ export default function CreateCampaignPage() {
           socials: { twitter: f.twitter, telegram: f.telegram, discord: '', website: f.website, farcaster: '' },
           feeWallet: '0x0000000000000000000000000000000000000000', // overwritten by the contract → FeeSplitter
         },
+        Math.round((Number(burnPct) || 0) * 100),
+        vaults.filter(v => Number(v.pct) > 0).map(v => v.addr as `0x${string}`),
+        vaults.filter(v => Number(v.pct) > 0).map(v => Math.round(Number(v.pct) * 100)),
       ],
     });
   };
@@ -142,9 +153,64 @@ export default function CreateCampaignPage() {
             {input('days', 'Deadline (Days)')}
           </div>
 
+          {/* ── Bot stack — same concept as the SOL launch bots ── */}
+          <div className="border-t border-[var(--border)] pt-4">
+            <span className={labelClass}>{'// '}Launch Bots (optional — carved from the backer share)</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+              <label className={labelClass}>
+                🔥 Burn Bot — % of fees that buy & burn the token
+                <input
+                  value={burnPct}
+                  onChange={(e) => setBurnPct(e.target.value)}
+                  placeholder="0"
+                  className={`${inputClass} mt-1.5`}
+                />
+                <span className="block mt-1 normal-case tracking-normal text-[var(--muted-soft)]">
+                  Runs as an ownerless contract. Anyone can crank it; nobody can stop it.
+                </span>
+              </label>
+              <div>
+                <span className={labelClass}>🏦 Vault Legs — named wallets that earn a fee %</span>
+                {vaults.map((v, i) => (
+                  <div key={i} className="flex gap-2 mt-1.5">
+                    <input
+                      value={v.addr}
+                      onChange={(e) => setVaults(vaults.map((x, j) => j === i ? { ...x, addr: e.target.value } : x))}
+                      placeholder="0x… (marketing / DAO / LP wallet)"
+                      className={inputClass}
+                    />
+                    <input
+                      value={v.pct}
+                      onChange={(e) => setVaults(vaults.map((x, j) => j === i ? { ...x, pct: e.target.value } : x))}
+                      placeholder="%"
+                      className={`${inputClass} w-20`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setVaults(vaults.filter((_, j) => j !== i))}
+                      className="px-2 text-[var(--muted)] hover:text-[var(--error)] font-mono"
+                    >×</button>
+                  </div>
+                ))}
+                {vaults.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setVaults([...vaults, { addr: '', pct: '' }])}
+                    className="mt-1.5 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                  >
+                    + Add Vault
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className={`mt-2 text-[10px] font-mono uppercase tracking-widest ${backerPct < 10 ? 'text-[var(--warning)]' : 'text-[var(--muted)]'}`}>
+              Backers receive {backerPct}% of creator fees{botsPct > 0 ? ` (90% − ${botsPct}% bots)` : ''} · 7% platform · 3% holder rewards
+            </p>
+          </div>
+
           <div className="border border-[var(--border)] bg-[var(--background)] p-3 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] leading-relaxed">
-            Fixed at creation, forever: 90% of creator trading fees → backers pro-rata ·
-            7% platform · 3% holder rewards. The pooled buy fires snipe-exempt on the
+            Fixed at creation, forever: {backerPct}% of creator trading fees → backers pro-rata ·
+            7% platform · 3% holder rewards{botsPct > 0 ? ` · ${botsPct}% bots` : ''}. The pooled buy fires snipe-exempt on the
             launch block. Goal unmet by deadline → refunds open automatically.
           </div>
 
@@ -158,7 +224,7 @@ export default function CreateCampaignPage() {
 
           <button
             onClick={submit}
-            disabled={!isConnected || isPending || !f.name || !f.symbol || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH}
+            disabled={!isConnected || isPending || !f.name || !f.symbol || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH || backerPct < 0 || !vaultsValid}
             className="btn-primary"
           >
             {isPending ? 'Confirm in Wallet…' : isConnected ? 'Create Campaign' : 'Connect Wallet First'}
