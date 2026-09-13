@@ -9,6 +9,11 @@ import { parseEther, decodeEventLog } from 'viem';
 import { POOLLAUNCH_FACTORY, PONS_FACTORY, factoryAbi, rhcPublicClient } from '@/lib/rhc';
 import { RhcHeader } from '../components';
 
+// Soft-launch guardrail: contracts allow any goal (oversized raises are
+// proven safe — they graduate at birth), but until the external contract
+// review completes we cap UI-created campaigns. Raise/remove after P3.
+const BETA_GOAL_CAP_ETH = 2;
+
 export default function CreateCampaignPage() {
   const { isConnected } = useAccount();
   const [f, setF] = useState({
@@ -124,9 +129,16 @@ export default function CreateCampaignPage() {
           the launch block. if the goal isn&apos;t met by deadline, refunds open automatically.
         </div>
 
+        {Number(f.goal) > BETA_GOAL_CAP_ETH && (
+          <p className="font-mono text-xs text-orange-400">
+            beta cap: goals are limited to {BETA_GOAL_CAP_ETH} ETH until the external contract
+            review completes. (A {f.goal} ETH raise would work — oversized raises graduate at
+            launch — we&apos;re just walking before running.)
+          </p>
+        )}
         <button
           onClick={submit}
-          disabled={!isConnected || isPending || !f.name || !f.symbol || Number(f.goal) <= 0}
+          disabled={!isConnected || isPending || !f.name || !f.symbol || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH}
           className="border border-orange-500 px-8 py-3 font-mono text-sm uppercase tracking-widest text-orange-400 hover:bg-orange-500 hover:text-black transition-colors disabled:opacity-40"
         >
           {isPending ? 'confirm in wallet…' : isConnected ? 'create campaign' : 'connect wallet first'}
