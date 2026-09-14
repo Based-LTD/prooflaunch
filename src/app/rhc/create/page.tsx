@@ -4,10 +4,10 @@
 // card, same section skeleton (LAUNCH_PLATFORM / BASICS / SOCIALS /
 // RAISE_TERMS / LAUNCH_BOTS), same sticky live-preview rail, same bot
 // stack picker UX. Terms become immutable at creation.
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, decodeEventLog } from 'viem';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Upload, X } from 'lucide-react';
 import { POOLLAUNCH_FACTORY_V5, AIRDROP_OPERATOR, factoryV3Abi } from '@/lib/rhc';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
@@ -48,10 +48,31 @@ const PCT_PRESETS = ['5', '10', '20', '30'];
 export default function CreateCampaignPage() {
   const { address, isConnected } = useAccount();
   const [f, setF] = useState({
-    name: '', symbol: '', logo: '', description: '',
-    twitter: '', telegram: '', website: '',
+    name: '', symbol: '', description: '',
+    twitter: '', telegram: '', discord: '', website: '', farcaster: '',
     goal: '1', min: '0.05', max: '0', slots: '0', days: '3',
   });
+  // Token image — uploaded to /api/upload/image at submit (same route as
+  // the SOL page); the public URL becomes the on-chain pons logo.
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { setImageError('Max 2MB'); return; }
+    setImageError(null);
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+  const removeImage = () => {
+    setImageFile(null); setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
   const [botsEnabled, setBotsEnabled] = useState(false);
   const [stack, setStack] = useState<BotItem[]>([]);
   // pons V2 creator tax: 0–10% of every trade, immutable at launch, earned
@@ -88,7 +109,25 @@ export default function CreateCampaignPage() {
     }
   }, [isSuccess, receipt]);
 
-  const submit = () => {
+  const submit = async () => {
+    // Upload the token image first — its public URL is baked into the
+    // immutable on-chain metadata, so it has to exist before the tx.
+    let logoUrl = '';
+    if (imageFile) {
+      try {
+        setUploading(true);
+        const fd = new FormData();
+        fd.append('file', imageFile);
+        const res = await fetch('/api/upload/image', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Image upload failed');
+        logoUrl = (await res.json()).url;
+      } catch (e) {
+        setImageError(e instanceof Error ? e.message : String(e));
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(f.days) * 86400);
     const pctOf = (k: BotKind) => Math.round((Number(activeStack.find((b) => b.kind === k)?.pct) || 0) * 100);
     const vaultLegs = activeStack.filter((b) => (b.kind === 'vault' || b.kind === 'airdrop') && Number(b.pct) > 0);
@@ -106,8 +145,8 @@ export default function CreateCampaignPage() {
         Math.round((Number(taxPct) || 0) * 100),
         buyback,
         {
-          name: f.name, symbol: f.symbol.toUpperCase(), logo: f.logo, description: f.description,
-          socials: { twitter: f.twitter, telegram: f.telegram, discord: '', website: f.website, farcaster: '' },
+          name: f.name, symbol: f.symbol.toUpperCase(), logo: logoUrl, description: f.description,
+          socials: { twitter: f.twitter, telegram: f.telegram, discord: f.discord, website: f.website, farcaster: f.farcaster },
           feeWallet: '0x0000000000000000000000000000000000000000', // unused on V2 — the contract sets creatorFeeRecipient = FeeSplitter
         },
         pctOf('burn'),
@@ -117,18 +156,6 @@ export default function CreateCampaignPage() {
       ],
     });
   };
-
-  const input = (key: keyof typeof f, lbl: string, placeholder = '') => (
-    <label className={labelClass}>
-      {lbl}
-      <input
-        value={f[key]}
-        onChange={(e) => setF({ ...f, [key]: e.target.value })}
-        placeholder={placeholder}
-        className={`${inputClass()} mt-1.5 normal-case tracking-normal`}
-      />
-    </label>
-  );
 
   // ── Success state ──────────────────────────────────────────────
   if (created) {
@@ -199,7 +226,7 @@ export default function CreateCampaignPage() {
         // submit layout. On mobile the preview stacks above the form.
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 lg:gap-6">
           <div className="lg:order-2">
-            <CampaignPreviewPanel f={f} stack={activeStack} backerPct={backerPct} creatorWallet={address} taxPct={Number(taxPct) || 0} buyback={buyback} />
+            <CampaignPreviewPanel f={f} imagePreview={imagePreview} stack={activeStack} backerPct={backerPct} creatorWallet={address} taxPct={Number(taxPct) || 0} buyback={buyback} />
           </div>
 
           <div className="space-y-5 lg:order-1 min-w-0">
@@ -233,7 +260,7 @@ export default function CreateCampaignPage() {
                 </button>
               </div>
               <div className="border-t border-[var(--border)] px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] bg-[var(--accent-gold)]/5">
-                &gt; Pooled buy fires snipe-exempt on the launch block · graduates to a Uniswap-v3 pool at 4.2 ETH
+                &gt; Pooled buy fires snipe-exempt on the launch block · graduates to a locked Uniswap-v4 pool at 4.2 ETH
               </div>
             </section>
 
@@ -247,93 +274,256 @@ export default function CreateCampaignPage() {
                   REQUIRED
                 </span>
               </div>
-              <div className="p-4 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {input('name', 'Token Name', 'e.g. Proof Coin')}
-                  {input('symbol', 'Symbol', 'e.g. PROOF')}
+              <div className="p-4 sm:p-5 space-y-4">
+                {/* Image + name/symbol — image left, fields right (mirrors how the campaign card renders) */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="shrink-0">
+                    {imagePreview ? (
+                      <div className="relative w-28 h-28">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={imagePreview}
+                          alt="Token preview"
+                          className="w-28 h-28 object-cover border border-[var(--accent)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="absolute -top-2 -right-2 w-5 h-5 bg-[var(--error)] flex items-center justify-center hover:opacity-90 transition-opacity"
+                          aria-label="Remove image"
+                        >
+                          <X className="w-3 h-3 text-[#0a0a0a]" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-28 h-28 border border-dashed border-[var(--border)] hover:border-[var(--accent)] transition-colors flex flex-col items-center justify-center gap-1.5 text-[var(--muted)] hover:text-[var(--accent)]"
+                      >
+                        <Upload className="w-5 h-5" />
+                        <span className="text-[9px] font-mono uppercase tracking-widest">Upload</span>
+                        <span className="text-[9px] font-mono text-[var(--muted)]">PNG/JPG · 2MB</span>
+                      </button>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleImageChange}
+                      className="hidden"
+                    />
+                    {imageError && (
+                      <span className="block mt-1 text-[10px] font-mono text-[var(--error)] max-w-28">{imageError}</span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-3 min-w-0">
+                    <div>
+                      <label className={labelClass}>Name *</label>
+                      <input
+                        type="text"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={f.name}
+                        onChange={(e) => setF({ ...f, name: e.target.value })}
+                        placeholder="e.g., Bonk Dog"
+                        maxLength={32}
+                        required
+                        className={inputClass()}
+                      />
+                      <div className="flex justify-between mt-1 text-[10px] font-mono text-[var(--muted)]">
+                        <span>Letters, numbers, spaces, hyphens</span>
+                        <span>{f.name.length}/32</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Symbol *</label>
+                      <input
+                        type="text"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={f.symbol}
+                        onChange={(e) => setF({ ...f, symbol: e.target.value })}
+                        placeholder="e.g., BONKD"
+                        maxLength={10}
+                        required
+                        className={`${inputClass()} uppercase`}
+                      />
+                      <div className="flex justify-between mt-1 text-[10px] font-mono text-[var(--muted)]">
+                        <span>Letters and numbers only</span>
+                        <span>{f.symbol.length}/10</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                {input('logo', 'Logo URL (https)', 'https://…/logo.png')}
-                <label className={labelClass}>
-                  Description
+
+                {/* Description — full width below */}
+                <div>
+                  <label className={labelClass}>Description *</label>
                   <textarea
+                    autoComplete="off"
                     value={f.description}
                     onChange={(e) => setF({ ...f, description: e.target.value })}
+                    placeholder="Tell the community about your project..."
+                    maxLength={500}
                     rows={3}
-                    className={`${inputClass()} mt-1.5 normal-case tracking-normal resize-none`}
+                    className={`${inputClass()} resize-none`}
                   />
-                </label>
-              </div>
-            </section>
-
-            {/* ── SOCIALS ── */}
-            <section className="border border-[var(--border)] bg-[var(--card)]">
-              <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                  {'// SOCIALS'}
-                </span>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  OPTIONAL
-                </span>
-              </div>
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {input('twitter', 'X / Twitter', 'https://x.com/…')}
-                {input('telegram', 'Telegram')}
-                {input('website', 'Website')}
-              </div>
-            </section>
-
-            {/* ── RAISE TERMS ── */}
-            <section className="border border-[var(--border)] bg-[var(--card)]">
-              <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                  {'// RAISE_TERMS'}
-                </span>
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  IMMUTABLE AT CREATION
-                </span>
-              </div>
-              <div className="p-4">
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                  {input('goal', 'Goal (ETH)')}
-                  {input('min', 'Min / Backer')}
-                  {input('max', 'Max (0 = ∞)')}
-                  {input('slots', 'Slots (0 = ∞)')}
-                  {input('days', 'Deadline (Days)')}
-                </div>
-                {/* Backer slots — the SOL model's slot picker, one tap.
-                    Capped slots make a raise feel ownable; ∞ keeps it open. */}
-                <div className="mt-3">
-                  <span className={labelClass}>Backer Slots</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['4', '8', '12', '16', '24', '0'].map((sv) => {
-                      const active = (f.slots || '0') === sv;
-                      return (
-                        <button
-                          key={sv}
-                          type="button"
-                          onClick={() => setF({ ...f, slots: sv })}
-                          aria-pressed={active}
-                          className={`px-3 py-1.5 text-[10px] font-mono border transition-colors ${
-                            active
-                              ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-                              : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--foreground)]'
-                          }`}
-                        >
-                          {sv === '0' ? '∞ OPEN' : `${sv} SLOTS`}
-                        </button>
-                      );
-                    })}
+                  <div className="flex justify-between mt-1 text-[10px] font-mono text-[var(--muted)]">
+                    <span>What this project is about</span>
+                    <span>{f.description.length}/500</span>
                   </div>
-                  <span className="block mt-1.5 text-[10px] font-mono text-[var(--muted-soft)] normal-case tracking-normal">
-                    Slots cap how many wallets can back the raise — same mechanic as the SOL
-                    Proving Grounds. ∞ leaves it open; min/max per backer still apply.
-                  </span>
                 </div>
+              </div>
+            </section>
+
+            {/* ── LINKS · all optional ── */}
+            <section className="border border-[var(--border)] bg-[var(--card)]">
+              <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+                  {'// LINKS'}
+                </span>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] border border-[var(--border)] px-1.5 py-0.5">
+                  ALL OPTIONAL
+                </span>
+              </div>
+              <div className="p-4 sm:p-5">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-3">
+                  &gt; Token socials · written to on-chain metadata
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {([
+                    ['twitter', 'Token X', 'https://x.com/...'],
+                    ['website', 'Website', 'https://...'],
+                    ['telegram', 'Telegram', 'https://t.me/...'],
+                    ['discord', 'Discord', 'https://discord.gg/...'],
+                    ['farcaster', 'Farcaster', 'https://farcaster.xyz/...'],
+                  ] as const).map(([key, lbl, ph]) => (
+                    <div key={key}>
+                      <label className={labelClass}>{lbl}</label>
+                      <input
+                        type="text"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={f[key]}
+                        onChange={(e) => setF({ ...f, [key]: e.target.value })}
+                        placeholder={ph}
+                        className={inputClass()}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {/* ── LAUNCH CONFIG — slots + backing + deadline ── */}
+            <section className="border border-[var(--border)] bg-[var(--card)]">
+              <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                  {'// LAUNCH CONFIG'}
+                </span>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  {f.days}-DAY DEADLINE
+                </span>
+              </div>
+              <div className="p-4 sm:p-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Backer slots</label>
+                    <select
+                      value={f.slots}
+                      onChange={(e) => setF({ ...f, slots: e.target.value })}
+                      className={inputClass()}
+                    >
+                      <option value="0">Open — unlimited backers</option>
+                      {[2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24].map((n) => (
+                        <option key={n} value={String(n)}>{n} slots</option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                      &gt; Caps how many wallets can back the raise
+                    </span>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Minimum per backer</label>
+                    <select
+                      value={f.min}
+                      onChange={(e) => setF({ ...f, min: e.target.value })}
+                      className={inputClass()}
+                    >
+                      {['0.01', '0.025', '0.05', '0.1', '0.25', '0.5'].map((n) => (
+                        <option key={n} value={n}>{n} ETH</option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                      &gt; Each backer pledges at least this
+                    </span>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Raise goal</label>
+                    <select
+                      value={f.goal}
+                      onChange={(e) => setF({ ...f, goal: e.target.value })}
+                      className={inputClass()}
+                    >
+                      {['0.1', '0.25', '0.5', '1', '1.5', '2'].map((n) => (
+                        <option key={n} value={n}>{n} ETH</option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                      &gt; Launches when the pool reaches this
+                    </span>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Deadline</label>
+                    <select
+                      value={f.days}
+                      onChange={(e) => setF({ ...f, days: e.target.value })}
+                      className={inputClass()}
+                    >
+                      {[['1', '1 day'], ['3', '3 days'], ['5', '5 days'], ['7', '7 days']].map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                      &gt; Goal unmet by then → refunds open automatically
+                    </span>
+                  </div>
+                </div>
+
+                {/* Per-backer maximum — optional whale cap, same idea as the
+                    SOL page's per-backer maximums box. */}
+                <div className="space-y-3 border border-[var(--border)] p-3">
+                  <div>
+                    <div className="text-xs font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+                      Per-backer maximum (optional)
+                    </div>
+                    <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
+                      Cap any single wallet&apos;s deposit so no whale can own the raise. Leave at 0 for uncapped.
+                    </p>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Max per backer (ETH)</label>
+                    <input
+                      type="number"
+                      value={f.max}
+                      onChange={(e) => setF({ ...f, max: e.target.value })}
+                      min={0}
+                      step="any"
+                      placeholder="0 = uncapped"
+                      className={inputClass()}
+                    />
+                  </div>
+                </div>
+
                 {Number(f.goal) > BETA_GOAL_CAP_ETH && (
-                  <p className="mt-3 text-xs font-mono text-[var(--warning)]">
+                  <p className="text-xs font-mono text-[var(--warning)]">
                     BETA CAP: goals are limited to {BETA_GOAL_CAP_ETH} ETH until the external contract
-                    review completes. (A {f.goal} ETH raise would work — oversized raises graduate at
-                    launch — we&apos;re just walking before running.)
+                    review completes.
                   </p>
                 )}
               </div>
@@ -408,10 +598,9 @@ export default function CreateCampaignPage() {
                   </div>
                   <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
                     Each bot becomes a fee leg on your campaign&apos;s splitter, carved from the
-                    backer share — immutable from creation, pull-based forever. The trustless
-                    Burn and Pool Feeder contracts (world-firsts, live on our pons-V1 factory)
-                    are being ported to Uniswap v4; pons&apos; native 💠 Buyback covers the burn
-                    flywheel here meanwhile.
+                    backer share — immutable from creation, pull-based forever. Burn and Pool
+                    Feeder run as ownerless contracts on the Uniswap-v4 pool — the world&apos;s
+                    first trustless launch bots: anyone can crank them, nobody can stop them.
                   </p>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -579,10 +768,10 @@ export default function CreateCampaignPage() {
               </p>
               <button
                 onClick={submit}
-                disabled={isPending || !f.name || !f.symbol || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH || overBudget || !stackValid || !taxValid}
+                disabled={isPending || uploading || !f.name || !f.symbol || !f.description || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH || overBudget || !stackValid || !taxValid}
                 className="btn-primary"
               >
-                {isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
+                {uploading ? 'Uploading Image…' : isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
               </button>
             </div>
           </div>
@@ -593,8 +782,9 @@ export default function CreateCampaignPage() {
 }
 
 // ── Live preview rail — the SOL TokenPreviewPanel, twinned ──────────
-function CampaignPreviewPanel({ f, stack, backerPct, creatorWallet, taxPct, buyback }: {
-  f: { name: string; symbol: string; logo: string; description: string; twitter: string; telegram: string; website: string; goal: string; min: string; max: string; slots: string };
+function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet, taxPct, buyback }: {
+  f: { name: string; symbol: string; description: string; twitter: string; telegram: string; discord: string; website: string; farcaster: string; goal: string; min: string; max: string; slots: string };
+  imagePreview: string | null;
   stack: BotItem[];
   backerPct: number;
   creatorWallet?: string;
@@ -607,12 +797,10 @@ function CampaignPreviewPanel({ f, stack, backerPct, creatorWallet, taxPct, buyb
   const socials = [
     { label: 'X',   href: f.twitter.trim() },
     { label: 'TG',  href: f.telegram.trim() },
+    { label: 'DC',  href: f.discord.trim() },
     { label: 'WEB', href: f.website.trim() },
+    { label: 'FC',  href: f.farcaster.trim() },
   ].filter((s) => !!s.href);
-  // Logo URLs are free text mid-typing; only render once it parses.
-  const logoOk = useMemo(() => {
-    try { return f.logo.trim().startsWith('https://') && !!new URL(f.logo.trim()) } catch { return false }
-  }, [f.logo]);
 
   return (
     <aside className="lg:sticky lg:top-3 lg:max-h-[calc(100vh-1.5rem)] overflow-auto">
@@ -631,9 +819,9 @@ function CampaignPreviewPanel({ f, stack, backerPct, creatorWallet, taxPct, buyb
 
         {/* Identity row */}
         <div className="flex items-center gap-3">
-          {logoOk ? (
+          {imagePreview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={f.logo.trim()} alt="preview" className="w-14 h-14 object-cover border border-[var(--border)] flex-shrink-0" />
+            <img src={imagePreview} alt="preview" className="w-14 h-14 object-cover border border-[var(--border)] flex-shrink-0" />
           ) : (
             <div className="w-14 h-14 border border-dashed border-[var(--border)] bg-[var(--background)] flex items-center justify-center flex-shrink-0">
               <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)]">IMG</span>
