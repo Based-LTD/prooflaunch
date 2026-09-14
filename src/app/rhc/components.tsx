@@ -110,9 +110,41 @@ export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.Rea
               {' / '}{fmtEth(r.goal, 3)} ETH
             </span>
           </div>
-          <div className="mt-2 h-1 bg-[var(--border)]">
-            <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(100, pct)}%` }} />
-          </div>
+          {/* Slot grid — the SOL card's visual blocks, verbatim. Slotted
+              raises show filled/outlined blocks; open raises (maxBackers 0)
+              keep the thin progress bar. */}
+          {!r.launched && r.maxBackers > 0n && r.maxBackers <= 24n ? (
+            <div className="mt-2">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Slots</span>
+                <span className="text-xs font-mono text-[var(--accent)]">
+                  {r.backerCount.toString()} / {r.maxBackers.toString()}
+                </span>
+              </div>
+              <div
+                className="grid gap-1"
+                style={{ gridTemplateColumns: `repeat(${Number(r.maxBackers)}, minmax(0, 1fr))` }}
+              >
+                {Array.from({ length: Number(r.maxBackers) }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-3 ${
+                      i < Number(r.backerCount)
+                        ? 'bg-[var(--accent)]'
+                        : 'border border-[var(--accent)]'
+                    }`}
+                  />
+                ))}
+              </div>
+              <div className="mt-2 h-1 bg-[var(--border)]">
+                <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(100, pct)}%` }} />
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 h-1 bg-[var(--border)]">
+              <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(100, pct)}%` }} />
+            </div>
+          )}
           <div className="mt-1.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
             <span>{r.backerCount.toString()} backer{r.backerCount === 1n ? '' : 's'}</span>
             <span className="inline-flex items-center gap-1.5">
