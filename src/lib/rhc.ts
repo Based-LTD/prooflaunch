@@ -83,6 +83,11 @@ export const splitterAbi = parseAbi([
 // WETH on Robinhood Chain (pons pair token, from TokenLaunched events)
 export const RHC_WETH = '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73' as const;
 
+// Platform airdrop operator — creators add it as a vault leg to opt into
+// platform-run holder snapshot airdrops (tools/rhc-holder-airdrop.mjs), the
+// same machinery as the SOL launches. Clearly labeled non-trustless in UI.
+export const AIRDROP_OPERATOR = '0xFd88ee2413514374654eD267A80ebE3319cAB3B9' as const;
+
 export function fmtEth(wei: bigint, digits = 4): string {
   return (Number(wei) / 1e18).toFixed(digits);
 }
