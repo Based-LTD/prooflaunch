@@ -3,6 +3,7 @@
 // Shared RHC UI — the SOL design system verbatim: same variables, card
 // shells, chip and label conventions. Same site, different chain.
 import Link from 'next/link';
+import { WpBadge } from './walletproof';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
 import { robinhoodChain, CampaignRow, fmtEth } from '@/lib/rhc';
 
@@ -114,7 +115,10 @@ export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.Rea
           </div>
           <div className="mt-1.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
             <span>{r.backerCount.toString()} backer{r.backerCount === 1n ? '' : 's'}</span>
-            <span>{r.launched ? 'LIVE' : `ends ${new Date(Number(r.deadline) * 1000).toLocaleDateString()}`}</span>
+            <span className="inline-flex items-center gap-1.5">
+              {r.launched && <WpBadge token={r.token} />}
+              <span>{r.launched ? 'LIVE' : `ends ${new Date(Number(r.deadline) * 1000).toLocaleDateString()}`}</span>
+            </span>
           </div>
           {footer}
         </div>
