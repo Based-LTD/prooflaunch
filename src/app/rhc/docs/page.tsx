@@ -289,7 +289,9 @@ export default function RhcDocsPage() {
                 campaign&apos;s fee splitter. It has no owner, no operator, and no off switch:{' '}
                 <strong>anyone</strong> can crank it, <strong>nobody</strong> can stop it, and its
                 terms can never change. As far as we know, these are the first trustless launch
-                bots anywhere.
+                bots anywhere — and they are <strong>dual-phase</strong>: during the bonding-curve
+                phase they trade on the curve itself; after graduation they talk to the Uniswap-v4
+                PoolManager directly (no router, proven third-party-allowed on live-pool forks).
               </p>
               <div className="bg-[var(--background)] border border-[var(--accent)]/40 p-4 text-sm leading-relaxed text-[var(--muted)]">
                 <strong className="text-[var(--accent)]">Honesty note:</strong> the Holder Airdrop
