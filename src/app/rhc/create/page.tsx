@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, decodeEventLog } from 'viem';
-import { POOLLAUNCH_FACTORY, PONS_FACTORY, factoryAbi } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, PONS_FACTORY, AIRDROP_OPERATOR, factoryAbi } from '@/lib/rhc';
 import { RhcHeader } from '../components';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
@@ -208,13 +208,32 @@ export default function CreateCampaignPage() {
                   </div>
                 ))}
                 {vaults.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setVaults([...vaults, { addr: '', pct: '' }])}
-                    className="mt-1.5 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]"
-                  >
-                    + Add Vault
-                  </button>
+                  <div className="mt-1.5 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setVaults([...vaults, { addr: '', pct: '' }])}
+                      className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                    >
+                      + Add Vault
+                    </button>
+                    {!vaults.some(v => v.addr === AIRDROP_OPERATOR) && (
+                      <button
+                        type="button"
+                        onClick={() => setVaults([...vaults, { addr: AIRDROP_OPERATOR, pct: '' }])}
+                        className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                      >
+                        + 📸 Holder Airdrop
+                      </button>
+                    )}
+                  </div>
+                )}
+                {vaults.some(v => v.addr === AIRDROP_OPERATOR) && (
+                  <span className="block mt-1.5 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] normal-case">
+                    📸 Snapshot airdrops to your token&apos;s holders, run by PoolLaunch — same
+                    machinery as our Solana launches. Platform-operated, not trustless; for the
+                    trustless holder reward, use 🔥 Burn (supply cuts pay every holder pro-rata,
+                    no snapshot authority needed).
+                  </span>
                 )}
               </div>
             </div>
