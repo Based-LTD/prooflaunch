@@ -869,6 +869,24 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
           <PreviewStat label="pons buyback" value={buyback ? 'ON' : 'OFF'} tone={buyback ? 'gold' : 'default'} />
         </div>
 
+        {/* Slot grid preview — what the campaign card will show */}
+        {Number(f.slots) > 0 && Number(f.slots) <= 24 && (
+          <div className="border-t border-[var(--border)] pt-3">
+            <div className="flex justify-between items-center mb-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Slots</span>
+              <span className="text-xs font-mono text-[var(--accent)]">0 / {f.slots}</span>
+            </div>
+            <div
+              className="grid gap-1"
+              style={{ gridTemplateColumns: `repeat(${Number(f.slots)}, minmax(0, 1fr))` }}
+            >
+              {Array.from({ length: Number(f.slots) }).map((_, i) => (
+                <div key={i} className="h-3 border border-[var(--accent)]" />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Fee distribution bar — 90/7/3 with bots carved from the 90 */}
         <div className="space-y-1.5 border-t border-[var(--border)] pt-3">
           <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest">

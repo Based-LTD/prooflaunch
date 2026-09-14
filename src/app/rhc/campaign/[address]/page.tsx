@@ -144,6 +144,35 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             <p className="text-sm font-mono text-[var(--muted)] mb-4">{s.meta.description}</p>
           )}
 
+          {/* Slot grid — the SOL detail treatment: filled blocks for
+              backers in, outlined for open slots. Open raises (maxBackers
+              0) show the bar alone. */}
+          {!s.launched && s.maxBackers > 0n && s.maxBackers <= 24n && (
+            <div className="mb-3">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Slots</span>
+                <span className="text-xs font-mono text-[var(--accent)]">
+                  {s.backerCount.toString()} / {s.maxBackers.toString()}
+                </span>
+              </div>
+              <div
+                className="grid gap-1"
+                style={{ gridTemplateColumns: `repeat(${Number(s.maxBackers)}, minmax(0, 1fr))` }}
+              >
+                {Array.from({ length: Number(s.maxBackers) }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-4 ${
+                      i < Number(s.backerCount)
+                        ? 'bg-[var(--accent)]'
+                        : 'border border-[var(--accent)]'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Raise progress */}
           <div className="h-1.5 bg-[var(--border)]">
             <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(100, pct)}%` }} />

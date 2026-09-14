@@ -132,6 +132,7 @@ export interface CampaignRow {
   goal: bigint;
   totalRaised: bigint;
   backerCount: bigint;
+  maxBackers: bigint; // 0 = open (unlimited backers)
   deadline: bigint;
   launched: boolean;
   cancelled: boolean;
@@ -165,13 +166,14 @@ export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow
   const rows: CampaignRow[] = [];
   for (const address of addrs) {
     const c = { address, abi: campaignAbi } as const;
-    const [meta, goal, totalRaised, backerCount, deadline, launched, cancelled, refundable, token, myContribution, myTokensClaimed] =
+    const [meta, goal, totalRaised, backerCount, maxBackers, deadline, launched, cancelled, refundable, token, myContribution, myTokensClaimed] =
       await rhcPublicClient.multicall({
         contracts: [
           { ...c, functionName: 'tokenMeta' },
           { ...c, functionName: 'goal' },
           { ...c, functionName: 'totalRaised' },
           { ...c, functionName: 'backerCount' },
+          { ...c, functionName: 'maxBackers' },
           { ...c, functionName: 'deadline' },
           { ...c, functionName: 'launched' },
           { ...c, functionName: 'cancelled' },
@@ -182,12 +184,12 @@ export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow
         ],
         allowFailure: false,
       }) as unknown as [
-        { name: string; symbol: string }, bigint, bigint, bigint, bigint,
+        { name: string; symbol: string }, bigint, bigint, bigint, bigint, bigint,
         boolean, boolean, boolean, `0x${string}`, bigint, boolean
       ];
     rows.push({
       address, name: meta.name, symbol: meta.symbol, goal, totalRaised,
-      backerCount, deadline, launched, cancelled, refundable, token,
+      backerCount, maxBackers, deadline, launched, cancelled, refundable, token,
       myContribution, myTokensClaimed,
     });
   }
