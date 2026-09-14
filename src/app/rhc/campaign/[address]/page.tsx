@@ -200,19 +200,33 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
 
           {isConnected && !s.launched && !s.cancelled && !s.refundable && now < s.deadline && (
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <input
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="ETH"
-                className="w-28 px-3 py-2.5 bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
-              />
-              <button
-                onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: parseEther(amount || '0') })}
-                disabled={isPending}
-                className="btn-primary"
-              >
-                Back This Launch
-              </button>
+              {/* Seat round (min == max, slotted): one fixed-price button —
+                  the SOL slot-claim feel. Open raise: free amount. */}
+              {s.maxBackers > 0n && s.minDeposit === s.maxDeposit && s.minDeposit > 0n ? (
+                <button
+                  onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: s.minDeposit })}
+                  disabled={isPending || s.myContribution > 0n}
+                  className="btn-primary"
+                >
+                  {s.myContribution > 0n ? 'Seat Taken ✓' : `Take a Seat — ${fmtEth(s.minDeposit, 3)} ETH`}
+                </button>
+              ) : (
+                <>
+                  <input
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="ETH"
+                    className="w-28 px-3 py-2.5 bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
+                  />
+                  <button
+                    onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: parseEther(amount || '0') })}
+                    disabled={isPending}
+                    className="btn-primary"
+                  >
+                    Back This Launch
+                  </button>
+                </>
+              )}
               {s.myContribution > 0n && (
                 <button
                   onClick={() => act('withdraw')}
