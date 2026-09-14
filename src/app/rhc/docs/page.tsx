@@ -10,7 +10,7 @@ import {
   TrendingUp, Zap, Receipt, Key, HelpCircle, Bot, ExternalLink,
   Undo2 as Undo2Icon, Wallet as WalletIcon,
 } from 'lucide-react';
-import { POOLLAUNCH_FACTORY, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
 
 const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
 
@@ -231,7 +231,7 @@ export default function RhcDocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { num: '1', title: 'Submit Your Token (gas only)', desc: 'Name, symbol, logo, socials, raise goal, per-backer min/max, slot cap, deadline, bot stack. Everything becomes immutable contract state — backers can verify the exact terms on-chain before depositing a single wei.' },
+                { num: '1', title: 'Submit Your Token (gas only)', desc: 'Name, symbol, logo, socials, raise goal, per-backer min/max, slot cap, deadline, creator tax (0\u201310%, the pons dial \u2014 except here your BACKERS earn it), pons buyback toggle, bot stack. Everything becomes immutable contract state \u2014 backers can verify the exact terms on-chain before depositing a single wei.' },
                 { num: '2', title: 'Rally the Raise', desc: 'Share your campaign link. Backers deposit ETH; the board shows live progress read straight from the chain.' },
                 { num: '3', title: 'Launch When Ready', desc: 'Goal met → you launch whenever you want (or anyone can after the deadline, so a funded raise can never be held hostage). One transaction: token created on pons + the whole pool buys, snipe-exempt.' },
               ].map((step) => (
@@ -378,7 +378,8 @@ export default function RhcDocsPage() {
                   { label: 'Creation Fee', value: 'Gas only', color: 'border-[var(--success)]', desc: 'Creating a campaign costs nothing but Robinhood Chain gas (well under a cent). pons charges 0.0005 ETH at launch time, paid from the pool.' },
                   { label: 'Backing Fee', value: 'None', color: 'border-[var(--success)]', desc: '100% of your ETH goes into the campaign contract.' },
                   { label: 'Withdrawal Fee', value: 'None', color: 'border-[var(--success)]', desc: 'Withdraw your full deposit any time before launch. Refunds after an expired raise are also full-amount.' },
-                  { label: 'Trading Fees Routing', value: '90 / 7 / 3', color: 'border-[var(--accent)]', desc: 'Of the creator fee stream: 90% to backers pro-rata (minus any bots the creator stacked), 7% platform, 3% holder rewards. Immutable per campaign, enforced by the FeeSplitter contract.' },
+                  { label: 'Creator Tax', value: '0\u201310%', color: 'border-[var(--accent-gold)]', desc: 'The pons V2 trading tax, set at creation and never raisable. On pons it pays the dev; on PoolLaunch it pays your campaign\u2019s FeeSplitter \u2014 which means the backers. Every launch buy pays it too, and it round-trips straight back to the pool.' },
+                  { label: 'Trading Fees Routing', value: '90 / 7 / 3', color: 'border-[var(--accent)]', desc: 'Of the creator fee stream (base fee + creator tax): 90% to backers pro-rata (minus any bots the creator stacked), 7% platform, 3% holder rewards. Immutable per campaign, enforced by the FeeSplitter contract. Fees arrive as native ETH and the token itself.' },
                 ].map((fee, i) => (
                   <div key={i} className={`bg-[var(--background)] p-4 border-l-4 ${fee.color}`}>
                     <div className="flex justify-between items-center mb-2">
@@ -465,7 +466,8 @@ export default function RhcDocsPage() {
                   Contract addresses
                 </h3>
                 <div className="space-y-2 text-xs font-mono">
-                  <AddrRow name="CampaignFactory v3 (active)" addr={POOLLAUNCH_FACTORY} />
+                  <AddrRow name="CampaignFactory v4 (active — pons V2, creator tax)" addr={POOLLAUNCH_FACTORY_V4} />
+                  <AddrRow name="CampaignFactory v3 (pons V1 — trustless bot stack)" addr={POOLLAUNCH_FACTORY} />
                   <AddrRow name="LegDeployer (bot-leg code)" addr={LEG_DEPLOYER} />
                   <AddrRow name="pons factory (launch target)" addr={PONS_FACTORY} />
                   <AddrRow name="Airdrop operator (📸 legs)" addr={AIRDROP_OPERATOR} />

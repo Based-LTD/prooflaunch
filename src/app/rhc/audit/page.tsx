@@ -3,7 +3,7 @@
 // RHC audit page — mirrors the SOL /proof role: every address, every
 // split, verify-it-yourself. Ownerless contracts mean this page is a
 // map, not a promise.
-import { POOLLAUNCH_FACTORY, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
 import { RhcHeader } from '../components';
 
 const PLATFORM_LEG = '0xD994AE0945c787A487c6dbd5188512E358986E29';
@@ -11,7 +11,8 @@ const REWARDS_LEG = '0x6ca08565CAf4f5CaAfB4BfeeCEcE6E0Ea3c65dcB';
 const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
 
 const rows: [string, string, string][] = [
-  ['PoolLaunch Factory v3', POOLLAUNCH_FACTORY, 'Deploys Campaign + FeeSplitter pairs and the trustless bot legs. Stateless policy; no owner, no admin, no upgrade path.'],
+  ['PoolLaunch Factory v4 (active)', POOLLAUNCH_FACTORY_V4, 'Targets pons V2: adjustable creator tax (0\u201310%, earned by backers), pons-native buyback, native-ETH fee flow. Stateless policy; no owner, no admin, no upgrade path.'],
+  ['PoolLaunch Factory v3', POOLLAUNCH_FACTORY, 'pons V1 generation \u2014 carries the trustless Burn + Pool Feeder bot legs. Read-only in the UI; its campaigns run forever.'],
   ['Leg Deployer', LEG_DEPLOYER, 'Carries the Burn + Pool Feeder creation code (Robinhood Chain enforces the 24KB contract size limit). Ownerless, stateless.'],
   ['pons Factory (target)', PONS_FACTORY, 'The launchpad our campaigns launch through. pons rotates factories — campaigns pin theirs at creation.'],
   ['Platform Fee Leg (7%)', PLATFORM_LEG, 'Receives the platform share of creator fees, per campaign, immutably.'],

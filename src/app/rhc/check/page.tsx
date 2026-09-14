@@ -3,13 +3,13 @@
 // /rhc/check — paste any Pons token and see who is really buying it. The public face of WalletProof on RHC:
 // counts and shares only, every number a replay of on-chain trades. Proof Launch tokens are crowd-funded by
 // backers who put ETH in before the token existed; this page shows what the rest of the chain looks like.
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { RhcHeader } from '../components';
 import { WpPanel, WpStatsBar } from '../walletproof';
 import { WpRecent } from './recent';
 
-export default function RhcCheckPage() {
+function RhcCheckInner() {
   const params = useSearchParams(); const router = useRouter();
   const initial = params.get('t') || '';
   const [input, setInput] = useState(initial);
@@ -35,5 +35,15 @@ export default function RhcCheckPage() {
       <WpStatsBar />
       <WpRecent />
     </div>
+  );
+}
+
+// useSearchParams requires a Suspense boundary for static prerender —
+// without this the whole site build fails on /rhc/check.
+export default function RhcCheckPage() {
+  return (
+    <Suspense fallback={null}>
+      <RhcCheckInner />
+    </Suspense>
   );
 }

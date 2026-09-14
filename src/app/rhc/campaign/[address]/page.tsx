@@ -23,6 +23,7 @@ interface State {
   tokensAtLaunch: bigint; totalRaisedAtLaunch: bigint;
   myContribution: bigint; myTokensClaimed: boolean;
   myFeeEntitlement: bigint; myFeesClaimed: bigint;
+  isV4: boolean; // pons V2 campaign — native-ETH fees, pokeHarvest crank
 }
 
 const label = 'block text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5';
@@ -71,19 +72,28 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           bigint, bigint, boolean, boolean, boolean, `0x${string}`, `0x${string}`, bigint, bigint,
           bigint, boolean];
 
+      // Generation probe: v4 (pons V2) campaigns expose curve(); their fee
+      // asset is native ETH (address(0)). v1-v3 campaigns fee in WETH.
+      let isV4 = false;
+      try {
+        await rhcPublicClient.readContract({ ...c, functionName: 'curve' });
+        isV4 = true;
+      } catch { /* pre-v4 campaign */ }
+      const feeAsset = (isV4 ? zero : RHC_WETH) as `0x${string}`;
+
       let myFeeEntitlement = 0n, myFeesClaimed = 0n;
       if (launched && me) {
         [myFeeEntitlement, myFeesClaimed] = await rhcPublicClient.multicall({
           contracts: [
-            { address: feeSplitter, abi: splitterAbi, functionName: 'backerEntitlement', args: [me, RHC_WETH] },
-            { address: feeSplitter, abi: splitterAbi, functionName: 'backerClaimed', args: [me, RHC_WETH] },
+            { address: feeSplitter, abi: splitterAbi, functionName: 'backerEntitlement', args: [me, feeAsset] },
+            { address: feeSplitter, abi: splitterAbi, functionName: 'backerClaimed', args: [me, feeAsset] },
           ],
           allowFailure: false,
         }) as [bigint, bigint];
       }
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
-        totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed });
+        totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, isV4 });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -92,7 +102,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (txConfirmed) { reset(); load(); } }, [txConfirmed, reset, load]);
 
-  const act = (functionName: 'withdraw' | 'launch' | 'claimTokens' | 'refund' | 'cancel' | 'pokeCollect') =>
+  const act = (functionName: 'withdraw' | 'launch' | 'claimTokens' | 'refund' | 'cancel' | 'pokeCollect' | 'pokeHarvest') =>
     writeContract({ address: addr, abi: campaignAbi, functionName });
 
   const shell = (children: React.ReactNode) => (
@@ -236,17 +246,17 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               {s.myContribution > 0n && (
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                    Your fee share (WETH): <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)}</span>
+                    Your fee share ({s.isV4 ? 'ETH' : 'WETH'}): <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)}</span>
                   </span>
                   <button
-                    onClick={() => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [RHC_WETH] })}
+                    onClick={() => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [s.isV4 ? '0x0000000000000000000000000000000000000000' : RHC_WETH] })}
                     disabled={isPending || feesOwed === 0n}
                     className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-40"
                   >
                     Claim Fees
                   </button>
                   <button
-                    onClick={() => act('pokeCollect')}
+                    onClick={() => act(s.isV4 ? 'pokeHarvest' : 'pokeCollect')}
                     disabled={isPending}
                     title="Permissionless: pull accrued creator fees from pons into the splitter"
                     className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
