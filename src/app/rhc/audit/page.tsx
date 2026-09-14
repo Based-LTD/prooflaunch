@@ -3,17 +3,20 @@
 // RHC audit page — mirrors the SOL /proof role: every address, every
 // split, verify-it-yourself. Ownerless contracts mean this page is a
 // map, not a promise.
-import { POOLLAUNCH_FACTORY, PONS_FACTORY, explorerUrl } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
 import { RhcHeader } from '../components';
 
 const PLATFORM_LEG = '0xD994AE0945c787A487c6dbd5188512E358986E29';
 const REWARDS_LEG = '0x6ca08565CAf4f5CaAfB4BfeeCEcE6E0Ea3c65dcB';
+const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
 
 const rows: [string, string, string][] = [
-  ['PoolLaunch Factory', POOLLAUNCH_FACTORY, 'Deploys Campaign + FeeSplitter pairs. Stateless policy; no owner, no admin, no upgrade path.'],
+  ['PoolLaunch Factory v3', POOLLAUNCH_FACTORY, 'Deploys Campaign + FeeSplitter pairs and the trustless bot legs. Stateless policy; no owner, no admin, no upgrade path.'],
+  ['Leg Deployer', LEG_DEPLOYER, 'Carries the Burn + Pool Feeder creation code (Robinhood Chain enforces the 24KB contract size limit). Ownerless, stateless.'],
   ['pons Factory (target)', PONS_FACTORY, 'The launchpad our campaigns launch through. pons rotates factories — campaigns pin theirs at creation.'],
   ['Platform Fee Leg (7%)', PLATFORM_LEG, 'Receives the platform share of creator fees, per campaign, immutably.'],
   ['Holder Rewards Leg (3%)', REWARDS_LEG, 'Accumulates the holder-rewards share — the future platform-token buyback feed.'],
+  ['Airdrop Operator (📸 legs)', AIRDROP_OPERATOR, 'Platform-run holder snapshot airdrops for campaigns that opted in. The one non-trustless bot — labeled so everywhere it appears.'],
 ];
 
 export default function RhcAuditPage() {

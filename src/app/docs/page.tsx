@@ -185,6 +185,27 @@ export default function DocsPage() {
               </div>
             </section>
 
+            {/* Two worlds — RHC cross-link */}
+            <section className="relative border-2 border-[var(--accent-gold)] bg-[var(--card)] p-6 space-y-3">
+              <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent-gold)] text-black text-xs font-bold uppercase tracking-wider">
+                {'// TWO_WORLDS'}
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <Zap className="w-6 h-6 text-[var(--accent-gold)]" />
+                <h2 className="text-2xl font-black uppercase tracking-tight">Also on Robinhood Chain</h2>
+              </div>
+              <p className="text-[var(--foreground)]/80 leading-relaxed">
+                The same pooled-launch model runs on <strong>Robinhood Chain</strong> as{' '}
+                <strong>PoolLaunch</strong> — with the promises enforced by <strong>ownerless
+                smart contracts</strong> instead of platform operations: 90% of creator fees to
+                backers, trustless burn and pool-feeder bots, no custodial wallets anywhere.
+                Toggle <strong>SOL | RHC</strong> in the navbar, or read the{' '}
+                <Link href="/rhc/docs" className="text-[var(--accent-gold)] hover:underline font-bold">
+                  PoolLaunch docs →
+                </Link>
+              </p>
+            </section>
+
             {/* The Proving Phase */}
             <section className="relative border-2 border-[var(--border)] bg-[var(--card)] p-6 space-y-4">
               <div className="flex items-center gap-3">
@@ -355,6 +376,14 @@ export default function DocsPage() {
                 creators a real programmable layer — burn, treasury, holder distribution,
                 backer rebate — automated, every block, every trade, auditable forever.
               </div>
+              <p className="text-sm text-[var(--muted)] leading-relaxed">
+                On Robinhood Chain the flagship bots go further: Burn and Pool Feeder run as{' '}
+                <strong className="text-[var(--foreground)]">ownerless contracts</strong> — the
+                world&apos;s first trustless launch bots.{' '}
+                <Link href="/rhc/docs" className="text-[var(--accent)] hover:underline">
+                  PoolLaunch bot docs →
+                </Link>
+              </p>
             </section>
 
             {/* The 9 actions */}
