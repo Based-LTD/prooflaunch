@@ -26,11 +26,10 @@ export const robinhoodChain = defineChain({
 // v4 — ACTIVE. Targets pons V2 (the live pons generation): adjustable
 // creator tax up to the pons cap (10%), pons-native buyback flywheel,
 // native-ETH fee flow via the pons FeeEscrow, curve → locked Uniswap v4.
-// v5 — pons V2 + the trustless bot legs ported to Uniswap v4 (dual-phase:
-// curve buys pre-graduation, direct PoolManager after). DEPLOY PENDING:
-// deployer needs a gas top-up; update this address the moment
-// DeployV3Factory lands and only then ship the frontend.
-export const POOLLAUNCH_FACTORY_V5 = '0xB86b783ccaCC20746ae9dd33CffE4a205B35E334' as const;
+// v5 — ACTIVE. pons V2 + the trustless bot legs ported to Uniswap v4
+// (dual-phase: curve buys pre-graduation, direct PoolManager after).
+// Live-verified 2026-09-14: 21,447 bytes, 90/7/3, legDeployer wired.
+export const POOLLAUNCH_FACTORY_V5 = '0xa5aC43cd8ff09e294240E97c2a63466B2c2a80E8' as const;
 export const POOLLAUNCH_FACTORY_V4 = '0x552db842cdB40ea73Dcac6cfAe15AF1E03405a9D' as const; // pons V2, tax, no bot legs
 export const POOLLAUNCH_FACTORY = '0xE2989dA79b04d64D9d68f476b6Ee8f971467b470' as const; // v3 — pons V1: burn + LP + vault legs
 export const POOLLAUNCH_FACTORY_V2 = '0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5' as const; // legacy, read-only
