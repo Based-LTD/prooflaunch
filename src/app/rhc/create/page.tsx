@@ -77,6 +77,13 @@ export default function CreateCampaignPage() {
   const [stack, setStack] = useState<BotItem[]>([]);
   // pons V2 creator tax: 0–10% of every trade, immutable at launch, earned
   // by the FeeSplitter — i.e. by the backers (90/7/3 of it).
+  // Two raise styles, both riding the same goal-based contract:
+  //   open  — ETH goal, unlimited backers, optional per-backer whale cap
+  //   seats — N identical seats at a fixed price; goal = seats x price and
+  //           min = max = price, so "last seat fills" IS "goal met": the
+  //           SOL launch mechanic, enforced by the contract by construction
+  const [raiseStyle, setRaiseStyle] = useState<'open' | 'seats'>('open');
+  const [seatPrice, setSeatPrice] = useState('0.1');
   const [taxPct, setTaxPct] = useState('1');
   const [buyback, setBuyback] = useState(false);
   const taxValid = (Number(taxPct) || 0) >= 0 && (Number(taxPct) || 0) <= 10;
@@ -95,6 +102,12 @@ export default function CreateCampaignPage() {
     if (b.kind === 'vault' && p > 0 && !/^0x[0-9a-fA-F]{40}$/.test(b.addr || '')) return false;
     return true;
   });
+
+  // Effective raise terms — what actually goes on-chain for each style.
+  const seatCount = Math.max(2, Number(f.slots) || 8);
+  const effGoalEth = raiseStyle === 'seats'
+    ? Number((seatCount * Number(seatPrice)).toFixed(6))
+    : Number(f.goal) || 0;
 
   useEffect(() => {
     if (isSuccess && receipt) {
@@ -131,15 +144,22 @@ export default function CreateCampaignPage() {
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(f.days) * 86400);
     const pctOf = (k: BotKind) => Math.round((Number(activeStack.find((b) => b.kind === k)?.pct) || 0) * 100);
     const vaultLegs = activeStack.filter((b) => (b.kind === 'vault' || b.kind === 'airdrop') && Number(b.pct) > 0);
+    // Seat rounds derive everything from seats x price (goal computed in
+    // wei — no float drift); open raises use the knobs directly.
+    const seatWei = parseEther(seatPrice);
+    const goalWei = raiseStyle === 'seats' ? seatWei * BigInt(seatCount) : parseEther(f.goal);
+    const minWei = raiseStyle === 'seats' ? seatWei : parseEther(f.min);
+    const maxWei = raiseStyle === 'seats' ? seatWei : (f.max === '0' || !Number(f.max) ? 0n : parseEther(f.max));
+    const slotsN = raiseStyle === 'seats' ? BigInt(seatCount) : 0n;
     writeContract({
       address: POOLLAUNCH_FACTORY_V5,
       abi: factoryV3Abi,
       functionName: 'createCampaign',
       args: [
-        parseEther(f.goal),
-        parseEther(f.min),
-        f.max === '0' ? 0n : parseEther(f.max),
-        BigInt(f.slots || '0'),
+        goalWei,
+        minWei,
+        maxWei,
+        slotsN,
         deadline,
         0n,
         Math.round((Number(taxPct) || 0) * 100),
@@ -226,7 +246,7 @@ export default function CreateCampaignPage() {
         // submit layout. On mobile the preview stacks above the form.
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 lg:gap-6">
           <div className="lg:order-2">
-            <CampaignPreviewPanel f={f} imagePreview={imagePreview} stack={activeStack} backerPct={backerPct} creatorWallet={address} taxPct={Number(taxPct) || 0} buyback={buyback} />
+            <CampaignPreviewPanel f={f} imagePreview={imagePreview} stack={activeStack} backerPct={backerPct} creatorWallet={address} taxPct={Number(taxPct) || 0} buyback={buyback} raiseStyle={raiseStyle} seatPrice={seatPrice} effGoalEth={effGoalEth} />
           </div>
 
           <div className="space-y-5 lg:order-1 min-w-0">
@@ -420,110 +440,184 @@ export default function CreateCampaignPage() {
               </div>
             </section>
 
-            {/* ── LAUNCH CONFIG — slots + backing + deadline ── */}
+            {/* ── RAISE STYLE — two presets, both riding the goal engine ── */}
             <section className="border border-[var(--border)] bg-[var(--card)]">
               <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                  {'// LAUNCH CONFIG'}
+                  {'// RAISE_STYLE'}
                 </span>
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                   {f.days}-DAY DEADLINE
                 </span>
               </div>
-              <div className="p-4 sm:p-5 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelClass}>Backer slots</label>
-                    <select
-                      value={f.slots}
-                      onChange={(e) => setF({ ...f, slots: e.target.value })}
-                      className={inputClass()}
+              <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {([
+                  { key: 'open' as const,  label: '⚡ OPEN RAISE', sub: 'ETH GOAL · UNLIMITED BACKERS', desc: 'Anyone can back with any amount. Launches when the pool hits the goal. Optional whale cap.' },
+                  { key: 'seats' as const, label: '🎟 SEAT ROUND', sub: 'N SEATS · FIXED PRICE · EQUAL ENTRY', desc: 'Every seat identical — same price, same share. The last seat filling IS the launch trigger, enforced by contract. The SOL mechanic, trustless.' },
+                ]).map((t) => {
+                  const active = raiseStyle === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => {
+                        setRaiseStyle(t.key);
+                        if (t.key === 'seats' && !(Number(f.slots) >= 2)) setF({ ...f, slots: '8' });
+                      }}
+                      aria-pressed={active}
+                      className={`border px-3 py-3 flex flex-col items-start gap-1 text-left transition-colors ${
+                        active
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                          : 'border-[var(--border)] hover:border-[var(--accent)]/50'
+                      }`}
                     >
-                      <option value="0">Open — unlimited backers</option>
-                      {[2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24].map((n) => (
-                        <option key={n} value={String(n)}>{n} slots</option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
-                      &gt; Caps how many wallets can back the raise
-                    </span>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Minimum per backer</label>
-                    <select
-                      value={f.min}
-                      onChange={(e) => setF({ ...f, min: e.target.value })}
-                      className={inputClass()}
-                    >
-                      {['0.01', '0.025', '0.05', '0.1', '0.25', '0.5'].map((n) => (
-                        <option key={n} value={n}>{n} ETH</option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
-                      &gt; Each backer pledges at least this
-                    </span>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Raise goal</label>
-                    <select
-                      value={f.goal}
-                      onChange={(e) => setF({ ...f, goal: e.target.value })}
-                      className={inputClass()}
-                    >
-                      {['0.1', '0.25', '0.5', '1', '1.5', '2'].map((n) => (
-                        <option key={n} value={n}>{n} ETH</option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
-                      &gt; Launches when the pool reaches this
-                    </span>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Deadline</label>
-                    <select
-                      value={f.days}
-                      onChange={(e) => setF({ ...f, days: e.target.value })}
-                      className={inputClass()}
-                    >
-                      {[['1', '1 day'], ['3', '3 days'], ['5', '5 days'], ['7', '7 days']].map(([v, l]) => (
-                        <option key={v} value={v}>{l}</option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
-                      &gt; Goal unmet by then → refunds open automatically
-                    </span>
-                  </div>
-                </div>
+                      <span className={`text-sm font-mono font-semibold ${active ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
+                        {t.label}
+                      </span>
+                      <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">{t.sub}</span>
+                      <span className="text-[10px] font-mono text-[var(--muted)] normal-case leading-snug">{t.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-                {/* Per-backer maximum — optional whale cap, same idea as the
-                    SOL page's per-backer maximums box. */}
-                <div className="space-y-3 border border-[var(--border)] p-3">
-                  <div>
-                    <div className="text-xs font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
-                      Per-backer maximum (optional)
+              <div className="border-t border-[var(--border)] p-4 sm:p-5 space-y-4">
+                {raiseStyle === 'open' ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className={labelClass}>Raise goal</label>
+                        <select
+                          value={f.goal}
+                          onChange={(e) => setF({ ...f, goal: e.target.value })}
+                          className={inputClass()}
+                        >
+                          {['0.1', '0.25', '0.5', '1', '1.5', '2'].map((n) => (
+                            <option key={n} value={n}>{n} ETH</option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                          &gt; Launchable once the pool reaches this
+                        </span>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Minimum per backer</label>
+                        <select
+                          value={f.min}
+                          onChange={(e) => setF({ ...f, min: e.target.value })}
+                          className={inputClass()}
+                        >
+                          {['0.01', '0.025', '0.05', '0.1', '0.25', '0.5'].map((n) => (
+                            <option key={n} value={n}>{n} ETH</option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                          &gt; Keeps dust out
+                        </span>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Deadline</label>
+                        <select
+                          value={f.days}
+                          onChange={(e) => setF({ ...f, days: e.target.value })}
+                          className={inputClass()}
+                        >
+                          {[['1', '1 day'], ['3', '3 days'], ['5', '5 days'], ['7', '7 days']].map(([v, l]) => (
+                            <option key={v} value={v}>{l}</option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                          &gt; Goal unmet by then → refunds open
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
-                      Cap any single wallet&apos;s deposit so no whale can own the raise. Leave at 0 for uncapped.
-                    </p>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Max per backer (ETH)</label>
-                    <input
-                      type="number"
-                      value={f.max}
-                      onChange={(e) => setF({ ...f, max: e.target.value })}
-                      min={0}
-                      step="any"
-                      placeholder="0 = uncapped"
-                      className={inputClass()}
-                    />
-                  </div>
-                </div>
 
-                {Number(f.goal) > BETA_GOAL_CAP_ETH && (
+                    {/* Whale cap — the creator's choice, off by default */}
+                    <div className="space-y-3 border border-[var(--border)] p-3">
+                      <div>
+                        <div className="text-xs font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+                          Whale cap (optional)
+                        </div>
+                        <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
+                          Cap any single wallet&apos;s deposit so no whale can own the raise. Leave at 0 for uncapped.
+                        </p>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Max per backer (ETH)</label>
+                        <input
+                          type="number"
+                          value={f.max}
+                          onChange={(e) => setF({ ...f, max: e.target.value })}
+                          min={0}
+                          step="any"
+                          placeholder="0 = uncapped"
+                          className={inputClass()}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className={labelClass}>Seats</label>
+                        <select
+                          value={f.slots}
+                          onChange={(e) => setF({ ...f, slots: e.target.value })}
+                          className={inputClass()}
+                        >
+                          {[2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24].map((n) => (
+                            <option key={n} value={String(n)}>{n} seats</option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                          &gt; Each seat = one wallet, one equal share
+                        </span>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Seat price</label>
+                        <select
+                          value={seatPrice}
+                          onChange={(e) => setSeatPrice(e.target.value)}
+                          className={inputClass()}
+                        >
+                          {['0.01', '0.025', '0.05', '0.1', '0.25', '0.5'].map((n) => (
+                            <option key={n} value={n}>{n} ETH</option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                          &gt; Exact deposit — no more, no less
+                        </span>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Deadline</label>
+                        <select
+                          value={f.days}
+                          onChange={(e) => setF({ ...f, days: e.target.value })}
+                          className={inputClass()}
+                        >
+                          {[['1', '1 day'], ['3', '3 days'], ['5', '5 days'], ['7', '7 days']].map(([v, l]) => (
+                            <option key={v} value={v}>{l}</option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                          &gt; Seats unfilled by then → refunds open
+                        </span>
+                      </div>
+                    </div>
+                    <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 px-3 py-2.5 text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                      <span className="text-[var(--accent)] font-semibold">{seatCount} seats × {seatPrice} ETH = {effGoalEth} ETH raise.</span>{' '}
+                      Every backer deposits exactly the seat price, owns exactly 1/{seatCount} of the
+                      backer pool and fee stream — and the last seat filling meets the goal, so{' '}
+                      <span className="text-[var(--foreground)]">filling the round IS the launch trigger</span>.
+                    </div>
+                  </>
+                )}
+
+                {effGoalEth > BETA_GOAL_CAP_ETH && (
                   <p className="text-xs font-mono text-[var(--warning)]">
-                    BETA CAP: goals are limited to {BETA_GOAL_CAP_ETH} ETH until the external contract
-                    review completes.
+                    BETA CAP: raises are limited to {BETA_GOAL_CAP_ETH} ETH total until the external
+                    contract review completes{raiseStyle === 'seats' ? ' — lower the seat count or price' : ''}.
                   </p>
                 )}
               </div>
@@ -768,7 +862,7 @@ export default function CreateCampaignPage() {
               </p>
               <button
                 onClick={submit}
-                disabled={isPending || uploading || !f.name || !f.symbol || !f.description || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH || overBudget || !stackValid || !taxValid}
+                disabled={isPending || uploading || !f.name || !f.symbol || !f.description || effGoalEth <= 0 || effGoalEth > BETA_GOAL_CAP_ETH || overBudget || !stackValid || !taxValid}
                 className="btn-primary"
               >
                 {uploading ? 'Uploading Image…' : isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
@@ -782,7 +876,7 @@ export default function CreateCampaignPage() {
 }
 
 // ── Live preview rail — the SOL TokenPreviewPanel, twinned ──────────
-function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet, taxPct, buyback }: {
+function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet, taxPct, buyback, raiseStyle, seatPrice, effGoalEth }: {
   f: { name: string; symbol: string; description: string; twitter: string; telegram: string; discord: string; website: string; farcaster: string; goal: string; min: string; max: string; slots: string };
   imagePreview: string | null;
   stack: BotItem[];
@@ -790,6 +884,9 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
   creatorWallet?: string;
   taxPct: number;
   buyback: boolean;
+  raiseStyle: 'open' | 'seats';
+  seatPrice: string;
+  effGoalEth: number;
 }) {
   const displaySymbol = f.symbol.trim() ? f.symbol.trim().toUpperCase() : '???';
   const displayName = f.name.trim() || 'Unnamed Token';
@@ -859,21 +956,31 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
           </p>
         )}
 
-        {/* Key stats */}
+        {/* Key stats — per raise style */}
         <div className="grid grid-cols-2 gap-2 text-[10px] font-mono uppercase tracking-widest border-t border-[var(--border)] pt-3">
-          <PreviewStat label="Goal" value={`${f.goal || '0'} ETH`} tone="accent" />
-          <PreviewStat label="Min per backer" value={`${f.min || '0'} ETH`} />
-          <PreviewStat label="Max per backer" value={Number(f.max) > 0 ? `${f.max} ETH` : 'Uncapped'} tone={Number(f.max) > 0 ? 'gold' : 'default'} />
-          <PreviewStat label="Slots" value={Number(f.slots) > 0 ? f.slots : 'Uncapped'} />
+          <PreviewStat label="Raise" value={`${effGoalEth} ETH`} tone="accent" />
+          {raiseStyle === 'seats' ? (
+            <>
+              <PreviewStat label="Seat price" value={`${seatPrice} ETH`} tone="gold" />
+              <PreviewStat label="Seats" value={f.slots} />
+              <PreviewStat label="Entry" value="Equal" />
+            </>
+          ) : (
+            <>
+              <PreviewStat label="Backers" value="Unlimited" />
+              <PreviewStat label="Min per backer" value={`${f.min || '0'} ETH`} />
+              <PreviewStat label="Whale cap" value={Number(f.max) > 0 ? `${f.max} ETH` : 'None'} tone={Number(f.max) > 0 ? 'gold' : 'default'} />
+            </>
+          )}
           <PreviewStat label="Creator tax" value={`${taxPct}%`} tone="accent" />
           <PreviewStat label="pons buyback" value={buyback ? 'ON' : 'OFF'} tone={buyback ? 'gold' : 'default'} />
         </div>
 
-        {/* Slot grid preview — what the campaign card will show */}
-        {Number(f.slots) > 0 && Number(f.slots) <= 24 && (
+        {/* Seat grid preview — what the campaign card will show */}
+        {raiseStyle === 'seats' && Number(f.slots) >= 2 && Number(f.slots) <= 24 && (
           <div className="border-t border-[var(--border)] pt-3">
             <div className="flex justify-between items-center mb-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Slots</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Seats</span>
               <span className="text-xs font-mono text-[var(--accent)]">0 / {f.slots}</span>
             </div>
             <div
