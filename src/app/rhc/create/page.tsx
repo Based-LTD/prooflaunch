@@ -8,7 +8,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, decodeEventLog } from 'viem';
 import { AlertCircle } from 'lucide-react';
-import { POOLLAUNCH_FACTORY, PONS_FACTORY, AIRDROP_OPERATOR, factoryAbi } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY_V4, AIRDROP_OPERATOR, factoryV2Abi } from '@/lib/rhc';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
 // proven safe — they graduate at birth), but until the external contract
@@ -26,18 +26,23 @@ const labelClass =
 // burn / feed_lp run as ownerless contracts (trustless — world-firsts);
 // vault legs are named wallets; the holder airdrop is a vault leg
 // pointed at the platform operator (platform-run, honestly labeled).
-type BotKind = 'burn' | 'feed_lp' | 'vault' | 'airdrop';
+type BotKind = 'vault' | 'airdrop';
 interface BotItem { kind: BotKind; pct: string; addr?: string }
 
-const BOT_ACTIONS: { kind: BotKind; label: string; tag: string; emoji: string; desc: string }[] = [
-  { kind: 'burn',    label: 'BURN',           tag: 'Deflationary · Trustless', emoji: '🔥', desc: 'Ownerless contract buys the token with its fee share and sends it to the dead address. Anyone can crank it; nobody — including us — can stop it. Supply cuts reward every holder pro-rata.' },
-  { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'Liquidity · Trustless',    emoji: '🌊', desc: 'Ownerless contract mints full-range liquidity with its fee share and compounds the position\'s own trading fees. It has NO withdraw function — protocol-owned liquidity locked by construction. World first.' },
+// v4 launches through pons V2 (curve → locked Uniswap v4) — where all the
+// live volume and the adjustable tax are. The trustless Burn/Pool-Feeder
+// contracts are built for V1's v3-style pools; their v4 ports are on the
+// roadmap, and until then pons' native buyback flywheel (💠, below) covers
+// buy-and-burn. Tiles stay visible + disabled so the roadmap is honest.
+const BOT_ACTIONS: { kind: BotKind | 'burn' | 'feed_lp'; label: string; tag: string; emoji: string; desc: string; disabled?: boolean }[] = [
   { kind: 'vault',   label: 'VAULT',          tag: 'Treasury',                 emoji: '🏦', desc: 'A wallet you name (marketing / DAO / treasury) becomes a fee leg and pulls its share anytime. Address locked at creation — can never be changed.' },
-  { kind: 'airdrop', label: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run',   emoji: '📸', desc: 'PoolLaunch snapshots your token\'s holders and airdrops this leg\'s fees pro-rata — the same machinery as our Solana launches. Platform-operated, not trustless; 🔥 BURN is the trustless holder reward.' },
+  { kind: 'airdrop', label: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run',   emoji: '📸', desc: 'PoolLaunch snapshots your token\'s holders and airdrops this leg\'s fees pro-rata — the same machinery as our Solana launches. Platform-operated and labeled so.' },
+  { kind: 'burn',    label: 'BURN',           tag: 'v4 port soon',             emoji: '🔥', desc: 'Our trustless buy-and-burn contract runs on pons V1 pools today; its Uniswap-v4 port is next. Meanwhile 💠 Buyback (pons-native, below) covers the burn flywheel.', disabled: true },
+  { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'v4 port soon',             emoji: '🌊', desc: 'Construction-locked liquidity feeder — pons V1 pools today, Uniswap-v4 port next. V2 graduation liquidity is already permanently locked by pons itself.', disabled: true },
 ];
-const SINGLE_KINDS = new Set<BotKind>(['burn', 'feed_lp', 'airdrop']);
-const BOT_EMOJI: Record<BotKind, string> = { burn: '🔥', feed_lp: '🌊', vault: '🏦', airdrop: '📸' };
-const BOT_SHORT: Record<BotKind, string> = { burn: 'BURN', feed_lp: 'POOL FEED', vault: 'VAULT', airdrop: 'AIRDROP' };
+const SINGLE_KINDS = new Set<string>(['airdrop']);
+const BOT_EMOJI: Record<BotKind, string> = { vault: '🏦', airdrop: '📸' };
+const BOT_SHORT: Record<BotKind, string> = { vault: 'VAULT', airdrop: 'AIRDROP' };
 
 export default function CreateCampaignPage() {
   const { address, isConnected } = useAccount();
@@ -48,6 +53,11 @@ export default function CreateCampaignPage() {
   });
   const [botsEnabled, setBotsEnabled] = useState(false);
   const [stack, setStack] = useState<BotItem[]>([]);
+  // pons V2 creator tax: 0–10% of every trade, immutable at launch, earned
+  // by the FeeSplitter — i.e. by the backers (90/7/3 of it).
+  const [taxPct, setTaxPct] = useState('1');
+  const [buyback, setBuyback] = useState(false);
+  const taxValid = (Number(taxPct) || 0) >= 0 && (Number(taxPct) || 0) <= 10;
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { data: receipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const [created, setCreated] = useState<string | null>(null);
@@ -68,7 +78,7 @@ export default function CreateCampaignPage() {
     if (isSuccess && receipt) {
       for (const log of receipt.logs) {
         try {
-          const ev = decodeEventLog({ abi: factoryAbi, data: log.data, topics: log.topics });
+          const ev = decodeEventLog({ abi: factoryV2Abi, data: log.data, topics: log.topics });
           if (ev.eventName === 'CampaignCreated') {
             setCreated((ev.args as { campaign: string }).campaign);
           }
@@ -79,29 +89,25 @@ export default function CreateCampaignPage() {
 
   const submit = () => {
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(f.days) * 86400);
-    const pctOf = (k: BotKind) => Math.round((Number(activeStack.find((b) => b.kind === k)?.pct) || 0) * 100);
-    const vaultLegs = activeStack.filter((b) =>
-      (b.kind === 'vault' || b.kind === 'airdrop') && Number(b.pct) > 0
-    );
+    const vaultLegs = activeStack.filter((b) => Number(b.pct) > 0);
     writeContract({
-      address: POOLLAUNCH_FACTORY,
-      abi: factoryAbi,
+      address: POOLLAUNCH_FACTORY_V4,
+      abi: factoryV2Abi,
       functionName: 'createCampaign',
       args: [
-        PONS_FACTORY,
         parseEther(f.goal),
         parseEther(f.min),
         f.max === '0' ? 0n : parseEther(f.max),
         BigInt(f.slots || '0'),
         deadline,
-        0n, 0n,
+        0n,
+        Math.round((Number(taxPct) || 0) * 100),
+        buyback,
         {
           name: f.name, symbol: f.symbol.toUpperCase(), logo: f.logo, description: f.description,
           socials: { twitter: f.twitter, telegram: f.telegram, discord: '', website: f.website, farcaster: '' },
-          feeWallet: '0x0000000000000000000000000000000000000000', // overwritten by the contract → FeeSplitter
+          feeWallet: '0x0000000000000000000000000000000000000000', // unused on V2 — the contract sets creatorFeeRecipient = FeeSplitter
         },
-        pctOf('burn'),
-        pctOf('feed_lp'),
         vaultLegs.map((b) => (b.kind === 'airdrop' ? AIRDROP_OPERATOR : (b.addr as `0x${string}`))),
         vaultLegs.map((b) => Math.round(Number(b.pct) * 100)),
       ],
@@ -189,7 +195,7 @@ export default function CreateCampaignPage() {
         // submit layout. On mobile the preview stacks above the form.
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 lg:gap-6">
           <div className="lg:order-2">
-            <CampaignPreviewPanel f={f} stack={activeStack} backerPct={backerPct} creatorWallet={address} />
+            <CampaignPreviewPanel f={f} stack={activeStack} backerPct={backerPct} creatorWallet={address} taxPct={Number(taxPct) || 0} buyback={buyback} />
           </div>
 
           <div className="space-y-5 lg:order-1 min-w-0">
@@ -300,6 +306,63 @@ export default function CreateCampaignPage() {
               </div>
             </section>
 
+            {/* ── CREATOR TAX — the pons V2 dial, earned by your backers ── */}
+            <section className="border border-[var(--border)] bg-[var(--card)]">
+              <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                  {'// CREATOR_TAX'}
+                </span>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  0–10% · IMMUTABLE
+                </span>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={0}
+                    max={10}
+                    step={0.25}
+                    value={Number(taxPct) || 0}
+                    onChange={(e) => setTaxPct(e.target.value)}
+                    className="flex-1 accent-[var(--accent)]"
+                    aria-label="Creator tax percent"
+                  />
+                  <label className="flex items-center gap-2 shrink-0">
+                    <input
+                      value={taxPct}
+                      onChange={(e) => setTaxPct(e.target.value)}
+                      className={`${inputClass(!taxValid)} w-20 text-right`}
+                    />
+                    <span className="text-sm font-mono text-[var(--muted)]">%</span>
+                  </label>
+                </div>
+                <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                  The pons trading tax on every buy and sell — same dial as launching on pons
+                  directly, with one difference: here the tax flows to your campaign&apos;s
+                  FeeSplitter, so <span className="text-[var(--accent)]">your backers earn it</span>{' '}
+                  ({backerPct}% of it, on top of the standard creator-fee share). Locked at launch;
+                  can never be raised.
+                </p>
+                {!taxValid && (
+                  <p className="text-xs font-mono text-[var(--error)]">Tax must be between 0 and 10%.</p>
+                )}
+                <label className="flex items-start gap-3 cursor-pointer border-t border-[var(--border)] pt-3">
+                  <input
+                    type="checkbox"
+                    checked={buyback}
+                    onChange={(e) => setBuyback(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-[var(--accent)]"
+                  />
+                  <span className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                    <span className="text-[var(--foreground)] uppercase tracking-widest text-[10px]">💠 pons Buyback</span>
+                    {' '}— route a slice of trading fees through pons&apos; native buyback flywheel
+                    for this token. Runs on pons&apos; own rails, immutable once launched.
+                  </span>
+                </label>
+              </div>
+            </section>
+
             {/* ── LAUNCH BOTS — the SOL bot-stack UX ── */}
             <div className="border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
               <div className="flex items-start justify-between gap-3">
@@ -312,9 +375,10 @@ export default function CreateCampaignPage() {
                   </div>
                   <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
                     Each bot becomes a fee leg on your campaign&apos;s splitter, carved from the
-                    backer share. Burn and Pool Feeder run as ownerless contracts — the
-                    world&apos;s first trustless launch bots: anyone can crank them, nobody can
-                    stop them, and the terms can never change.
+                    backer share — immutable from creation, pull-based forever. The trustless
+                    Burn and Pool Feeder contracts (world-firsts, live on our pons-V1 factory)
+                    are being ported to Uniswap v4; pons&apos; native 💠 Buyback covers the burn
+                    flywheel here meanwhile.
                   </p>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -364,12 +428,12 @@ export default function CreateCampaignPage() {
                       {BOT_ACTIONS.map((opt) => {
                         const alreadyUsed = SINGLE_KINDS.has(opt.kind) && stack.some((b) => b.kind === opt.kind);
                         const vaultsFull = (opt.kind === 'vault' || opt.kind === 'airdrop') && vaultCount >= 3;
-                        const disabled = alreadyUsed || vaultsFull || botsPct >= 90;
+                        const disabled = !!opt.disabled || alreadyUsed || vaultsFull || botsPct >= 90;
                         return (
                           <button
                             key={opt.kind}
                             type="button"
-                            onClick={() => !disabled && setStack([...stack, { kind: opt.kind, pct: '', addr: '' }])}
+                            onClick={() => !disabled && setStack([...stack, { kind: opt.kind as BotKind, pct: '', addr: '' }])}
                             disabled={disabled}
                             className={`text-left p-2.5 border transition-colors ${
                               disabled
@@ -461,7 +525,7 @@ export default function CreateCampaignPage() {
               </p>
               <button
                 onClick={submit}
-                disabled={isPending || !f.name || !f.symbol || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH || overBudget || !stackValid}
+                disabled={isPending || !f.name || !f.symbol || Number(f.goal) <= 0 || Number(f.goal) > BETA_GOAL_CAP_ETH || overBudget || !stackValid || !taxValid}
                 className="btn-primary"
               >
                 {isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
@@ -475,11 +539,13 @@ export default function CreateCampaignPage() {
 }
 
 // ── Live preview rail — the SOL TokenPreviewPanel, twinned ──────────
-function CampaignPreviewPanel({ f, stack, backerPct, creatorWallet }: {
+function CampaignPreviewPanel({ f, stack, backerPct, creatorWallet, taxPct, buyback }: {
   f: { name: string; symbol: string; logo: string; description: string; twitter: string; telegram: string; website: string; goal: string; min: string; max: string; slots: string };
   stack: BotItem[];
   backerPct: number;
   creatorWallet?: string;
+  taxPct: number;
+  buyback: boolean;
 }) {
   const displaySymbol = f.symbol.trim() ? f.symbol.trim().toUpperCase() : '???';
   const displayName = f.name.trim() || 'Unnamed Token';
@@ -557,6 +623,8 @@ function CampaignPreviewPanel({ f, stack, backerPct, creatorWallet }: {
           <PreviewStat label="Min per backer" value={`${f.min || '0'} ETH`} />
           <PreviewStat label="Max per backer" value={Number(f.max) > 0 ? `${f.max} ETH` : 'Uncapped'} tone={Number(f.max) > 0 ? 'gold' : 'default'} />
           <PreviewStat label="Slots" value={Number(f.slots) > 0 ? f.slots : 'Uncapped'} />
+          <PreviewStat label="Creator tax" value={`${taxPct}%`} tone="accent" />
+          <PreviewStat label="pons buyback" value={buyback ? 'ON' : 'OFF'} tone={buyback ? 'gold' : 'default'} />
         </div>
 
         {/* Fee distribution bar — 90/7/3 with bots carved from the 90 */}

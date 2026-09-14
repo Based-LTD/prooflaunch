@@ -25,3 +25,14 @@ it; existing campaigns keep their immutable terms forever.
 | CampaignFactory v2 | `0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5` | 2026-09-14 | Adds creator bot legs: burnBps (deploys ownerless BurnLeg per campaign — buy-and-burn from fees on the pons v3 pool) + vault legs. Same 90/7/3 platform floor; backer share = 90% − bots. WETH `0x0Bd7D308...`, v3 factory `0x1f7d7550...`, fee tier 10000. v1 remains read-only in the UI (its campaigns are immutable and keep working). |
 | LegDeployer | `0xA530b670762A5e82062A8f2256B0d877Afc8eBe4` | 2026-09-14 | Carries bot-leg creation code (EIP-170: RHC enforces 24KB; monolithic v3 failed on-chain at 27.5KB). |
 | CampaignFactory v3 | `0xE2989dA79b04d64D9d68f476b6Ee8f971467b470` | 2026-09-14 | ACTIVE. burnBps + lpBps (FeedLPLeg: full-range POL locked by construction, fee-compounding) + vault legs. 19,695 bytes runtime. |
+| CampaignFactoryV2 (v4) | `0x552db842cdB40ea73Dcac6cfAe15AF1E03405a9D` | 2026-09-14 | ACTIVE. Targets **pons V2** — the live pons generation (3,640 launches/100k blocks vs 24 on V1): adjustable creatorTaxBps (cap read live from pons, 1000 = 10%), pons-native buybackEnabled, native-ETH fee flow (curve → FeeEscrow → FeeSplitterV2.harvest, all pull-based), curve refund on oversized raises claimable pro-rata (excessAtLaunch). Vault + airdrop legs; trustless Burn/FeedLP legs stay on v3 until their Uniswap-v4 ports. 5/5 fork tests vs live pons V2. |
+
+pons V2 targets (extracted from the pons frontend bundle, verified on-chain
+2026-09-14 — they rotate; re-extract from the app bundle if launches fail):
+- V2 factory: `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e` (maxCreatorTaxBps 1000)
+- LaunchAndBuy: `0xe33E9E479dF8802cb0866d5d05258bEc4cF62948` (atomic create+buy, snipe exemptions)
+- FeeEscrow: `0xd3AFEB2a57f70eF218Aa82451c51B2fb0416Ac9e` (creator fees pull here)
+- memeHook (v4): `0xE5e702641Ea86F4ae6cC3cDaeD2B886f976Be044` — curve→escrow sweep is gated to its feeSweepOperator (pons' bot; their protocol share rides the same sweep)
+
+Fork suites hammer the RPC — run with `--threads 1` or parallel forks trip
+Cloudflare and fail spuriously.
