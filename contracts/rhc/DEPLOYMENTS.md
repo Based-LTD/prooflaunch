@@ -36,3 +36,5 @@ pons V2 targets (extracted from the pons frontend bundle, verified on-chain
 
 Fork suites hammer the RPC — run with `--threads 1` or parallel forks trip
 Cloudflare and fail spuriously.
+| LegDeployerV2 | `0x42a2495D9426fd5d88A01e724E62275DCe02dfF4` | 2026-09-14 | Carries the v4 bot legs' creation code (EIP-170). NOTE: a stray duplicate landed at `0xa5aC43cd…` (combined script re-ran after a partial failure — use DeployV3Factory.s.sol for retries). |
+| CampaignFactoryV3 (v5) | PENDING — deployer needs ~0.0005 ETH | — | pons V2 + trustless bot legs on Uniswap v4: BurnLegV2 (dual-phase: curve buy pre-grad, direct PoolManager swap after), FeedLPLegV2 (full-range locked-by-construction v4 position, fee-compounding; accumulates during curve phase). Graduation cranks proven PERMISSIONLESS (rando createGraduatedPool worked on fork). 3/3 deep fork tests + full suite 26/26. Deploy with script/DeployV3Factory.s.sol (factory only!). |

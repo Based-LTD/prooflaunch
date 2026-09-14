@@ -8,7 +8,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, decodeEventLog } from 'viem';
 import { AlertCircle } from 'lucide-react';
-import { POOLLAUNCH_FACTORY_V4, AIRDROP_OPERATOR, factoryV2Abi } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY_V5, AIRDROP_OPERATOR, factoryV3Abi } from '@/lib/rhc';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
 // proven safe — they graduate at birth), but until the external contract
@@ -26,23 +26,24 @@ const labelClass =
 // burn / feed_lp run as ownerless contracts (trustless — world-firsts);
 // vault legs are named wallets; the holder airdrop is a vault leg
 // pointed at the platform operator (platform-run, honestly labeled).
-type BotKind = 'vault' | 'airdrop';
+type BotKind = 'burn' | 'feed_lp' | 'vault' | 'airdrop';
 interface BotItem { kind: BotKind; pct: string; addr?: string }
 
-// v4 launches through pons V2 (curve → locked Uniswap v4) — where all the
-// live volume and the adjustable tax are. The trustless Burn/Pool-Feeder
-// contracts are built for V1's v3-style pools; their v4 ports are on the
-// roadmap, and until then pons' native buyback flywheel (💠, below) covers
-// buy-and-burn. Tiles stay visible + disabled so the roadmap is honest.
-const BOT_ACTIONS: { kind: BotKind | 'burn' | 'feed_lp'; label: string; tag: string; emoji: string; desc: string; disabled?: boolean }[] = [
+// The full stack on pons V2: the trustless Burn and Pool Feeder run as
+// ownerless contracts on the Uniswap-v4 graduated pools (dual-phase —
+// they buy on the bonding curve pre-graduation, talk to the PoolManager
+// directly after; proven on live-pool forks). World-firsts, both.
+const BOT_ACTIONS: { kind: BotKind; label: string; tag: string; emoji: string; desc: string; disabled?: boolean }[] = [
+  { kind: 'burn',    label: 'BURN',           tag: 'Deflationary · Trustless', emoji: '🔥', desc: 'Ownerless contract buys the token with its fee share — on the bonding curve before graduation, directly on the Uniswap-v4 pool after — and sends everything to the dead address. Anyone can crank it; nobody, including us, can stop it.' },
+  { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'Liquidity · Trustless',    emoji: '🌊', desc: 'Ownerless contract mints full-range liquidity on the graduated v4 pool and compounds the position\'s own trading fees. It has NO withdraw function — protocol-owned liquidity locked by construction. World first.' },
   { kind: 'vault',   label: 'VAULT',          tag: 'Treasury',                 emoji: '🏦', desc: 'A wallet you name (marketing / DAO / treasury) becomes a fee leg and pulls its share anytime. Address locked at creation — can never be changed.' },
-  { kind: 'airdrop', label: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run',   emoji: '📸', desc: 'PoolLaunch snapshots your token\'s holders and airdrops this leg\'s fees pro-rata — the same machinery as our Solana launches. Platform-operated and labeled so.' },
-  { kind: 'burn',    label: 'BURN',           tag: 'v4 port soon',             emoji: '🔥', desc: 'Our trustless buy-and-burn contract runs on pons V1 pools today; its Uniswap-v4 port is next. Meanwhile 💠 Buyback (pons-native, below) covers the burn flywheel.', disabled: true },
-  { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'v4 port soon',             emoji: '🌊', desc: 'Construction-locked liquidity feeder — pons V1 pools today, Uniswap-v4 port next. V2 graduation liquidity is already permanently locked by pons itself.', disabled: true },
+  { kind: 'airdrop', label: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run',   emoji: '📸', desc: 'PoolLaunch snapshots your token\'s holders and airdrops this leg\'s fees pro-rata — the same machinery as our Solana launches. Platform-operated and labeled so; 🔥 BURN is the trustless holder reward.' },
 ];
-const SINGLE_KINDS = new Set<string>(['airdrop']);
-const BOT_EMOJI: Record<BotKind, string> = { vault: '🏦', airdrop: '📸' };
-const BOT_SHORT: Record<BotKind, string> = { vault: 'VAULT', airdrop: 'AIRDROP' };
+const SINGLE_KINDS = new Set<string>(['burn', 'feed_lp', 'airdrop']);
+const BOT_EMOJI: Record<BotKind, string> = { burn: '🔥', feed_lp: '🌊', vault: '🏦', airdrop: '📸' };
+const BOT_SHORT: Record<BotKind, string> = { burn: 'BURN', feed_lp: 'POOL FEED', vault: 'VAULT', airdrop: 'AIRDROP' };
+// One-tap fee presets on each bot card — most creators think in these.
+const PCT_PRESETS = ['5', '10', '20', '30'];
 
 export default function CreateCampaignPage() {
   const { address, isConnected } = useAccount();
@@ -78,7 +79,7 @@ export default function CreateCampaignPage() {
     if (isSuccess && receipt) {
       for (const log of receipt.logs) {
         try {
-          const ev = decodeEventLog({ abi: factoryV2Abi, data: log.data, topics: log.topics });
+          const ev = decodeEventLog({ abi: factoryV3Abi, data: log.data, topics: log.topics });
           if (ev.eventName === 'CampaignCreated') {
             setCreated((ev.args as { campaign: string }).campaign);
           }
@@ -89,10 +90,11 @@ export default function CreateCampaignPage() {
 
   const submit = () => {
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(f.days) * 86400);
-    const vaultLegs = activeStack.filter((b) => Number(b.pct) > 0);
+    const pctOf = (k: BotKind) => Math.round((Number(activeStack.find((b) => b.kind === k)?.pct) || 0) * 100);
+    const vaultLegs = activeStack.filter((b) => (b.kind === 'vault' || b.kind === 'airdrop') && Number(b.pct) > 0);
     writeContract({
-      address: POOLLAUNCH_FACTORY_V4,
-      abi: factoryV2Abi,
+      address: POOLLAUNCH_FACTORY_V5,
+      abi: factoryV3Abi,
       functionName: 'createCampaign',
       args: [
         parseEther(f.goal),
@@ -108,6 +110,8 @@ export default function CreateCampaignPage() {
           socials: { twitter: f.twitter, telegram: f.telegram, discord: '', website: f.website, farcaster: '' },
           feeWallet: '0x0000000000000000000000000000000000000000', // unused on V2 — the contract sets creatorFeeRecipient = FeeSplitter
         },
+        pctOf('burn'),
+        pctOf('feed_lp'),
         vaultLegs.map((b) => (b.kind === 'airdrop' ? AIRDROP_OPERATOR : (b.addr as `0x${string}`))),
         vaultLegs.map((b) => Math.round(Number(b.pct) * 100)),
       ],
@@ -295,6 +299,35 @@ export default function CreateCampaignPage() {
                   {input('max', 'Max (0 = ∞)')}
                   {input('slots', 'Slots (0 = ∞)')}
                   {input('days', 'Deadline (Days)')}
+                </div>
+                {/* Backer slots — the SOL model's slot picker, one tap.
+                    Capped slots make a raise feel ownable; ∞ keeps it open. */}
+                <div className="mt-3">
+                  <span className={labelClass}>Backer Slots</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['4', '8', '12', '16', '24', '0'].map((sv) => {
+                      const active = (f.slots || '0') === sv;
+                      return (
+                        <button
+                          key={sv}
+                          type="button"
+                          onClick={() => setF({ ...f, slots: sv })}
+                          aria-pressed={active}
+                          className={`px-3 py-1.5 text-[10px] font-mono border transition-colors ${
+                            active
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                              : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--foreground)]'
+                          }`}
+                        >
+                          {sv === '0' ? '∞ OPEN' : `${sv} SLOTS`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <span className="block mt-1.5 text-[10px] font-mono text-[var(--muted-soft)] normal-case tracking-normal">
+                    Slots cap how many wallets can back the raise — same mechanic as the SOL
+                    Proving Grounds. ∞ leaves it open; min/max per backer still apply.
+                  </span>
                 </div>
                 {Number(f.goal) > BETA_GOAL_CAP_ETH && (
                   <p className="mt-3 text-xs font-mono text-[var(--warning)]">
@@ -487,15 +520,36 @@ export default function CreateCampaignPage() {
                               >×</button>
                             </div>
                             <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">{meta.desc}</p>
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               {bot.kind === 'vault' && (
                                 <input
                                   value={bot.addr}
                                   onChange={(e) => setStack(stack.map((x, j) => j === idx ? { ...x, addr: e.target.value } : x))}
                                   placeholder="0x… (marketing / DAO / treasury wallet)"
-                                  className={inputClass(badAddr)}
+                                  className={`${inputClass(badAddr)} min-w-[200px] flex-1`}
                                 />
                               )}
+                              {/* one-tap presets — the fastest way to configure a leg */}
+                              <div className="flex gap-1 shrink-0">
+                                {PCT_PRESETS.map((pv) => {
+                                  const active = bot.pct === pv;
+                                  return (
+                                    <button
+                                      key={pv}
+                                      type="button"
+                                      onClick={() => setStack(stack.map((x, j) => j === idx ? { ...x, pct: active ? '' : pv } : x))}
+                                      aria-pressed={active}
+                                      className={`px-2.5 py-1.5 text-[10px] font-mono border transition-colors ${
+                                        active
+                                          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                                          : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--foreground)]'
+                                      }`}
+                                    >
+                                      {pv}%
+                                    </button>
+                                  );
+                                })}
+                              </div>
                               <label className="flex items-center gap-2 shrink-0">
                                 <input
                                   value={bot.pct}
