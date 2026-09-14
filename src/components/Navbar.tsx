@@ -38,7 +38,7 @@ const rhcNavLinks = [
   { href: '/rhc/create', label: 'Submit' },
   { href: '/rhc/launched', label: 'Launched' },
   { href: '/rhc/portfolio', label: 'Portfolio' },
-  { href: '/docs', label: 'Docs' },
+  { href: '/rhc/docs', label: 'Docs' },
   { href: '/roadmap', label: 'Roadmap' },
   { href: '/rhc/audit', label: 'Audit' },
 ];
