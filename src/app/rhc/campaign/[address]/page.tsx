@@ -11,6 +11,7 @@ import {
   rhcPublicClient, campaignAbi, splitterAbi, fmtEth, explorerUrl, RHC_WETH,
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
+import { WpPanel } from '../../walletproof';
 
 interface State {
   meta: { name: string; symbol: string; description: string };
@@ -221,6 +222,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   {s.token}
                 </a>
               </div>
+              <WpPanel token={s.token} />
               {s.myContribution > 0n && !s.myTokensClaimed && (
                 <button onClick={() => act('claimTokens')} disabled={isPending} className="btn-primary">
                   Claim {(Number(myTokenShare) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol}

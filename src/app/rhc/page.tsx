@@ -8,6 +8,7 @@ import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { fetchAllCampaigns, CampaignRow } from '@/lib/rhc';
 import { CampaignCard } from './components';
 import { RhcHero } from './RhcHero';
+import { WpStatsBar } from './walletproof';
 
 type BackingSort = 'ending_soon' | 'newest' | 'progress';
 type SimpleSort = 'newest' | 'oldest';
@@ -74,6 +75,7 @@ export default function RhcBoardPage() {
   return (
     <div className="space-y-4 sm:space-y-5">
       <RhcHero rows={rows} />
+      <div className="mt-4"><WpStatsBar /></div>
 
       {/* Search — single row (sort is per-column, in column headers) */}
       <div className="border border-[var(--border)] bg-[var(--card)] flex items-center gap-2 px-3 py-2">
