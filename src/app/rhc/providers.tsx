@@ -8,7 +8,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { robinhoodChain } from '@/lib/rhc';
 import { useState } from 'react';
 
-const wagmiConfig = createConfig({
+// Exported singleton: the navbar's RHC connect button wraps itself in its
+// own WagmiProvider around this SAME config (the navbar renders outside
+// the /rhc layout tree), so connection state stays shared — wagmi keeps
+// state on the config object, not the provider.
+export const wagmiConfig = createConfig({
   chains: [robinhoodChain],
   connectors: [injected()],
   transports: { [robinhoodChain.id]: http() },
