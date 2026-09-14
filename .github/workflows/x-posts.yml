@@ -1,0 +1,35 @@
+name: x-posts
+
+# Two PoolLaunch promo posts a day, picked from docs/x-content-calendar.md
+# by date + slot (stateless, idempotent per slot). Does nothing until the
+# four X API secrets are configured — safe to merge disarmed.
+on:
+  schedule:
+    - cron: '0 15 * * *'   # slot 1 — ~morning US
+    - cron: '0 23 * * *'   # slot 2 — ~evening US
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Slot to post (1 or 2); empty = by UTC hour'
+        required: false
+      dry_run:
+        description: 'Set to 1 to print without posting'
+        required: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Post scheduled tweet
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          X_QUEUE_START: ${{ vars.X_QUEUE_START }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: node tools/x-post.mjs ${{ github.event.inputs.slot }}
