@@ -49,6 +49,8 @@ export function ConnectButton() {
   );
 }
 
+// Subpage header row — chip + tagline only. The wallet button lives in
+// the navbar (same slot as the SOL WalletMultiButton), not here.
 export function RhcHeader() {
   return (
     <div className="flex flex-wrap items-center justify-between mb-6 gap-3">
@@ -60,7 +62,6 @@ export function RhcHeader() {
           {'// '}Pool the raise · own the float · earn the fees
         </span>
       </div>
-      <ConnectButton />
     </div>
   );
 }
@@ -122,27 +123,3 @@ export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.Rea
   );
 }
 
-// A board column — same skeleton as the SOL Proving board's columns.
-export function BoardColumn({ label, icon, items, empty }: {
-  label: string; icon: string; items: CampaignRow[]; empty: string;
-}) {
-  return (
-    <div className="border border-[var(--border)] bg-[var(--card)] flex flex-col md:max-h-[75vh]">
-      <div className="border-b border-[var(--border)] px-3 py-2 flex items-center gap-2 shrink-0">
-        <span className="text-[var(--accent)] text-xs">{icon}</span>
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-          {'// '}{label}
-        </span>
-        <span className="ml-auto text-[10px] font-mono text-[var(--muted-soft)]">{items.length}</span>
-      </div>
-      <div className="p-2.5 space-y-2.5 overflow-y-auto">
-        {items.length === 0 && (
-          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] py-4 text-center">
-            {empty}
-          </p>
-        )}
-        {items.map((r) => <CampaignCard key={r.address} r={r} />)}
-      </div>
-    </div>
-  );
-}

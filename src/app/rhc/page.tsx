@@ -1,16 +1,37 @@
 'use client';
 
-// RHC home — the same three-column board as the SOL Proving page:
-// BACKING (raising now) | FUNDED (goal met, awaiting launch) | LIVE.
-// Same site, different chain.
-import { useEffect, useState } from 'react';
+// RHC home — the SOL Home page structure verbatim: hero, search row,
+// mobile column switcher, 3-column board with per-column sorts, and the
+// How It Works terminal block. Same site, different chain.
+import { useEffect, useMemo, useState } from 'react';
+import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { fetchAllCampaigns, CampaignRow } from '@/lib/rhc';
-import { RhcHeader, BoardColumn } from './components';
+import { CampaignCard } from './components';
 import { RhcHero } from './RhcHero';
+
+type BackingSort = 'ending_soon' | 'newest' | 'progress';
+type SimpleSort = 'newest' | 'oldest';
+
+// No created_at on-chain; deadline is the honest recency proxy (newer
+// campaigns set later deadlines) and is exactly right for ENDING_SOON.
+const endingSoon = (a: CampaignRow, b: CampaignRow) => Number(a.deadline - b.deadline);
+const newestFirst = (a: CampaignRow, b: CampaignRow) => Number(b.deadline - a.deadline);
+const oldestFirst = (a: CampaignRow, b: CampaignRow) => Number(a.deadline - b.deadline);
+// progress = raised/goal, compared by bigint cross-multiplication
+const byProgress = (a: CampaignRow, b: CampaignRow) => {
+  const l = a.totalRaised * (b.goal === 0n ? 1n : b.goal);
+  const r = b.totalRaised * (a.goal === 0n ? 1n : a.goal);
+  return l === r ? 0 : l > r ? -1 : 1;
+};
 
 export default function RhcBoardPage() {
   const [rows, setRows] = useState<CampaignRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [backingSort, setBackingSort] = useState<BackingSort>('ending_soon');
+  const [fundedSort, setFundedSort] = useState<SimpleSort>('newest');
+  const [liveSort, setLiveSort] = useState<SimpleSort>('newest');
+  const [mobileTab, setMobileTab] = useState<'backing' | 'funded' | 'live'>('backing');
 
   useEffect(() => {
     fetchAllCampaigns()
@@ -18,39 +39,248 @@ export default function RhcBoardPage() {
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
-  const now = BigInt(Math.floor(Date.now() / 1000));
-  const backing = (rows || []).filter(r => !r.launched && !r.cancelled && r.totalRaised < r.goal && now < r.deadline);
-  const funded = (rows || []).filter(r => !r.launched && !r.cancelled && r.totalRaised >= r.goal);
-  const live = (rows || []).filter(r => r.launched);
+  const { backing, funded, live, totals } = useMemo(() => {
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const all = rows || [];
+    const isBacking = (r: CampaignRow) => !r.launched && !r.cancelled && r.totalRaised < r.goal && now < r.deadline;
+    const isFunded = (r: CampaignRow) => !r.launched && !r.cancelled && r.totalRaised >= r.goal;
+
+    const term = search.trim().toLowerCase();
+    const matches = (r: CampaignRow) =>
+      !term || r.name.toLowerCase().includes(term) || r.symbol.toLowerCase().includes(term);
+    const filtered = all.filter(matches);
+
+    const backingFn =
+      backingSort === 'ending_soon' ? endingSoon :
+      backingSort === 'progress' ? byProgress :
+      newestFirst;
+    const fundedFn = fundedSort === 'oldest' ? oldestFirst : newestFirst;
+    const liveFn = liveSort === 'oldest' ? oldestFirst : newestFirst;
+
+    return {
+      backing: filtered.filter(isBacking).sort(backingFn),
+      funded: filtered.filter(isFunded).sort(fundedFn),
+      live: filtered.filter((r) => r.launched).sort(liveFn),
+      totals: {
+        backing: all.filter(isBacking).length,
+        funded: all.filter(isFunded).length,
+        live: all.filter((r) => r.launched).length,
+      },
+    };
+  }, [rows, search, backingSort, fundedSort, liveSort]);
+
+  const loading = !rows && !error;
 
   return (
-    <div className="max-w-6xl mx-auto pb-8">
-      <RhcHeader />
+    <div className="space-y-4 sm:space-y-5">
       <RhcHero rows={rows} />
 
+      {/* Search — single row (sort is per-column, in column headers) */}
+      <div className="border border-[var(--border)] bg-[var(--card)] flex items-center gap-2 px-3 py-2">
+        <Search className="w-3.5 h-3.5 text-[var(--muted)] shrink-0" />
+        <input
+          type="text"
+          placeholder="search tokens by name or symbol..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 bg-transparent border-0 outline-none text-sm font-mono placeholder:text-[var(--muted)] focus:ring-0"
+          style={{ border: 'none', background: 'transparent' }}
+        />
+      </div>
+
       {error && (
-        <p className="text-xs font-mono text-[var(--error)] border border-[var(--error)]/40 bg-[var(--error)]/5 p-3 mb-4">
+        <p className="text-xs font-mono text-[var(--error)] border border-[var(--error)]/40 bg-[var(--error)]/5 p-3">
           CHAIN READ FAILED: {error} — refresh to retry
         </p>
       )}
-      {!rows && !error && (
-        <p className="text-xs font-mono text-[var(--muted)] animate-pulse py-8 text-center">
-          reading robinhood chain…
-        </p>
-      )}
 
-      {rows && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <BoardColumn label="BACKING" icon="◎" items={backing} empty="no open raises — create one" />
-          <BoardColumn label="FUNDED" icon="◈" items={funded} empty="none awaiting launch" />
-          <BoardColumn label="LIVE" icon="▲" items={live} empty="none live yet" />
+      {loading && (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-[var(--accent)]" />
         </div>
       )}
 
-      <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
-        90% of creator fees → backers · 7% platform · 3% holder rewards — immutable per campaign ·
-        the platform never holds funds
-      </p>
+      {/* Mobile-only column switcher — sticky beneath the navbar, same
+          offsets and treatment as the SOL board. */}
+      {rows && (
+        <div
+          className="md:hidden sticky top-20 z-30 -mx-4 sm:-mx-6 lg:-mx-8 border-y border-[var(--border)] bg-[var(--background)]/95"
+          style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+        >
+          <div className="flex">
+            {([
+              { key: 'backing' as const, label: 'Backing', count: totals.backing, color: 'var(--accent)' },
+              { key: 'funded' as const,  label: 'Funded',  count: totals.funded,  color: 'var(--accent-gold)' },
+              { key: 'live' as const,    label: 'Live',    count: totals.live,    color: 'var(--success)' },
+            ]).map((tab, i) => {
+              const active = mobileTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setMobileTab(tab.key)}
+                  className={`flex-1 py-3 text-[11px] font-mono uppercase tracking-widest transition-colors ${
+                    i > 0 ? 'border-l border-[var(--border)]' : ''
+                  } ${active ? 'bg-[var(--card)]' : ''}`}
+                  style={{ color: active ? tab.color : 'var(--muted)' }}
+                  aria-pressed={active}
+                >
+                  {tab.label}{' '}
+                  <span className="opacity-60">({tab.count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 3-column board — the SOL Column skeleton with chain-native data. */}
+      {rows && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={mobileTab === 'backing' ? 'block' : 'hidden md:block'}>
+            <Column
+              label="Backing"
+              icon={Flame}
+              iconColor="text-[var(--accent)]"
+              count={backing.length}
+              totalCount={totals.backing}
+              isFiltered={!!search.trim()}
+              items={backing}
+              emptyHint={search ? 'No matches' : 'No open raises — create one'}
+              sortValue={backingSort}
+              onSortChange={(v) => setBackingSort(v as BackingSort)}
+              sortOptions={[
+                { value: 'ending_soon', label: 'ENDING_SOON' },
+                { value: 'progress', label: 'PROGRESS' },
+                { value: 'newest', label: 'NEWEST' },
+              ]}
+            />
+          </div>
+          <div className={mobileTab === 'funded' ? 'block' : 'hidden md:block'}>
+            <Column
+              label="Funded"
+              icon={Zap}
+              iconColor="text-[var(--accent-gold)]"
+              count={funded.length}
+              totalCount={totals.funded}
+              isFiltered={!!search.trim()}
+              items={funded}
+              emptyHint={search ? 'No matches' : 'None awaiting launch'}
+              sortValue={fundedSort}
+              onSortChange={(v) => setFundedSort(v as SimpleSort)}
+              sortOptions={[
+                { value: 'newest', label: 'NEWEST' },
+                { value: 'oldest', label: 'OLDEST' },
+              ]}
+            />
+          </div>
+          <div className={mobileTab === 'live' ? 'block' : 'hidden md:block'}>
+            <Column
+              label="Live"
+              icon={Rocket}
+              iconColor="text-[var(--success)]"
+              count={live.length}
+              totalCount={totals.live}
+              isFiltered={!!search.trim()}
+              items={live}
+              emptyHint={search ? 'No matches' : 'No launched tokens yet'}
+              sortValue={liveSort}
+              onSortChange={(v) => setLiveSort(v as SimpleSort)}
+              sortOptions={[
+                { value: 'newest', label: 'NEWEST' },
+                { value: 'oldest', label: 'OLDEST' },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* How It Works — small terminal block at the bottom, doesn't compete with the board */}
+      <div className="border border-[var(--border)] bg-[var(--card)] mt-6">
+        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            {'// SEQUENCE.HOW_IT_WORKS'}
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+            4 STEPS
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[var(--border)]">
+          {[
+            { step: '01', title: 'SUBMIT', desc: 'Creator submits a token and sets the raise terms — immutable once deployed' },
+            { step: '02', title: 'BACK', desc: 'Community backs with ETH — withdraw any time before launch, full refunds if it expires' },
+            { step: '03', title: 'LAUNCH', desc: 'Goal met = token launches on pons in one transaction; backers claim tokens pro-rata' },
+            { step: '04', title: 'EARN', desc: '90% of creator fees stream to backers forever — enforced by ownerless contracts, not promises' },
+          ].map((item) => (
+            <div key={item.step} className="p-4">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">
+                STEP {item.step}
+              </div>
+              <h3 className="font-mono font-semibold uppercase text-sm mb-1">{item.title}</h3>
+              <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
+
+// ── Column ───────────────────────────────────────────────────────
+// The SOL board Column, verbatim skeleton: icon + label + count chip on
+// the left, sort selector on the right, scrollable card stack below.
+interface SortOption { value: string; label: string }
+interface ColumnProps {
+  label: string;
+  icon: typeof Flame;
+  iconColor: string;
+  count: number;
+  totalCount: number;
+  isFiltered: boolean;
+  items: CampaignRow[];
+  emptyHint: string;
+  sortValue: string;
+  onSortChange: (v: string) => void;
+  sortOptions: SortOption[];
+}
+
+const Column: React.FC<ColumnProps> = ({
+  label, icon: Icon, iconColor, count, totalCount, isFiltered, items, emptyHint,
+  sortValue, onSortChange, sortOptions,
+}) => {
+  return (
+    <div className="border border-[var(--border)] bg-[var(--card)] flex flex-col md:max-h-[75vh]">
+      <div className="border-b border-[var(--border)] px-3 py-2 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon className={`w-3 h-3 ${iconColor} shrink-0`} />
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            {'// '}{label.toUpperCase()}
+          </span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] shrink-0">
+            {isFiltered ? <><span className={iconColor}>{count}</span>/{totalCount}</> : <span className={iconColor}>{totalCount}</span>}
+          </span>
+        </div>
+        <select
+          value={sortValue}
+          onChange={(e) => onSortChange(e.target.value)}
+          className="bg-transparent border-0 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)] outline-none cursor-pointer pr-1 shrink-0"
+          aria-label={`Sort ${label}`}
+        >
+          {sortOptions.map((opt) => (
+            <option key={opt.value} value={opt.value} className="bg-[var(--background)] text-[var(--foreground)]">
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex-1 md:overflow-y-auto p-2 space-y-2">
+        {items.length === 0 ? (
+          <div className="p-6 text-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+            &gt; {emptyHint}
+          </div>
+        ) : (
+          items.map((r) => <CampaignCard key={r.address} r={r} />)
+        )}
+      </div>
+    </div>
+  );
+};
