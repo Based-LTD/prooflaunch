@@ -5,7 +5,7 @@
 // Every action is the user's own transaction against an ownerless
 // contract — the site is a convenience view, never a custodian.
 import { use, useEffect, useState, useCallback } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, isAddress } from 'viem';
 import {
   rhcPublicClient, campaignAbi, splitterAbi, fmtEth, explorerUrl, RHC_WETH, robinhoodChain,
@@ -36,6 +36,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const [err, setErr] = useState<string | null>(null);
   const [amount, setAmount] = useState('0.1');
   const { writeContract, data: txHash, isPending, error: writeErr, reset } = useWriteContract();
+  const { data: walletClient } = useWalletClient();
+  const [watchState, setWatchState] = useState<'idle' | 'asking' | 'ok' | 'nope'>('idle');
   const { isSuccess: txConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
 
   const load = useCallback(async () => {
@@ -291,20 +293,25 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                       told — the #1 support question on the SOL side too. */}
                   <button
                     onClick={async () => {
+                      // Route through the CONNECTED wallet's client (not a
+                      // bare window.ethereum, which may be a different
+                      // extension) and always report the outcome — a silent
+                      // no-op here cost the founder a test cycle.
+                      setWatchState('asking');
                       try {
-                        const eth = (window as unknown as { ethereum?: { request: (a: object) => Promise<unknown> } }).ethereum;
-                        await eth?.request({
-                          method: 'wallet_watchAsset',
-                          params: {
-                            type: 'ERC20',
-                            options: { address: s.token, symbol: s.meta.symbol.slice(0, 11), decimals: 18 },
-                          },
+                        const ok = await walletClient?.watchAsset({
+                          type: 'ERC20',
+                          options: { address: s.token, symbol: s.meta.symbol.replace(/[^A-Za-z0-9]/g, '').slice(0, 11) || 'TOKEN', decimals: 18 },
                         });
-                      } catch { /* wallet said no — explorer link still proves it */ }
+                        setWatchState(ok ? 'ok' : 'nope');
+                      } catch {
+                        setWatchState('nope');
+                      }
                     }}
-                    className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                    disabled={watchState === 'asking' || !walletClient}
+                    className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-40"
                   >
-                    + Add Token to Wallet
+                    {watchState === 'asking' ? 'Check your wallet…' : watchState === 'ok' ? '✓ Added to wallet' : watchState === 'nope' ? 'Wallet refused — use Explorer →' : '+ Add Token to Wallet'}
                   </button>
                   <a
                     href={explorerUrl(s.token)}
