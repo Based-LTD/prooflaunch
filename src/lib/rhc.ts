@@ -113,6 +113,21 @@ export const factoryV2Abi = parseAbi([
   'event CampaignCreated(address indexed campaign, address indexed creator, address feeSplitter, uint256 goal, uint256 deadline, string symbol)',
 ]);
 
+// pons V2 bonding curve — buy/sell are public; our campaign page trades
+// directly so token ACCESS never depends on any external UI or wallet
+// display. Post-graduation the curve refuses trades (pool takes over).
+export const curveAbi = parseAbi([
+  'function graduated() view returns (bool)',
+  'function buy(uint256 quoteIn, uint256 minTokensOut, address recipient) payable returns (uint256)',
+  'function sell(uint256 tokensIn, uint256 minQuoteOut, address recipient) returns (uint256)',
+]);
+
+export const erc20Abi = parseAbi([
+  'function balanceOf(address) view returns (uint256)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+]);
+
 export const splitterAbi = parseAbi([
   'function backerBps() view returns (uint16)',
   'function backerPool(address asset) view returns (uint256)',
