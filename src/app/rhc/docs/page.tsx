@@ -277,7 +277,7 @@ export default function RhcDocsPage() {
           <>
             <section className="relative border-2 border-[var(--accent)] bg-[var(--card)] p-6 space-y-4">
               <div className="absolute -top-3 left-4 px-4 py-1 bg-[var(--accent)] text-white text-xs font-bold uppercase tracking-wider">
-                {'// WORLD_FIRST'}
+                {'// CONTRACTS_NOT_COMPANIES'}
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <Bot className="w-6 h-6 text-[var(--accent)]" />
@@ -309,7 +309,7 @@ export default function RhcDocsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                 {[
                   { emoji: '🔥', name: 'BURN', tag: 'Deflationary · Trustless', desc: 'Claims its fee share (WETH + tokens), market-buys the token on its pons pool, sends everything to the dead address. Per-crank cap keeps sandwich extraction negligible. Totals readable on-chain forever.' },
-                  { emoji: '🌊', name: 'POOL FEEDER', tag: 'Liquidity · Trustless', desc: 'Mints full-range liquidity with its fee share and compounds the position\'s own earned trading fees every crank. The contract has NO withdraw function — protocol-owned liquidity locked by construction, not by promise. World first.' },
+                  { emoji: '🌊', name: 'POOL FEEDER', tag: 'Liquidity · Trustless', desc: 'Mints full-range liquidity with its fee share and compounds the position\'s own earned trading fees every crank. The contract has NO withdraw function — protocol-owned liquidity locked by construction, not by promise \u2014 the code to withdraw was never written.' },
                   { emoji: '🏦', name: 'VAULT', tag: 'Treasury', desc: 'Any wallet you name (marketing, DAO, treasury) becomes a fee leg and pulls its share anytime. The address is immutable from creation — a public, permanent commitment.' },
                   { emoji: '📸', name: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run', desc: 'PoolLaunch snapshots your token\'s holders and airdrops the leg\'s fees pro-rata (ETH + tokens), dust-filtered, with the snapshot reconciled against total supply before a single payment goes out. Platform-operated and labeled so.' },
                 ].map((a) => (

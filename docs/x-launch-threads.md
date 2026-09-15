@@ -160,7 +160,7 @@ The fairest cap table on the chain, by construction.
 
 ---
 
-## Thread D — the trustless bots (world firsts)
+## Thread D — the trustless bots (contracts, not companies)
 
 **D1**
 Every launchpad has "bots." Ours can't be turned off. Not by you. Not
