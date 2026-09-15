@@ -8,7 +8,7 @@ import { use, useEffect, useState, useCallback } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, isAddress } from 'viem';
 import {
-  rhcPublicClient, campaignAbi, splitterAbi, fmtEth, explorerUrl, RHC_WETH,
+  rhcPublicClient, campaignAbi, splitterAbi, fmtEth, explorerUrl, RHC_WETH, robinhoodChain,
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
 import { WpPanel } from '../../walletproof';
@@ -103,7 +103,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   useEffect(() => { if (txConfirmed) { reset(); load(); } }, [txConfirmed, reset, load]);
 
   const act = (functionName: 'withdraw' | 'launch' | 'claimTokens' | 'refund' | 'cancel' | 'pokeCollect' | 'pokeHarvest') =>
-    writeContract({ address: addr, abi: campaignAbi, functionName });
+    writeContract({ address: addr, abi: campaignAbi, functionName, chainId: robinhoodChain.id });
 
   const shell = (children: React.ReactNode) => (
     <div className="max-w-3xl mx-auto pb-8"><RhcHeader />{children}</div>
@@ -204,7 +204,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   the SOL slot-claim feel. Open raise: free amount. */}
               {s.maxBackers > 0n && s.minDeposit === s.maxDeposit && s.minDeposit > 0n ? (
                 <button
-                  onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: s.minDeposit })}
+                  onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: s.minDeposit, chainId: robinhoodChain.id })}
                   disabled={isPending || s.myContribution > 0n}
                   className="btn-primary"
                 >
@@ -219,7 +219,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     className="w-28 px-3 py-2.5 bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
                   />
                   <button
-                    onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: parseEther(amount || '0') })}
+                    onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: parseEther(amount || '0'), chainId: robinhoodChain.id })}
                     disabled={isPending}
                     className="btn-primary"
                   >
@@ -292,7 +292,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     Your fee share ({s.isV4 ? 'ETH' : 'WETH'}): <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)}</span>
                   </span>
                   <button
-                    onClick={() => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [s.isV4 ? '0x0000000000000000000000000000000000000000' : RHC_WETH] })}
+                    onClick={() => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [s.isV4 ? '0x0000000000000000000000000000000000000000' : RHC_WETH], chainId: robinhoodChain.id })}
                     disabled={isPending || feesOwed === 0n}
                     className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-40"
                   >
