@@ -142,6 +142,10 @@ export interface CampaignRow {
   address: `0x${string}`;
   name: string;
   symbol: string;
+  logo: string;
+  description: string;
+  socials: { twitter: string; telegram: string; discord: string; website: string; farcaster: string };
+  creator: `0x${string}`;
   goal: bigint;
   totalRaised: bigint;
   backerCount: bigint;
@@ -179,10 +183,11 @@ export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow
   const rows: CampaignRow[] = [];
   for (const address of addrs) {
     const c = { address, abi: campaignAbi } as const;
-    const [meta, goal, totalRaised, backerCount, maxBackers, deadline, launched, cancelled, refundable, token, myContribution, myTokensClaimed] =
+    const [meta, creator, goal, totalRaised, backerCount, maxBackers, deadline, launched, cancelled, refundable, token, myContribution, myTokensClaimed] =
       await rhcPublicClient.multicall({
         contracts: [
           { ...c, functionName: 'tokenMeta' },
+          { ...c, functionName: 'creator' },
           { ...c, functionName: 'goal' },
           { ...c, functionName: 'totalRaised' },
           { ...c, functionName: 'backerCount' },
@@ -197,13 +202,16 @@ export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow
         ],
         allowFailure: false,
       }) as unknown as [
-        { name: string; symbol: string }, bigint, bigint, bigint, bigint, bigint,
+        { name: string; symbol: string; logo: string; description: string;
+          socials: { twitter: string; telegram: string; discord: string; website: string; farcaster: string } },
+        `0x${string}`, bigint, bigint, bigint, bigint, bigint,
         boolean, boolean, boolean, `0x${string}`, bigint, boolean
       ];
     rows.push({
-      address, name: meta.name, symbol: meta.symbol, goal, totalRaised,
-      backerCount, maxBackers, deadline, launched, cancelled, refundable, token,
-      myContribution, myTokensClaimed,
+      address, name: meta.name, symbol: meta.symbol, logo: meta.logo,
+      description: meta.description, socials: meta.socials, creator,
+      goal, totalRaised, backerCount, maxBackers, deadline, launched,
+      cancelled, refundable, token, myContribution, myTokensClaimed,
     });
   }
   return rows.reverse(); // newest first
