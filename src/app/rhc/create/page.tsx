@@ -673,17 +673,21 @@ export default function CreateCampaignPage() {
                 {!taxValid && (
                   <p className="text-xs font-mono text-[var(--error)]">Tax must be between 0 and 10%.</p>
                 )}
-                <label className="flex items-start gap-3 cursor-pointer border-t border-[var(--border)] pt-3">
-                  <input
-                    type="checkbox"
-                    checked={buyback}
-                    onChange={(e) => setBuyback(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 accent-[var(--accent)]"
-                  />
+                {/* pons buybackEnabled — DISABLED until fully characterized.
+                    Fork measurement 2026-09-15: with the flag ON, the pons
+                    curve diverted ~20%+ of buy volume into curve-held fee/
+                    buyback pools (vs 1% with it off) on identical trades.
+                    Backer tax income was unchanged, but where that extra
+                    take lands isn't proven yet — no creator should flip a
+                    switch we can't fully explain. Nearly every live pons
+                    launch runs with it off, too. */}
+                <label className="flex items-start gap-3 border-t border-[var(--border)] pt-3 opacity-50 cursor-not-allowed">
+                  <input type="checkbox" checked={false} disabled className="w-4 h-4 mt-0.5" />
                   <span className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
                     <span className="text-[var(--foreground)] uppercase tracking-widest text-[10px]">💠 pons Buyback</span>
-                    {' '}— route a slice of trading fees through pons&apos; native buyback flywheel
-                    for this token. Runs on pons&apos; own rails, immutable once launched.
+                    {' '}— temporarily disabled: our fork measurements show this pons-side flag
+                    diverting far more of the trade flow than their docs suggest. It stays off
+                    until we can publish exactly what it takes and where it goes.
                   </span>
                 </label>
               </div>
