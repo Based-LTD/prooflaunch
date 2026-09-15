@@ -14,6 +14,11 @@ import { POOLLAUNCH_FACTORY_V6, AIRDROP_OPERATOR, factoryV4Abi } from '@/lib/rhc
 // proven safe — they graduate at birth), but until the external contract
 // review completes we cap UI-created campaigns. Raise/remove after P3.
 const BETA_GOAL_CAP_ETH = 2;
+// The v6 factory's immutable creation fee. The page still reads
+// creationFeeFor(you) live (it goes to 0 once the holder waiver arms),
+// but this constant is the fallback so a slow RPC read can NEVER make
+// us submit with value 0 and revert BadFee at gas estimation.
+const CREATION_FEE_WEI = 1_000_000_000_000_000n; // 0.001 ETH
 
 const inputClass = (hasError?: boolean) =>
   `w-full px-3 py-2.5 bg-[var(--background)] border ${
@@ -163,7 +168,7 @@ export default function CreateCampaignPage() {
       address: POOLLAUNCH_FACTORY_V6,
       abi: factoryV4Abi,
       functionName: 'createCampaign',
-      value: myCreationFee ?? 0n,
+      value: myCreationFee ?? CREATION_FEE_WEI,
       args: [
         goalWei,
         minWei,
