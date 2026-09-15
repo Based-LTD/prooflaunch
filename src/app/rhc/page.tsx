@@ -5,7 +5,7 @@
 // How It Works terminal block. Same site, different chain.
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
-import { fetchAllCampaigns, CampaignRow } from '@/lib/rhc';
+import { fetchAllCampaigns, readBoardCache, writeBoardCache, CampaignRow } from '@/lib/rhc';
 import { CampaignCard } from './components';
 import { RhcHero } from './RhcHero';
 import { WpStatsBar } from './walletproof';
@@ -35,9 +35,13 @@ export default function RhcBoardPage() {
   const [mobileTab, setMobileTab] = useState<'backing' | 'funded' | 'live'>('backing');
 
   useEffect(() => {
+    // Instant paint from the session cache (the SOL-board feel), then
+    // revalidate against the chain in the background.
+    const cached = readBoardCache();
+    if (cached) setRows(cached);
     fetchAllCampaigns()
-      .then(setRows)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .then((r) => { setRows(r); writeBoardCache(r); })
+      .catch((e) => { if (!cached) setError(e instanceof Error ? e.message : String(e)); });
   }, []);
 
   const { backing, funded, live, totals } = useMemo(() => {

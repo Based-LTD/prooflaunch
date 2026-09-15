@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { Copy, Check } from 'lucide-react';
 import { parseAbi } from 'viem';
-import { fetchAllCampaigns, rhcPublicClient, CampaignRow, fmtEth, explorerUrl } from '@/lib/rhc';
+import { fetchAllCampaigns, readBoardCache, writeBoardCache, rhcPublicClient, CampaignRow, fmtEth, explorerUrl } from '@/lib/rhc';
 import { RhcHeader, CampaignCard, ConnectButton } from '../components';
 
 const balAbi = parseAbi(['function balanceOf(address) view returns (uint256)']);
@@ -116,9 +116,11 @@ export default function RhcPortfolioPage() {
   useEffect(() => {
     if (!me) return;
     setRows(null);
+    const cached = readBoardCache(me);
+    if (cached) setRows(cached.filter((c) => c.myContribution > 0n));
     fetchAllCampaigns(me)
-      .then((r) => setRows(r.filter((c) => c.myContribution > 0n)))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .then((r) => { writeBoardCache(r, me); setRows(r.filter((c) => c.myContribution > 0n)); })
+      .catch((e) => { if (!cached) setError(e instanceof Error ? e.message : String(e)); });
   }, [me]);
 
   return (

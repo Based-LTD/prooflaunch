@@ -177,59 +177,96 @@ export interface CampaignRow {
 export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow[]> {
   const zero = '0x0000000000000000000000000000000000000000' as `0x${string}`;
   const who = me ?? zero;
-  // v2 first (current), then v1 (legacy campaigns stay visible forever —
-  // their contracts are immutable and keep working regardless of factory).
-  const addrs: `0x${string}`[] = [];
-  for (const factory of [POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V2, POOLLAUNCH_FACTORY_V1]) {
-    try {
-      const count = await rhcPublicClient.readContract({
-        address: factory, abi: factoryAbi, functionName: 'campaignCount',
-      });
-      for (let i = 0n; i < count; i++) {
-        addrs.push(await rhcPublicClient.readContract({
-          address: factory, abi: factoryAbi, functionName: 'campaigns', args: [i],
-        }));
-      }
-    } catch {
-      // a single unreachable factory generation must never blank the board
-      continue;
-    }
-  }
-  const rows: CampaignRow[] = [];
-  for (const address of addrs) {
+  const factories = [POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V2, POOLLAUNCH_FACTORY_V1];
+
+  // THREE round-trips total, regardless of campaign count. The old
+  // shape awaited one RPC call per campaign per factory sequentially —
+  // seconds of spinner for a handful of rows. (allowFailure everywhere:
+  // one dead factory generation or one weird campaign never blanks the
+  // board.)
+
+  // #1 — every factory's campaignCount in one multicall
+  const counts = await rhcPublicClient.multicall({
+    contracts: factories.map((address) => ({ address, abi: factoryAbi, functionName: 'campaignCount' as const })),
+    allowFailure: true,
+  });
+
+  // #2 — every campaigns(i) across every factory in one multicall
+  const indexCalls: { address: `0x${string}`; abi: typeof factoryAbi; functionName: 'campaigns'; args: [bigint] }[] = [];
+  factories.forEach((address, f) => {
+    const n = counts[f].status === 'success' ? (counts[f].result as bigint) : 0n;
+    for (let i = 0n; i < n; i++) indexCalls.push({ address, abi: factoryAbi, functionName: 'campaigns', args: [i] });
+  });
+  if (indexCalls.length === 0) return [];
+  const addrRes = await rhcPublicClient.multicall({ contracts: indexCalls, allowFailure: true });
+  const addrs = addrRes.filter((r) => r.status === 'success').map((r) => r.result as `0x${string}`);
+
+  // #3 — all 13 fields for all campaigns, flattened into one multicall
+  const FIELDS = 13;
+  const fieldCalls = addrs.flatMap((address) => {
     const c = { address, abi: campaignAbi } as const;
-    const [meta, creator, goal, totalRaised, backerCount, maxBackers, deadline, launched, cancelled, refundable, token, myContribution, myTokensClaimed] =
-      await rhcPublicClient.multicall({
-        contracts: [
-          { ...c, functionName: 'tokenMeta' },
-          { ...c, functionName: 'creator' },
-          { ...c, functionName: 'goal' },
-          { ...c, functionName: 'totalRaised' },
-          { ...c, functionName: 'backerCount' },
-          { ...c, functionName: 'maxBackers' },
-          { ...c, functionName: 'deadline' },
-          { ...c, functionName: 'launched' },
-          { ...c, functionName: 'cancelled' },
-          { ...c, functionName: 'refundable' },
-          { ...c, functionName: 'token' },
-          { ...c, functionName: 'contributionOf', args: [who] },
-          { ...c, functionName: 'tokensClaimed', args: [who] },
-        ],
-        allowFailure: false,
-      }) as unknown as [
-        { name: string; symbol: string; logo: string; description: string;
-          socials: { twitter: string; telegram: string; discord: string; website: string; farcaster: string } },
-        `0x${string}`, bigint, bigint, bigint, bigint, bigint,
-        boolean, boolean, boolean, `0x${string}`, bigint, boolean
-      ];
+    return [
+      { ...c, functionName: 'tokenMeta' as const },
+      { ...c, functionName: 'creator' as const },
+      { ...c, functionName: 'goal' as const },
+      { ...c, functionName: 'totalRaised' as const },
+      { ...c, functionName: 'backerCount' as const },
+      { ...c, functionName: 'maxBackers' as const },
+      { ...c, functionName: 'deadline' as const },
+      { ...c, functionName: 'launched' as const },
+      { ...c, functionName: 'cancelled' as const },
+      { ...c, functionName: 'refundable' as const },
+      { ...c, functionName: 'token' as const },
+      { ...c, functionName: 'contributionOf' as const, args: [who] as const },
+      { ...c, functionName: 'tokensClaimed' as const, args: [who] as const },
+    ];
+  });
+  const res = await rhcPublicClient.multicall({ contracts: fieldCalls, allowFailure: true });
+
+  const rows: CampaignRow[] = [];
+  addrs.forEach((address, i) => {
+    const slice = res.slice(i * FIELDS, (i + 1) * FIELDS);
+    if (slice.some((r) => r.status !== 'success')) return; // skip broken row, keep the board
+    const v = slice.map((r) => r.result);
+    const meta = v[0] as { name: string; symbol: string; logo: string; description: string;
+      socials: { twitter: string; telegram: string; discord: string; website: string; farcaster: string } };
     rows.push({
       address, name: meta.name, symbol: meta.symbol, logo: meta.logo,
-      description: meta.description, socials: meta.socials, creator,
-      goal, totalRaised, backerCount, maxBackers, deadline, launched,
-      cancelled, refundable, token, myContribution, myTokensClaimed,
+      description: meta.description, socials: meta.socials,
+      creator: v[1] as `0x${string}`,
+      goal: v[2] as bigint, totalRaised: v[3] as bigint, backerCount: v[4] as bigint,
+      maxBackers: v[5] as bigint, deadline: v[6] as bigint,
+      launched: v[7] as boolean, cancelled: v[8] as boolean, refundable: v[9] as boolean,
+      token: v[10] as `0x${string}`,
+      myContribution: v[11] as bigint, myTokensClaimed: v[12] as boolean,
     });
-  }
+  });
   return rows.reverse(); // newest first
+}
+
+// ── session cache: paint instantly, revalidate in background ────────
+// The SOL board feels instant because it renders from a cached fetch
+// while fresh data streams in; same pattern here, chain-flavored.
+// BigInts survive via string tagging.
+const BOARD_CACHE_KEY = 'rhc-board-cache-v1';
+
+export function readBoardCache(me?: `0x${string}`): CampaignRow[] | null {
+  try {
+    const raw = sessionStorage.getItem(BOARD_CACHE_KEY + (me ?? ''));
+    if (!raw) return null;
+    return JSON.parse(raw, (_k, val) =>
+      typeof val === 'string' && val.startsWith('#bigint:') ? BigInt(val.slice(8)) : val
+    ) as CampaignRow[];
+  } catch { return null; }
+}
+
+export function writeBoardCache(rows: CampaignRow[], me?: `0x${string}`): void {
+  try {
+    sessionStorage.setItem(
+      BOARD_CACHE_KEY + (me ?? ''),
+      JSON.stringify(rows, (_k, val) => (typeof val === 'bigint' ? '#bigint:' + val.toString() : val))
+    );
+  } catch { /* private mode etc — cache is a bonus, never a requirement */ }
 }
 
 export function explorerUrl(addr: string): string {
