@@ -2,7 +2,7 @@
 // ABIs. The EVM twin of the Solana stack, except there is no backend: the
 // UI reads contract state directly and users sign their own transactions.
 // The platform holds nothing and can break nothing.
-import { defineChain, createPublicClient, http, parseAbi } from 'viem';
+import { defineChain, createPublicClient, fallback, http, parseAbi } from 'viem';
 
 export const robinhoodChain = defineChain({
   id: 4663,
@@ -39,9 +39,19 @@ export const POOLLAUNCH_FACTORY_V2 = '0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5
 export const POOLLAUNCH_FACTORY_V1 = '0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d' as const; // legacy, read-only
 export const PONS_FACTORY = '0xF4fC0CD27fC8EcF17E55eE4c3f7201897dF3eb75' as const;
 
+// RPC speed matters more than brand: the official gateway is Cloudflare-
+// fronted and ~1.5s/request; publicnode and ordofi answer in 70–350ms
+// (benchmarked 2026-09-15). Fallback order = fastest first, official as
+// the last resort — reads fail over automatically.
+export const RHC_RPC_URLS = [
+  'https://robinhood-rpc.publicnode.com',
+  'https://rpc.ordofi.network',
+  'https://rpc.mainnet.chain.robinhood.com',
+] as const;
+
 export const rhcPublicClient = createPublicClient({
   chain: robinhoodChain,
-  transport: http(),
+  transport: fallback(RHC_RPC_URLS.map((u) => http(u, { timeout: 8_000 }))),
 });
 
 export const factoryAbi = parseAbi([
@@ -250,22 +260,27 @@ export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow
 // BigInts survive via string tagging.
 const BOARD_CACHE_KEY = 'rhc-board-cache-v1';
 
+export function serializeRows(rows: CampaignRow[]): string {
+  return JSON.stringify(rows, (_k, val) => (typeof val === 'bigint' ? '#bigint:' + val.toString() : val));
+}
+
+export function parseRows(json: string): CampaignRow[] {
+  return JSON.parse(json, (_k, val) =>
+    typeof val === 'string' && val.startsWith('#bigint:') ? BigInt(val.slice(8)) : val
+  ) as CampaignRow[];
+}
+
 export function readBoardCache(me?: `0x${string}`): CampaignRow[] | null {
   try {
     const raw = sessionStorage.getItem(BOARD_CACHE_KEY + (me ?? ''));
     if (!raw) return null;
-    return JSON.parse(raw, (_k, val) =>
-      typeof val === 'string' && val.startsWith('#bigint:') ? BigInt(val.slice(8)) : val
-    ) as CampaignRow[];
+    return parseRows(raw);
   } catch { return null; }
 }
 
 export function writeBoardCache(rows: CampaignRow[], me?: `0x${string}`): void {
   try {
-    sessionStorage.setItem(
-      BOARD_CACHE_KEY + (me ?? ''),
-      JSON.stringify(rows, (_k, val) => (typeof val === 'bigint' ? '#bigint:' + val.toString() : val))
-    );
+    sessionStorage.setItem(BOARD_CACHE_KEY + (me ?? ''), serializeRows(rows));
   } catch { /* private mode etc — cache is a bonus, never a requirement */ }
 }
 

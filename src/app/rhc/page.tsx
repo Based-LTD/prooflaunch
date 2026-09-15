@@ -5,7 +5,7 @@
 // How It Works terminal block. Same site, different chain.
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
-import { fetchAllCampaigns, readBoardCache, writeBoardCache, CampaignRow } from '@/lib/rhc';
+import { fetchAllCampaigns, parseRows, readBoardCache, writeBoardCache, CampaignRow } from '@/lib/rhc';
 import { CampaignCard } from './components';
 import { RhcHero } from './RhcHero';
 import { WpStatsBar } from './walletproof';
@@ -35,11 +35,17 @@ export default function RhcBoardPage() {
   const [mobileTab, setMobileTab] = useState<'backing' | 'funded' | 'live'>('backing');
 
   useEffect(() => {
-    // Instant paint from the session cache (the SOL-board feel), then
-    // revalidate against the chain in the background.
+    // Instant paint from the session cache, then the CDN-cached API
+    // (~100ms warm), with direct chain reads as the fallback of last
+    // resort — the SOL board's exact loading strategy.
     const cached = readBoardCache();
     if (cached) setRows(cached);
-    fetchAllCampaigns()
+    fetch('/api/rhc/campaigns')
+      .then(async (res) => {
+        if (!res.ok) throw new Error('api ' + res.status);
+        return parseRows(await res.text());
+      })
+      .catch(() => fetchAllCampaigns())
       .then((r) => { setRows(r); writeBoardCache(r); })
       .catch((e) => { if (!cached) setError(e instanceof Error ? e.message : String(e)); });
   }, []);
