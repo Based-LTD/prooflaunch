@@ -2,10 +2,10 @@
 
 // Wagmi provider scoped to /rhc only — the rest of the site stays pure
 // Solana. Injected connector covers Phantom's EVM side (and MetaMask/Rabby).
-import { WagmiProvider, createConfig, http } from 'wagmi';
+import { WagmiProvider, createConfig, fallback, http } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { robinhoodChain } from '@/lib/rhc';
+import { robinhoodChain, RHC_RPC_URLS } from '@/lib/rhc';
 import { useState } from 'react';
 
 // Exported singleton: the navbar's RHC connect button wraps itself in its
@@ -15,7 +15,7 @@ import { useState } from 'react';
 export const wagmiConfig = createConfig({
   chains: [robinhoodChain],
   connectors: [injected()],
-  transports: { [robinhoodChain.id]: http() },
+  transports: { [robinhoodChain.id]: fallback(RHC_RPC_URLS.map((u) => http(u))) },
 });
 
 export function RhcProviders({ children }: { children: React.ReactNode }) {
