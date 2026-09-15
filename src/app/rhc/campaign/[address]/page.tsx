@@ -8,7 +8,7 @@ import { use, useEffect, useState, useCallback } from 'react';
 import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, isAddress } from 'viem';
 import {
-  rhcPublicClient, campaignAbi, splitterAbi, fmtEth, explorerUrl, RHC_WETH, robinhoodChain,
+  rhcPublicClient, campaignAbi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl, RHC_WETH, robinhoodChain,
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
 import { WpPanel } from '../../walletproof';
@@ -25,6 +25,9 @@ interface State {
   myFeeEntitlement: bigint; myFeesClaimed: bigint;
   myTokenBalance: bigint; // live wallet balance — Phantom won't show it, we do
   isV4: boolean; // pons V2 campaign — native-ETH fees, pokeHarvest crank
+  curve: `0x${string}` | null;
+  curveGraduated: boolean;
+  myCurveAllowance: bigint;
 }
 
 const label = 'block text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5';
@@ -36,6 +39,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const [s, setS] = useState<State | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [amount, setAmount] = useState('0.1');
+  const [buyAmt, setBuyAmt] = useState('0.005');
+  const [sellAmt, setSellAmt] = useState('');
   const { writeContract, data: txHash, isPending, error: writeErr, reset } = useWriteContract();
   const { data: walletClient } = useWalletClient();
   const [watchState, setWatchState] = useState<'idle' | 'asking' | 'ok' | 'nope'>('idle');
@@ -78,13 +83,21 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       // Generation probe: v4 (pons V2) campaigns expose curve(); their fee
       // asset is native ETH (address(0)). v1-v3 campaigns fee in WETH.
       let isV4 = false;
+      let curve: `0x${string}` | null = null;
       try {
-        await rhcPublicClient.readContract({ ...c, functionName: 'curve' });
+        curve = await rhcPublicClient.readContract({ ...c, functionName: 'curve' }) as `0x${string}`;
         isV4 = true;
       } catch { /* pre-v4 campaign */ }
       const feeAsset = (isV4 ? zero : RHC_WETH) as `0x${string}`;
 
       let myFeeEntitlement = 0n, myFeesClaimed = 0n, myTokenBalance = 0n;
+      let curveGraduated = false, myCurveAllowance = 0n;
+      if (launched && curve && curve !== zero) {
+        curveGraduated = await rhcPublicClient.readContract({ address: curve, abi: curveAbi, functionName: 'graduated' }).catch(() => false) as boolean;
+        if (me) {
+          myCurveAllowance = await rhcPublicClient.readContract({ address: token, abi: erc20Abi, functionName: 'allowance', args: [me, curve] }).catch(() => 0n) as bigint;
+        }
+      }
       if (launched && me) {
         myTokenBalance = await rhcPublicClient.readContract({
           address: token,
@@ -102,7 +115,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       }
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
-        totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4 });
+        totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4,
+        curve, curveGraduated, myCurveAllowance });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -330,6 +344,89 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   </a>
                 </div>
               )}
+              {/* ── TRADE — direct curve access on OUR page. Token access
+                  must never depend on an external UI or a wallet's display:
+                  buy/sell are public curve functions, so we call them. ── */}
+              {s.launched && s.curve && !s.curveGraduated && (
+                <div className="mt-5 border border-[var(--border)] bg-[var(--background)]">
+                  <div className="border-b border-[var(--border)] px-3 py-2 flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                      {'// '}TRADE — pons bonding curve, direct
+                    </span>
+                    <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                      your wallet signs, no middleman
+                    </span>
+                  </div>
+                  <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">Buy with ETH</span>
+                      <div className="flex gap-2">
+                        <input
+                          value={buyAmt}
+                          onChange={(e) => setBuyAmt(e.target.value)}
+                          placeholder="0.005"
+                          className="w-24 px-2 py-2 bg-[var(--card)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
+                        />
+                        <button
+                          onClick={() => writeContract({ address: s.curve!, abi: curveAbi, functionName: 'buy', args: [parseEther(buyAmt || '0'), 0n, me!], value: parseEther(buyAmt || '0'), chainId: robinhoodChain.id })}
+                          disabled={isPending || !me || !Number(buyAmt)}
+                          className="btn-primary"
+                        >
+                          Buy
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">
+                        Sell ${s.meta.symbol} (you hold {(Number(s.myTokenBalance) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                      </span>
+                      <div className="flex gap-2">
+                        <input
+                          value={sellAmt}
+                          onChange={(e) => setSellAmt(e.target.value)}
+                          placeholder="amount"
+                          className="flex-1 min-w-0 px-2 py-2 bg-[var(--card)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSellAmt(String(Number(s.myTokenBalance) / 1e18))}
+                          className="px-2 py-2 text-[9px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                        >
+                          Max
+                        </button>
+                        {s.myCurveAllowance < (s.myTokenBalance > 0n ? s.myTokenBalance : 1n) ? (
+                          <button
+                            onClick={() => writeContract({ address: s.token, abi: erc20Abi, functionName: 'approve', args: [s.curve!, 2n ** 256n - 1n], chainId: robinhoodChain.id })}
+                            disabled={isPending || !me}
+                            title="One-time: allow the pons curve to take the tokens you sell"
+                            className="btn-primary"
+                          >
+                            Enable Selling
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => writeContract({ address: s.curve!, abi: curveAbi, functionName: 'sell', args: [parseEther(sellAmt || '0'), 0n, me!], chainId: robinhoodChain.id })}
+                            disabled={isPending || !me || !Number(sellAmt)}
+                            className="btn-primary"
+                          >
+                            Sell → ETH
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="px-3 pb-2.5 text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
+                    Trades hit the pons curve directly and pay its 1% fee + this token&apos;s {'creator tax'} —
+                    which flows back to this campaign&apos;s backers. ETH from sells lands in your wallet instantly.
+                  </p>
+                </div>
+              )}
+              {s.launched && s.curve && s.curveGraduated && (
+                <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  {'> '}Graduated — trades on the locked Uniswap v4 pool via pons.
+                </p>
+              )}
+
               {s.myContribution > 0n && (
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
