@@ -169,9 +169,9 @@ Solana runs on our track record. Robinhood Chain runs on contracts that don't ne
 
 ## D13
 ### SLOT1
-Launching on pons costs 0.0005 ETH. Launching through PoolLaunch costs... 0.0005 ETH. Same fee, paid to pons at launch — we add no creation fee on top.
+Creating a raise costs 0.001 ETH — a buy-in, enforced on-chain, so the board stays real instead of flooded.
 
-What you add: a funded community at your back before block one.
+It'll be waived for platform-token holders. Until then: one coffee, one community, one fair launch.
 
 ### SLOT2
 Everything a backer needs to verify is on-chain before they deposit: the goal, the seat price, the tax, the bot stack, the fee split.

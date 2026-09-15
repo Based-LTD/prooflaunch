@@ -26,9 +26,12 @@ export const robinhoodChain = defineChain({
 // v4 — ACTIVE. Targets pons V2 (the live pons generation): adjustable
 // creator tax up to the pons cap (10%), pons-native buyback flywheel,
 // native-ETH fee flow via the pons FeeEscrow, curve → locked Uniswap v4.
-// v5 — ACTIVE. pons V2 + the trustless bot legs ported to Uniswap v4
-// (dual-phase: curve buys pre-graduation, direct PoolManager after).
-// Live-verified 2026-09-14: 21,447 bytes, 90/7/3, legDeployer wired.
+// v6 — ACTIVE. v5 + the creation buy-in: 0.001 ETH fee paid with
+// createCampaign, forwarded straight to the platform recipient (never
+// held by the factory); holder-waiver hooks dormant until the platform
+// token exists on RHC.
+export const POOLLAUNCH_FACTORY_V6 = '0xB86b783ccaCC20746ae9dd33CffE4a205B35E334' as const;
+// v5 — pons V2 + trustless v4 bot legs, no creation fee. Read-only.
 export const POOLLAUNCH_FACTORY_V5 = '0xa5aC43cd8ff09e294240E97c2a63466B2c2a80E8' as const;
 export const POOLLAUNCH_FACTORY_V4 = '0x552db842cdB40ea73Dcac6cfAe15AF1E03405a9D' as const; // pons V2, tax, no bot legs
 export const POOLLAUNCH_FACTORY = '0xE2989dA79b04d64D9d68f476b6Ee8f971467b470' as const; // v3 — pons V1: burn + LP + vault legs
@@ -81,6 +84,16 @@ export const campaignAbi = parseAbi([
   'function creatorTaxBps() view returns (uint16)',
   'function excessAtLaunch() view returns (uint256)',
   'function pokeHarvest()',
+]);
+
+// v6 factory — v5 + payable creation fee with on-chain holder waiver.
+export const factoryV4Abi = parseAbi([
+  'function createCampaign(uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint16 creatorTaxBps, bool buybackEnabled, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta, uint16 burnBps, uint16 lpBps, address[] vaultRecipients, uint16[] vaultBps) payable returns (address)',
+  'function creationFee() view returns (uint256)',
+  'function creationFeeFor(address creator) view returns (uint256)',
+  'function campaignCount() view returns (uint256)',
+  'function campaigns(uint256) view returns (address)',
+  'event CampaignCreated(address indexed campaign, address indexed creator, address feeSplitter, uint256 goal, uint256 deadline, string symbol)',
 ]);
 
 // v5 factory — tax + trustless v4 bot legs + vault legs.
@@ -148,7 +161,7 @@ export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow
   // v2 first (current), then v1 (legacy campaigns stay visible forever —
   // their contracts are immutable and keep working regardless of factory).
   const addrs: `0x${string}`[] = [];
-  for (const factory of [POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V2, POOLLAUNCH_FACTORY_V1]) {
+  for (const factory of [POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V2, POOLLAUNCH_FACTORY_V1]) {
     try {
       const count = await rhcPublicClient.readContract({
         address: factory, abi: factoryAbi, functionName: 'campaignCount',

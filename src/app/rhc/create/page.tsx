@@ -5,10 +5,10 @@
 // RAISE_TERMS / LAUNCH_BOTS), same sticky live-preview rail, same bot
 // stack picker UX. Terms become immutable at creation.
 import { useState, useEffect, useRef } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, decodeEventLog } from 'viem';
 import { AlertCircle, Upload, X } from 'lucide-react';
-import { POOLLAUNCH_FACTORY_V5, AIRDROP_OPERATOR, factoryV3Abi } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY_V6, AIRDROP_OPERATOR, factoryV4Abi } from '@/lib/rhc';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
 // proven safe — they graduate at birth), but until the external contract
@@ -88,6 +88,14 @@ export default function CreateCampaignPage() {
   const [buyback, setBuyback] = useState(false);
   const taxValid = (Number(taxPct) || 0) >= 0 && (Number(taxPct) || 0) <= 10;
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
+  // Creation buy-in — read live from the factory (0 for waived holders
+  // once the platform token exists and a waiver-armed factory ships).
+  const { data: myCreationFee } = useReadContract({
+    address: POOLLAUNCH_FACTORY_V6,
+    abi: factoryV4Abi,
+    functionName: 'creationFeeFor',
+    args: [address ?? '0x0000000000000000000000000000000000000000'],
+  });
   const { data: receipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const [created, setCreated] = useState<string | null>(null);
 
@@ -113,7 +121,7 @@ export default function CreateCampaignPage() {
     if (isSuccess && receipt) {
       for (const log of receipt.logs) {
         try {
-          const ev = decodeEventLog({ abi: factoryV3Abi, data: log.data, topics: log.topics });
+          const ev = decodeEventLog({ abi: factoryV4Abi, data: log.data, topics: log.topics });
           if (ev.eventName === 'CampaignCreated') {
             setCreated((ev.args as { campaign: string }).campaign);
           }
@@ -152,9 +160,10 @@ export default function CreateCampaignPage() {
     const maxWei = raiseStyle === 'seats' ? seatWei : (f.max === '0' || !Number(f.max) ? 0n : parseEther(f.max));
     const slotsN = raiseStyle === 'seats' ? BigInt(seatCount) : 0n;
     writeContract({
-      address: POOLLAUNCH_FACTORY_V5,
-      abi: factoryV3Abi,
+      address: POOLLAUNCH_FACTORY_V6,
+      abi: factoryV4Abi,
       functionName: 'createCampaign',
+      value: myCreationFee ?? 0n,
       args: [
         goalWei,
         minWei,
@@ -859,6 +868,10 @@ export default function CreateCampaignPage() {
                 7% platform · 3% holder rewards{botsPct > 0 ? ` · ${botsPct}% bots` : ''}. The pooled
                 buy fires snipe-exempt on the launch block. Goal unmet by deadline → refunds open
                 automatically. No admin keys exist.
+              </p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+                Creation fee: {myCreationFee !== undefined ? `${Number(myCreationFee) / 1e18} ETH` : '0.001 ETH'} —
+                spam control, paid on-chain to the platform. Waived for platform-token holders once it launches.
               </p>
               <button
                 onClick={submit}
