@@ -5,10 +5,10 @@
 // RAISE_TERMS / LAUNCH_BOTS), same sticky live-preview rail, same bot
 // stack picker UX. Terms become immutable at creation.
 import { useState, useEffect, useRef } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContract, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, decodeEventLog } from 'viem';
 import { AlertCircle, Upload, X } from 'lucide-react';
-import { POOLLAUNCH_FACTORY_V6, AIRDROP_OPERATOR, factoryV4Abi } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY_V6, AIRDROP_OPERATOR, factoryV4Abi, robinhoodChain } from '@/lib/rhc';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
 // proven safe — they graduate at birth), but until the external contract
@@ -51,7 +51,9 @@ const BOT_SHORT: Record<BotKind, string> = { burn: 'BURN', feed_lp: 'POOL FEED',
 const PCT_PRESETS = ['5', '10', '20', '30'];
 
 export default function CreateCampaignPage() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
+  const { switchChain, isPending: switching } = useSwitchChain();
+  const onRhc = chainId === robinhoodChain.id;
   const [f, setF] = useState({
     name: '', symbol: '', description: '',
     twitter: '', telegram: '', discord: '', website: '', farcaster: '',
@@ -168,6 +170,11 @@ export default function CreateCampaignPage() {
       address: POOLLAUNCH_FACTORY_V6,
       abi: factoryV4Abi,
       functionName: 'createCampaign',
+      // Pin the chain: Phantom's EVM side defaults to Ethereum mainnet,
+      // and an unpinned write gets built THERE (factory absent, balance
+      // 0 → "exceeds balance"). Belt: wagmi switches when pinned;
+      // braces: the button below refuses to submit off-chain at all.
+      chainId: robinhoodChain.id,
       value: myCreationFee ?? CREATION_FEE_WEI,
       args: [
         goalWei,
@@ -882,13 +889,23 @@ export default function CreateCampaignPage() {
                 Creation fee: {myCreationFee !== undefined ? `${Number(myCreationFee) / 1e18} ETH` : '0.001 ETH'} —
                 spam control, paid on-chain to the platform. Waived for platform-token holders once it launches.
               </p>
-              <button
-                onClick={submit}
-                disabled={isPending || uploading || !f.name || !f.symbol || !f.description || effGoalEth <= 0 || effGoalEth > BETA_GOAL_CAP_ETH || overBudget || !stackValid || !taxValid}
-                className="btn-primary"
-              >
-                {uploading ? 'Uploading Image…' : isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
-              </button>
+              {!onRhc ? (
+                <button
+                  onClick={() => switchChain({ chainId: robinhoodChain.id })}
+                  disabled={switching}
+                  className="btn-primary"
+                >
+                  {switching ? 'Switching…' : 'Switch to Robinhood Chain First'}
+                </button>
+              ) : (
+                <button
+                  onClick={submit}
+                  disabled={isPending || uploading || !f.name || !f.symbol || !f.description || effGoalEth <= 0 || effGoalEth > BETA_GOAL_CAP_ETH || overBudget || !stackValid || !taxValid}
+                  className="btn-primary"
+                >
+                  {uploading ? 'Uploading Image…' : isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
+                </button>
+              )}
             </div>
           </div>
         </div>
