@@ -377,7 +377,7 @@ export default function RhcDocsPage() {
               </div>
               <div className="space-y-3 pt-2">
                 {[
-                  { label: 'Creation Fee', value: 'Gas only', color: 'border-[var(--success)]', desc: 'Creating a campaign costs nothing but Robinhood Chain gas (well under a cent). pons charges 0.0005 ETH at launch time, paid from the pool.' },
+                  { label: 'Creation Fee', value: '0.001 ETH', color: 'border-[var(--accent)]', desc: 'A one-time buy-in when creating a campaign, paid on-chain to the platform — spam control, exact-amount enforced by the factory contract. Will be waived for platform-token holders once the token launches (an on-chain balance check, not a policy). pons separately charges 0.0005 ETH at launch time, paid from the pool.' },
                   { label: 'Backing Fee', value: 'None', color: 'border-[var(--success)]', desc: '100% of your ETH goes into the campaign contract.' },
                   { label: 'Withdrawal Fee', value: 'None', color: 'border-[var(--success)]', desc: 'Withdraw your full deposit any time before launch. Refunds after an expired raise are also full-amount.' },
                   { label: 'Creator Tax', value: '0\u201310%', color: 'border-[var(--accent-gold)]', desc: 'The pons V2 trading tax, set at creation and never raisable. On pons it pays the dev; on PoolLaunch it pays your campaign\u2019s FeeSplitter \u2014 which means the backers. Every launch buy pays it too, and it round-trips straight back to the pool.' },
