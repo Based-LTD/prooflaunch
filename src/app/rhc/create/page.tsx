@@ -28,7 +28,7 @@ const labelClass =
   'block text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5';
 
 // ── Bot stack — the RHC twin of the SOL launch bots ─────────────────
-// burn / feed_lp run as ownerless contracts (trustless — world-firsts);
+// burn / feed_lp run as ownerless contracts (trustless — first on RHC);
 // vault legs are named wallets; the holder airdrop is a vault leg
 // pointed at the platform operator (platform-run, honestly labeled).
 type BotKind = 'burn' | 'feed_lp' | 'vault' | 'airdrop';
@@ -37,10 +37,11 @@ interface BotItem { kind: BotKind; pct: string; addr?: string }
 // The full stack on pons V2: the trustless Burn and Pool Feeder run as
 // ownerless contracts on the Uniswap-v4 graduated pools (dual-phase —
 // they buy on the bonding curve pre-graduation, talk to the PoolManager
-// directly after; proven on live-pool forks). World-firsts, both.
+// directly after; proven on live-pool forks). First of their kind on
+// this chain; globally we say "we believe first" and mean the hedge.
 const BOT_ACTIONS: { kind: BotKind; label: string; tag: string; emoji: string; desc: string; disabled?: boolean }[] = [
   { kind: 'burn',    label: 'BURN',           tag: 'Deflationary · Trustless', emoji: '🔥', desc: 'Ownerless contract buys the token with its fee share — on the bonding curve before graduation, directly on the Uniswap-v4 pool after — and sends everything to the dead address. Anyone can crank it; nobody, including us, can stop it.' },
-  { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'Liquidity · Trustless',    emoji: '🌊', desc: 'Ownerless contract mints full-range liquidity on the graduated v4 pool and compounds the position\'s own trading fees. It has NO withdraw function — protocol-owned liquidity locked by construction. World first.' },
+  { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'Liquidity · Trustless',    emoji: '🌊', desc: 'Ownerless contract mints full-range liquidity on the graduated v4 pool and compounds the position\'s own trading fees. It has NO withdraw function — protocol-owned liquidity locked by construction, not by promise.' },
   { kind: 'vault',   label: 'VAULT',          tag: 'Treasury',                 emoji: '🏦', desc: 'A wallet you name (marketing / DAO / treasury) becomes a fee leg and pulls its share anytime. Address locked at creation — can never be changed.' },
   { kind: 'airdrop', label: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run',   emoji: '📸', desc: 'PoolLaunch snapshots your token\'s holders and airdrops this leg\'s fees pro-rata — the same machinery as our Solana launches. Platform-operated and labeled so; 🔥 BURN is the trustless holder reward.' },
 ];
