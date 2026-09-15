@@ -282,9 +282,39 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                 </button>
               )}
               {s.myTokensClaimed && (
-                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
-                  ✓ Tokens claimed
-                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
+                    ✓ Tokens claimed
+                  </p>
+                  {/* EIP-747: ask the wallet to TRACK the token. New tokens
+                      on a young chain are invisible in wallet UIs until
+                      told — the #1 support question on the SOL side too. */}
+                  <button
+                    onClick={async () => {
+                      try {
+                        const eth = (window as unknown as { ethereum?: { request: (a: object) => Promise<unknown> } }).ethereum;
+                        await eth?.request({
+                          method: 'wallet_watchAsset',
+                          params: {
+                            type: 'ERC20',
+                            options: { address: s.token, symbol: s.meta.symbol.slice(0, 11), decimals: 18 },
+                          },
+                        });
+                      } catch { /* wallet said no — explorer link still proves it */ }
+                    }}
+                    className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                  >
+                    + Add Token to Wallet
+                  </button>
+                  <a
+                    href={explorerUrl(s.token)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                  >
+                    Verify on Explorer ↗
+                  </a>
+                </div>
               )}
               {s.myContribution > 0n && (
                 <div className="flex flex-wrap items-center gap-3">
