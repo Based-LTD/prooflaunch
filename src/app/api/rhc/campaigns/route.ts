@@ -15,7 +15,7 @@ export async function GET() {
     return new NextResponse(serializeRows(rows), {
       headers: {
         'content-type': 'application/json',
-        'cache-control': 'public, s-maxage=15, stale-while-revalidate=300',
+        'cache-control': 'public, s-maxage=30, stale-while-revalidate=600',
       },
     });
   } catch (e) {
