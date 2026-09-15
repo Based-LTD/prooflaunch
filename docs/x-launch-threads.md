@@ -230,12 +230,14 @@ gets. Eat your own cooking or don't cook.
 **E2** [ticker/name] + the raise terms, screenshot of the campaign page
 pre-launch. Terms readable on-chain before anyone deposits.
 
-**E3** Holder rewards: 3% of every campaign's creator fees on the
-platform accrues to the holder-rewards leg — [mechanism: buyback of the
-platform token / distribution]. [DECISION NEEDED]
+**E3** Holder utility, decided: (1) the 3% holder-rewards leg from
+EVERY campaign flows to holders; (2) creation fees waived for holders
+(the contract checks your balance — no application, no list); (3)
+creators can token-gate seats on their raises. [Mechanism copy pends
+the rewards-vault build; keep "earn the fee stream" framing.]
 
-**E4** [$PROOF holder treatment — bridge/claim/allocation. DECISION
-NEEDED — do not tease before decided.]
+**E4** [Ticker + whether the RHC token is $PROOF-branded / what SOL
+$PROOF holders receive — STILL OPEN with founder.]
 
 **E5** WalletProof will be pointed at our own launch, live. Judge us
 with the same lens we built for everyone else.
