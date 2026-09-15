@@ -23,6 +23,7 @@ interface State {
   tokensAtLaunch: bigint; totalRaisedAtLaunch: bigint;
   myContribution: bigint; myTokensClaimed: boolean;
   myFeeEntitlement: bigint; myFeesClaimed: bigint;
+  myTokenBalance: bigint; // live wallet balance — Phantom won't show it, we do
   isV4: boolean; // pons V2 campaign — native-ETH fees, pokeHarvest crank
 }
 
@@ -83,8 +84,14 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       } catch { /* pre-v4 campaign */ }
       const feeAsset = (isV4 ? zero : RHC_WETH) as `0x${string}`;
 
-      let myFeeEntitlement = 0n, myFeesClaimed = 0n;
+      let myFeeEntitlement = 0n, myFeesClaimed = 0n, myTokenBalance = 0n;
       if (launched && me) {
+        myTokenBalance = await rhcPublicClient.readContract({
+          address: token,
+          abi: [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }] as const,
+          functionName: 'balanceOf',
+          args: [me],
+        }) as bigint;
         [myFeeEntitlement, myFeesClaimed] = await rhcPublicClient.multicall({
           contracts: [
             { address: feeSplitter, abi: splitterAbi, functionName: 'backerEntitlement', args: [me, feeAsset] },
@@ -95,7 +102,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       }
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
-        totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, isV4 });
+        totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4 });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -286,7 +293,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               {s.myTokensClaimed && (
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
-                    ✓ Tokens claimed
+                    ✓ In your wallet: {(Number(s.myTokenBalance) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol}
                   </p>
                   {/* EIP-747: ask the wallet to TRACK the token. New tokens
                       on a young chain are invisible in wallet UIs until
