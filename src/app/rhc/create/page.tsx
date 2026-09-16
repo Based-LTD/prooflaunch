@@ -6,9 +6,13 @@
 // stack picker UX. Terms become immutable at creation.
 import { useState, useEffect, useRef } from 'react';
 import { useAccount, useReadContract, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseEther, decodeEventLog } from 'viem';
+import { parseEther, parseUnits, formatUnits, decodeEventLog, isAddress } from 'viem';
 import { AlertCircle, Upload, X } from 'lucide-react';
-import { POOLLAUNCH_FACTORY_V6, AIRDROP_OPERATOR, factoryV4Abi, robinhoodChain } from '@/lib/rhc';
+import {
+  POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, V7_LIVE, QUOTE_ASSETS,
+  AIRDROP_OPERATOR, factoryV4Abi, factoryV5Abi, robinhoodChain, rhcPublicClient,
+} from '@/lib/rhc';
+import { grindVanitySalt, predictLegAddresses, SIGNATURE_SUFFIX } from '@/lib/rhcVanity';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
 // proven safe — they graduate at birth), but until the external contract
@@ -19,6 +23,10 @@ const BETA_GOAL_CAP_ETH = 2;
 // but this constant is the fallback so a slow RPC read can NEVER make
 // us submit with value 0 and revert BadFee at gas estimation.
 const CREATION_FEE_WEI = 1_000_000_000_000_000n; // 0.001 ETH
+// pons' own launch fee, native ETH. ERC20-quoted raises escrow it in the
+// campaign at creation (the pool itself is not ETH), refundable to the
+// creator if the raise never launches.
+const PONS_LAUNCH_FEE_WEI = 500_000_000_000_000n; // 0.0005 ETH
 
 const inputClass = (hasError?: boolean) =>
   `w-full px-3 py-2.5 bg-[var(--background)] border ${
@@ -92,6 +100,26 @@ export default function CreateCampaignPage() {
   //           SOL launch mechanic, enforced by the contract by construction
   const [raiseStyle, setRaiseStyle] = useState<'open' | 'seats'>('open');
   const [seatPrice, setSeatPrice] = useState('0.1');
+  // ── v7 options (inert until V7_LIVE) ──
+  // The quote asset a raise is denominated in. ETH is native; USDG and
+  // the tokenized stocks are pons-approved pair tokens with their own
+  // decimals, so every amount below is parsed against THIS, never 18.
+  const [quoteIdx, setQuoteIdx] = useState(0);
+  const quote = QUOTE_ASSETS[quoteIdx];
+  const isNativeQuote = quote.address === '0x0000000000000000000000000000000000000000';
+  const [reservedSeats, setReservedSeats] = useState('0');
+  const [allowlistText, setAllowlistText] = useState('');
+  const [gateAddr, setGateAddr] = useState('');
+  const [gateMin, setGateMin] = useState('');
+  const [vanity, setVanity] = useState<{ address: string; attempts: number; ms: number } | null>(null);
+  const [grinding, setGrinding] = useState(false);
+
+  const allowlist = allowlistText
+    .split(/[\s,]+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0);
+  const allowlistValid = allowlist.every((w) => isAddress(w));
+  const gateValid = !gateAddr.trim() || isAddress(gateAddr.trim());
   const [taxPct, setTaxPct] = useState('1');
   const [buyback, setBuyback] = useState(false);
   const taxValid = (Number(taxPct) || 0) >= 0 && (Number(taxPct) || 0) <= 10;
@@ -124,6 +152,14 @@ export default function CreateCampaignPage() {
   const effGoalEth = raiseStyle === 'seats'
     ? Number((seatCount * Number(seatPrice)).toFixed(6))
     : Number(f.goal) || 0;
+  // The beta cap travels with the quote asset (2 ETH and 2 USDG are not
+  // the same guardrail). Pre-v7 there is only ever ETH.
+  const betaCap = V7_LIVE ? quote.betaCap : BETA_GOAL_CAP_ETH;
+  const goalPresets = V7_LIVE ? quote.goalPresets : QUOTE_ASSETS[0].goalPresets;
+  const minPresets = V7_LIVE ? quote.minPresets : QUOTE_ASSETS[0].minPresets;
+  const seatPresets = V7_LIVE ? quote.seatPresets : QUOTE_ASSETS[0].seatPresets;
+  const unitSym = V7_LIVE ? quote.symbol : 'ETH';
+  const reservedN = Math.min(Number(reservedSeats) || 0, seatCount);
 
   useEffect(() => {
     if (isSuccess && receipt) {
@@ -160,13 +196,84 @@ export default function CreateCampaignPage() {
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(f.days) * 86400);
     const pctOf = (k: BotKind) => Math.round((Number(activeStack.find((b) => b.kind === k)?.pct) || 0) * 100);
     const vaultLegs = activeStack.filter((b) => (b.kind === 'vault' || b.kind === 'airdrop') && Number(b.pct) > 0);
-    // Seat rounds derive everything from seats x price (goal computed in
-    // wei — no float drift); open raises use the knobs directly.
-    const seatWei = parseEther(seatPrice);
-    const goalWei = raiseStyle === 'seats' ? seatWei * BigInt(seatCount) : parseEther(f.goal);
-    const minWei = raiseStyle === 'seats' ? seatWei : parseEther(f.min);
-    const maxWei = raiseStyle === 'seats' ? seatWei : (f.max === '0' || !Number(f.max) ? 0n : parseEther(f.max));
+    // Amounts are parsed against the QUOTE asset's decimals, never a
+    // hardcoded 18 — USDG is 6. On the v6 path the quote is always ETH,
+    // so this reduces to exactly the previous parseEther behavior.
+    const dec = V7_LIVE ? quote.decimals : 18;
+    const unit = (v: string) => parseUnits(v || '0', dec);
+    const seatUnits = unit(seatPrice);
+    const goalUnits = raiseStyle === 'seats' ? seatUnits * BigInt(seatCount) : unit(f.goal);
+    const minUnits = raiseStyle === 'seats' ? seatUnits : unit(f.min);
+    const maxUnits = raiseStyle === 'seats' ? seatUnits : (f.max === '0' || !Number(f.max) ? 0n : unit(f.max));
     const slotsN = raiseStyle === 'seats' ? BigInt(seatCount) : 0n;
+
+    const meta = {
+      name: f.name, symbol: f.symbol.toUpperCase(), logo: logoUrl, description: f.description,
+      socials: { twitter: f.twitter, telegram: f.telegram, discord: f.discord, website: f.website, farcaster: f.farcaster },
+      feeWallet: '0x0000000000000000000000000000000000000000' as `0x${string}`, // unused on V2 — the contract sets creatorFeeRecipient = FeeSplitter
+    };
+    const vaultAddrs = vaultLegs.map((b) => (b.kind === 'airdrop' ? AIRDROP_OPERATOR : (b.addr as `0x${string}`)));
+    const vaultBpsArr = vaultLegs.map((b) => Math.round(Number(b.pct) * 100));
+
+    if (V7_LIVE) {
+      const params = {
+        goal: goalUnits,
+        minDeposit: minUnits,
+        maxDeposit: maxUnits,
+        maxBackers: slotsN,
+        deadline,
+        launchConfigId: 0n,
+        creatorTaxBps: Math.round((Number(taxPct) || 0) * 100),
+        buybackEnabled: buyback,
+        quoteToken: quote.address,
+        gateToken: (gateAddr.trim() || '0x0000000000000000000000000000000000000000') as `0x${string}`,
+        gateMinBalance: gateAddr.trim() ? parseEther(gateMin || '0') : 0n,
+        reservedSeats: raiseStyle === 'seats' ? Math.min(Number(reservedSeats) || 0, seatCount) : 0,
+        allowlist: (raiseStyle === 'seats' ? allowlist : []) as `0x${string}`[],
+        meta,
+      };
+      const burnBps = pctOf('burn');
+      const lpBps = pctOf('feed_lp');
+
+      // Grind the 0x…5EED signature. One read for the init-code hash
+      // (so the encoding can never drift from what deploys), then a
+      // local keccak loop. Missing it is cosmetic — if anything here
+      // fails we still create at a perfectly good address.
+      let salt = ('0x' + Math.floor(Math.random() * 1e15).toString(16).padStart(64, '0')) as `0x${string}`;
+      try {
+        setGrinding(true);
+        const [deployerAddr, legDeployerAddr] = await Promise.all([
+          rhcPublicClient.readContract({ address: POOLLAUNCH_FACTORY_V7, abi: factoryV5Abi, functionName: 'campaignDeployer' }),
+          rhcPublicClient.readContract({ address: POOLLAUNCH_FACTORY_V7, abi: factoryV5Abi, functionName: 'legDeployer' }),
+        ]);
+        const legNonce = await rhcPublicClient.getTransactionCount({ address: legDeployerAddr });
+        const { burnLeg, lpLeg } = predictLegAddresses(legDeployerAddr, BigInt(legNonce), burnBps > 0, lpBps > 0);
+        const initCodeHash = await rhcPublicClient.readContract({
+          address: POOLLAUNCH_FACTORY_V7,
+          abi: factoryV5Abi,
+          functionName: 'previewInitCodeHash',
+          args: [address as `0x${string}`, params, burnBps, lpBps, vaultAddrs, vaultBpsArr, burnLeg, lpLeg],
+        });
+        const g = grindVanitySalt({ deployer: deployerAddr, initCodeHash });
+        salt = g.salt;
+        if (g.found) setVanity({ address: g.address, attempts: g.attempts, ms: g.ms });
+      } catch { /* no signature this time; the raise is unaffected */ }
+      setGrinding(false);
+
+      // ERC20-quoted raises escrow the pons launch fee (native ETH) at
+      // creation; it comes back via refundLaunchFee if the raise dies.
+      const launchFeeEscrow = isNativeQuote ? 0n : PONS_LAUNCH_FEE_WEI;
+      writeContract({
+        address: POOLLAUNCH_FACTORY_V7,
+        abi: factoryV5Abi,
+        functionName: 'createCampaign',
+        chainId: robinhoodChain.id,
+        value: (myCreationFee ?? CREATION_FEE_WEI) + launchFeeEscrow,
+        args: [params, burnBps, lpBps, vaultAddrs, vaultBpsArr, salt],
+      });
+      return;
+    }
+
     writeContract({
       address: POOLLAUNCH_FACTORY_V6,
       abi: factoryV4Abi,
@@ -178,23 +285,19 @@ export default function CreateCampaignPage() {
       chainId: robinhoodChain.id,
       value: myCreationFee ?? CREATION_FEE_WEI,
       args: [
-        goalWei,
-        minWei,
-        maxWei,
+        goalUnits,
+        minUnits,
+        maxUnits,
         slotsN,
         deadline,
         0n,
         Math.round((Number(taxPct) || 0) * 100),
         buyback,
-        {
-          name: f.name, symbol: f.symbol.toUpperCase(), logo: logoUrl, description: f.description,
-          socials: { twitter: f.twitter, telegram: f.telegram, discord: f.discord, website: f.website, farcaster: f.farcaster },
-          feeWallet: '0x0000000000000000000000000000000000000000', // unused on V2 — the contract sets creatorFeeRecipient = FeeSplitter
-        },
+        meta,
         pctOf('burn'),
         pctOf('feed_lp'),
-        vaultLegs.map((b) => (b.kind === 'airdrop' ? AIRDROP_OPERATOR : (b.addr as `0x${string}`))),
-        vaultLegs.map((b) => Math.round(Number(b.pct) * 100)),
+        vaultAddrs,
+        vaultBpsArr,
       ],
     });
   };
@@ -462,6 +565,61 @@ export default function CreateCampaignPage() {
               </div>
             </section>
 
+            {/* ── QUOTE ASSET — what the raise is pooled in ── */}
+            {V7_LIVE && (
+              <section className="border border-[var(--border)] bg-[var(--card)]">
+                <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                    {'// QUOTE_ASSET'}
+                  </span>
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                    PONS-APPROVED PAIRS
+                  </span>
+                </div>
+                <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {QUOTE_ASSETS.map((q, i) => {
+                    const active = quoteIdx === i;
+                    return (
+                      <button
+                        key={q.address}
+                        type="button"
+                        onClick={() => {
+                          setQuoteIdx(i);
+                          // amounts are asset-relative; reset to that
+                          // asset's own presets rather than carrying
+                          // an ETH-sized number into a USDG raise
+                          setF((d) => ({ ...d, goal: q.goalPresets[2], min: q.minPresets[2], max: '0' }));
+                          setSeatPrice(q.seatPresets[2]);
+                        }}
+                        aria-pressed={active}
+                        className={`border px-3 py-3 flex flex-col items-start gap-1 text-left transition-colors ${
+                          active
+                            ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                            : 'border-[var(--border)] hover:border-[var(--accent)]/50'
+                        }`}
+                      >
+                        <span className={`text-sm font-mono font-semibold ${active ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
+                          {q.label}
+                        </span>
+                        <span className="text-[10px] font-mono text-[var(--muted)] normal-case leading-snug">
+                          {q.blurb}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {!isNativeQuote && (
+                  <div className="border-t border-[var(--border)] px-3 py-2.5 text-[10px] font-mono text-[var(--muted)] leading-relaxed">
+                    <span className="text-[var(--accent-gold)] uppercase tracking-widest">Heads up:</span>{' '}
+                    backers deposit {quote.symbol} (one approval, then deposit), refunds and the
+                    fee stream pay in {quote.symbol}, and pons&apos; 0.0005 ETH launch fee is
+                    escrowed from your wallet at creation — refundable to you if the raise never
+                    launches. Trustless 🔥/🌊 bots are ETH-quoted only for now.
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* ── RAISE STYLE — two presets, both riding the goal engine ── */}
             <section className="border border-[var(--border)] bg-[var(--card)]">
               <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
@@ -514,8 +672,8 @@ export default function CreateCampaignPage() {
                           onChange={(e) => setF({ ...f, goal: e.target.value })}
                           className={inputClass()}
                         >
-                          {['0.1', '0.25', '0.5', '1', '1.5', '2'].map((n) => (
-                            <option key={n} value={n}>{n} ETH</option>
+                          {goalPresets.map((n) => (
+                            <option key={n} value={n}>{n} {unitSym}</option>
                           ))}
                         </select>
                         <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
@@ -529,8 +687,8 @@ export default function CreateCampaignPage() {
                           onChange={(e) => setF({ ...f, min: e.target.value })}
                           className={inputClass()}
                         >
-                          {['0.01', '0.025', '0.05', '0.1', '0.25', '0.5'].map((n) => (
-                            <option key={n} value={n}>{n} ETH</option>
+                          {minPresets.map((n) => (
+                            <option key={n} value={n}>{n} {unitSym}</option>
                           ))}
                         </select>
                         <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
@@ -565,7 +723,7 @@ export default function CreateCampaignPage() {
                         </p>
                       </div>
                       <div>
-                        <label className={labelClass}>Max per backer (ETH)</label>
+                        <label className={labelClass}>Max per backer ({unitSym})</label>
                         <input
                           type="number"
                           value={f.max}
@@ -603,8 +761,8 @@ export default function CreateCampaignPage() {
                           onChange={(e) => setSeatPrice(e.target.value)}
                           className={inputClass()}
                         >
-                          {['0.01', '0.025', '0.05', '0.1', '0.25', '0.5'].map((n) => (
-                            <option key={n} value={n}>{n} ETH</option>
+                          {seatPresets.map((n) => (
+                            <option key={n} value={n}>{n} {unitSym}</option>
                           ))}
                         </select>
                         <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
@@ -627,8 +785,67 @@ export default function CreateCampaignPage() {
                         </span>
                       </div>
                     </div>
+                    {V7_LIVE && (
+                      <div className="border border-[var(--border)] p-3 space-y-3">
+                        <div>
+                          <div className="text-xs font-mono uppercase tracking-widest text-[var(--muted)] mb-1">
+                            🏟 Team round (optional)
+                          </div>
+                          <p className="text-[10px] font-mono text-[var(--muted)] leading-snug">
+                            Reserve seats for wallets you name. The contract enforces it: nobody
+                            else can take a reserved seat, and the public&apos;s remaining seats are
+                            a guarantee, not a leftover. Reserve every seat for a pure team round.
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className={labelClass}>Reserved seats</label>
+                            <select
+                              value={reservedSeats}
+                              onChange={(e) => setReservedSeats(e.target.value)}
+                              className={inputClass()}
+                            >
+                              {Array.from({ length: seatCount + 1 }).map((_, n) => (
+                                <option key={n} value={String(n)}>
+                                  {n === 0
+                                    ? '0 — fully open'
+                                    : n === seatCount
+                                      ? `${n} of ${seatCount} — TEAM ROUND`
+                                      : `${n} of ${seatCount} — ${seatCount - n} open to public`}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className={labelClass}>
+                              Allowlist {allowlist.length > 0 && `(${allowlist.length})`}
+                            </label>
+                            <textarea
+                              value={allowlistText}
+                              onChange={(e) => setAllowlistText(e.target.value)}
+                              placeholder="0xabc…  0xdef…  (one per line)"
+                              rows={3}
+                              className={`${inputClass(!allowlistValid)} resize-none normal-case tracking-normal`}
+                            />
+                          </div>
+                        </div>
+                        {!allowlistValid && (
+                          <p className="text-xs font-mono text-[var(--error)]">
+                            One of those is not a valid address.
+                          </p>
+                        )}
+                        {reservedN > 0 && allowlist.length < reservedN && (
+                          <p className="text-[10px] font-mono text-[var(--warning)] uppercase tracking-widest">
+                            {reservedN} seats reserved but only {allowlist.length} wallet
+                            {allowlist.length === 1 ? '' : 's'} allowlisted — the rest would sit
+                            unclaimable until the deadline.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 px-3 py-2.5 text-[11px] font-mono text-[var(--muted)] leading-relaxed">
-                      <span className="text-[var(--accent)] font-semibold">{seatCount} seats × {seatPrice} ETH = {effGoalEth} ETH raise.</span>{' '}
+                      <span className="text-[var(--accent)] font-semibold">{seatCount} seats × {seatPrice} {unitSym} = {effGoalEth} {unitSym} raise.</span>{' '}
                       Every backer deposits exactly the seat price, owns exactly 1/{seatCount} of the
                       backer pool and fee stream — and the last seat filling meets the goal, so{' '}
                       <span className="text-[var(--foreground)]">filling the round IS the launch trigger</span>.
@@ -636,9 +853,9 @@ export default function CreateCampaignPage() {
                   </>
                 )}
 
-                {effGoalEth > BETA_GOAL_CAP_ETH && (
+                {effGoalEth > betaCap && (
                   <p className="text-xs font-mono text-[var(--warning)]">
-                    BETA CAP: raises are limited to {BETA_GOAL_CAP_ETH} ETH total until the external
+                    BETA CAP: raises are limited to {betaCap} {unitSym} total until the external
                     contract review completes{raiseStyle === 'seats' ? ' — lower the seat count or price' : ''}.
                   </p>
                 )}
@@ -705,6 +922,54 @@ export default function CreateCampaignPage() {
                 </label>
               </div>
             </section>
+
+            {/* ── TOKEN GATE — hold to back ── */}
+            {V7_LIVE && (
+              <section className="border border-[var(--border)] bg-[var(--card)]">
+                <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                    {'// TOKEN_GATE'}
+                  </span>
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                    OPTIONAL
+                  </span>
+                </div>
+                <div className="p-4 space-y-3">
+                  <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                    Require backers to hold a token before they can enter. Anti-bot armor for a
+                    hyped raise, and the reason to hold a community&apos;s token. Checked by the
+                    contract at deposit, not by us.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>Gate token address</label>
+                      <input
+                        value={gateAddr}
+                        onChange={(e) => setGateAddr(e.target.value)}
+                        placeholder="0x… (leave empty for no gate)"
+                        className={`${inputClass(!gateValid)} normal-case tracking-normal`}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Minimum balance</label>
+                      <input
+                        value={gateMin}
+                        onChange={(e) => setGateMin(e.target.value)}
+                        placeholder="e.g. 500000"
+                        disabled={!gateAddr.trim()}
+                        className={`${inputClass()} disabled:opacity-40`}
+                      />
+                      <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
+                        &gt; Whole tokens (18-decimal assumed)
+                      </span>
+                    </div>
+                  </div>
+                  {!gateValid && (
+                    <p className="text-xs font-mono text-[var(--error)]">That is not a valid address.</p>
+                  )}
+                </div>
+              </section>
+            )}
 
             {/* ── LAUNCH BOTS — the SOL bot-stack UX ── */}
             <div className="border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
@@ -901,10 +1166,10 @@ export default function CreateCampaignPage() {
               ) : (
                 <button
                   onClick={submit}
-                  disabled={isPending || uploading || !f.name || !f.symbol || !f.description || effGoalEth <= 0 || effGoalEth > BETA_GOAL_CAP_ETH || overBudget || !stackValid || !taxValid}
+                  disabled={isPending || uploading || grinding || !f.name || !f.symbol || !f.description || effGoalEth <= 0 || effGoalEth > betaCap || overBudget || !stackValid || !taxValid || !allowlistValid || !gateValid}
                   className="btn-primary"
                 >
-                  {uploading ? 'Uploading Image…' : isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
+                  {uploading ? 'Uploading Image…' : grinding ? `Grinding 0x…${SIGNATURE_SUFFIX.toUpperCase()} address…` : isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
                 </button>
               )}
             </div>

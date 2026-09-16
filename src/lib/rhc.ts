@@ -39,6 +39,68 @@ export const POOLLAUNCH_FACTORY_V2 = '0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5
 export const POOLLAUNCH_FACTORY_V1 = '0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d' as const; // legacy, read-only
 export const PONS_FACTORY = '0xF4fC0CD27fC8EcF17E55eE4c3f7201897dF3eb75' as const;
 
+// ── v7 (CampaignFactoryV5) — built, fork-proven, NOT YET DEPLOYED ────
+// Team rounds, token gating, ERC20/stock-quoted raises, 0x…5EED
+// signature addresses. Deploys after the external review; until then
+// V7_LIVE stays false and the UI keeps using v6 unchanged. Flipping
+// this flag plus filling the address is the entire switch-over.
+export const POOLLAUNCH_FACTORY_V7 = '0x0000000000000000000000000000000000000000' as const;
+export const V7_LIVE = false;
+
+// Quote assets a raise can be denominated in. ETH is native; the rest
+// must be pons-approved pair tokens (verified on-chain 2026-09-16) and
+// carry their own decimals — never assume 18.
+export interface QuoteAsset {
+  address: `0x${string}`;
+  symbol: string;
+  label: string;
+  decimals: number;
+  blurb: string;
+  /** Sensible raise sizes for this asset — 1 ETH and 1 USDG are not the
+   *  same order of magnitude, so presets and the beta cap travel with
+   *  the asset rather than being hardcoded in ETH. */
+  goalPresets: string[];
+  minPresets: string[];
+  seatPresets: string[];
+  betaCap: number;
+}
+
+export const QUOTE_ASSETS: QuoteAsset[] = [
+  {
+    address: '0x0000000000000000000000000000000000000000',
+    symbol: 'ETH',
+    label: 'ETH',
+    decimals: 18,
+    blurb: 'The native quote. Trustless bot legs available.',
+    goalPresets: ['0.1', '0.25', '0.5', '1', '1.5', '2'],
+    minPresets: ['0.01', '0.025', '0.05', '0.1', '0.25', '0.5'],
+    seatPresets: ['0.01', '0.025', '0.05', '0.1', '0.25', '0.5'],
+    betaCap: 2,
+  },
+  {
+    address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168',
+    symbol: 'USDG',
+    label: 'USDG',
+    decimals: 6,
+    blurb: 'Global Dollar. A stable-denominated raise: the goal means the same thing tomorrow.',
+    goalPresets: ['250', '500', '1000', '2500', '5000'],
+    minPresets: ['5', '10', '25', '50', '100'],
+    seatPresets: ['10', '25', '50', '100', '250'],
+    betaCap: 5000,
+  },
+  {
+    address: '0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa',
+    symbol: 'SPCX',
+    label: 'SPCX (SpaceX)',
+    decimals: 18,
+    blurb: 'Tokenized SpaceX stock. Pool equity, launch a token, earn the fee stream in it.',
+    goalPresets: ['1', '2.5', '5', '10', '25'],
+    minPresets: ['0.05', '0.1', '0.25', '0.5', '1'],
+    seatPresets: ['0.1', '0.25', '0.5', '1', '2.5'],
+    betaCap: 25,
+  },
+];
+
 // RPC speed matters more than brand: the official gateway is Cloudflare-
 // fronted and ~1.5s/request; publicnode and ordofi answer in 70–350ms
 // (benchmarked 2026-09-15). Fallback order = fastest first, official as
@@ -94,6 +156,35 @@ export const campaignAbi = parseAbi([
   'function creatorTaxBps() view returns (uint16)',
   'function excessAtLaunch() view returns (uint256)',
   'function pokeHarvest()',
+]);
+
+// v7 factory — the full option surface behind one CampaignParams struct.
+export const factoryV5Abi = parseAbi([
+  'function createCampaign((uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint16 creatorTaxBps, bool buybackEnabled, address quoteToken, address gateToken, uint256 gateMinBalance, uint16 reservedSeats, address[] allowlist, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta) p, uint16 burnBps, uint16 lpBps, address[] vaultRecipients, uint16[] vaultBps, bytes32 salt) payable returns (address)',
+  'function previewInitCodeHash(address creator, (uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint16 creatorTaxBps, bool buybackEnabled, address quoteToken, address gateToken, uint256 gateMinBalance, uint16 reservedSeats, address[] allowlist, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta) p, uint16 burnBps, uint16 lpBps, address[] vaultRecipients, uint16[] vaultBps, address predictedBurnLeg, address predictedLpLeg) view returns (bytes32)',
+  'function creationFee() view returns (uint256)',
+  'function creationFeeFor(address creator) view returns (uint256)',
+  'function campaignDeployer() view returns (address)',
+  'function legDeployer() view returns (address)',
+  'function campaignCount() view returns (uint256)',
+  'function campaigns(uint256) view returns (address)',
+  'event CampaignCreated(address indexed campaign, address indexed creator, address feeSplitter, uint256 goal, uint256 deadline, string symbol)',
+]);
+
+// v7 campaign — everything v6 had, plus the quote asset, the gate, the
+// seat buckets and the ERC20 deposit path.
+export const campaignV3Abi = parseAbi([
+  'function quoteToken() view returns (address)',
+  'function gateToken() view returns (address)',
+  'function gateMinBalance() view returns (uint256)',
+  'function reservedSeats() view returns (uint16)',
+  'function reservedSeatsUsed() view returns (uint256)',
+  'function publicSeatsUsed() view returns (uint256)',
+  'function seatBucket(address) view returns (uint8)',
+  'function allowlisted(address) view returns (bool)',
+  'function launchFeeEscrowed() view returns (uint256)',
+  'function depositToken(uint256 amount)',
+  'function refundLaunchFee()',
 ]);
 
 // v6 factory — v5 + payable creation fee with on-chain holder waiver.
