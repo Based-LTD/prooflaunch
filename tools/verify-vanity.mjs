@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Cross-language proof for the 0x…5EED signature scheme.
 //
-// The browser grinder (src/lib/vanity.ts) and the contract
+// The browser grinder (src/lib/rhcVanity.ts) and the contract
 // (CampaignDeployerV3's CREATE2) must derive byte-identical addresses.
 // The fixture below comes from contracts/rhc/test/Vanity.t.sol, which
 // grinds in Solidity and then asserts the campaign actually deploys to
@@ -26,11 +26,11 @@ const FIXTURE = {
 mkdirSync(OUT, { recursive: true });
 writeFileSync(`${OUT}/package.json`, '{"type":"module"}');
 execSync(
-  `npx tsc src/lib/vanity.ts --outDir ${OUT} --module es2022 --target es2022 --moduleResolution bundler --skipLibCheck`,
+  `npx tsc src/lib/rhcVanity.ts --outDir ${OUT} --module es2022 --target es2022 --moduleResolution bundler --skipLibCheck`,
   { stdio: 'inherit' },
 );
 
-const { predictCreate2, grindVanitySalt, hasSignature, predictLegAddresses } = await import(`../${OUT}/vanity.js`);
+const { predictCreate2, grindVanitySalt, hasSignature, predictLegAddresses } = await import(`../${OUT}/rhcVanity.js`);
 
 let fail = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fail++; };
