@@ -118,9 +118,42 @@ Production evidence: first human E2E completed 2026-09-15 — campaign
   sandwich loss bounded by cap × pool depth; challenge the bound.
 - The 📸 airdrop leg is a platform-operated EOA by design (labeled).
 
+## v7 addendum (contracts built, NOT yet deployed — review together)
+
+The v7 generation is code-complete and fork-proven; it deploys only
+after this review. Files: CampaignV3.sol (CampaignParams struct),
+FeeSplitterV3.sol, CampaignFactoryV5.sol (+ CampaignDeployerV3
+satellite), RewardsVault.sol.
+
+New surface to scrutinize:
+- **Team rounds**: reservedSeats/allowlist seat buckets — deposit
+  assignment, withdraw freeing the right bucket, the public-seat
+  guarantee (a public wallet must never take a reserved seat and vice
+  versa can spill); constructor rejects reserved seats on unslotted
+  raises.
+- **Token gating**: gateToken balance check at first deposit (balance
+  can be flash-borrowed for entry — accepted, it gates entry not
+  economics; challenge that).
+- **ERC20 quotes** (USDG + tokenized stocks, fork-proven against both):
+  approve+depositToken/withdraw/refund/excess paths; the native launch
+  fee escrowed at creation (refundLaunchFee single-shot to creator);
+  approve-to-launchAndBuy set then zeroed; nonstandard-token behavior
+  (fee-on-transfer would break accounting — pons approval is the
+  implicit filter, challenge whether that's enough); bots refused on
+  ERC20 quotes at the factory.
+- **CREATE2 deployment**: CampaignDeployerV3 is factory-only; salt is
+  caller-supplied (vanity 0x…5EED) — confirm no griefing via address
+  pre-computation (deploy-before-them front-running reverts on
+  collision; assess).
+- **RewardsVault**: Synthetix-style accumulator, ETH-only; solvency
+  invariant unit-tested under churn; ETH sent while unstaked pool
+  waits unaccounted and is inherited by first stakers (intended);
+  pokeClaim try/catch spray.
+
+Tests: 37 unit + ForkV3 (USDG-quoted lifecycle incl. withdraw, SPCX
+stock-quoted lifecycle, native seat-round) against live pons.
+
 ## Out of scope
 
 Frontend, the Solana platform, WalletProof, pons internals beyond the
-interaction surface, the planned v7 features (team rounds, CREATE2
-vanity salts, ERC20-quoted raises) — v7 will request an incremental
-review.
+interaction surface.
