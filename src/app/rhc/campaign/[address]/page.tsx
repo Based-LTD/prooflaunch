@@ -8,7 +8,8 @@ import { use, useEffect, useState, useCallback } from 'react';
 import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, isAddress } from 'viem';
 import {
-  rhcPublicClient, campaignAbi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl, RHC_WETH, robinhoodChain,
+  rhcPublicClient, campaignAbi, campaignV3Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl,
+  RHC_WETH, robinhoodChain, QUOTE_ASSETS,
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
 import { WpPanel } from '../../walletproof';
@@ -28,6 +29,45 @@ interface State {
   curve: `0x${string}` | null;
   curveGraduated: boolean;
   myCurveAllowance: bigint;
+  v7: V7 | null; // null for v1–v6 campaigns; this page serves every generation
+}
+
+/// v7 adds an ERC20-quoted raise (USDG and friends), contract-enforced
+/// team seats, token gating, and an escrowed pons launch fee. All of it
+/// is absent on older campaigns, so it lives behind its own probe.
+interface V7 {
+  quoteToken: `0x${string}`;      // 0 = native ETH
+  quoteSymbol: string;
+  quoteDecimals: number;
+  reservedSeats: number;
+  reservedSeatsUsed: bigint;
+  publicSeatsUsed: bigint;
+  mySeatBucket: number;           // 0 none · 1 public · 2 reserved
+  iAmAllowlisted: boolean;
+  gateToken: `0x${string}`;
+  gateMinBalance: bigint;
+  myGateBalance: bigint;
+  myQuoteBalance: bigint;
+  myQuoteAllowance: bigint;
+  launchFeeEscrowed: bigint;
+  launchFeeRefunded: boolean;
+}
+
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as `0x${string}`;
+
+/// Quote amounts are NOT always 18 decimals — USDG is 6, and treating it
+/// as ETH would misprice every input by a factor of a trillion.
+function fmtUnits(v: bigint, decimals: number, digits = 4): string {
+  const base = 10n ** BigInt(decimals);
+  const whole = v / base;
+  const frac = ((v % base) * 10n ** BigInt(digits)) / base;
+  return `${whole}.${frac.toString().padStart(digits, '0').replace(/0+$/, '') || '0'}`;
+}
+
+function parseUnits(input: string, decimals: number): bigint {
+  const [w = '0', f = ''] = (input || '0').split('.');
+  const frac = (f + '0'.repeat(decimals)).slice(0, decimals);
+  return BigInt(w || '0') * 10n ** BigInt(decimals) + BigInt(frac || '0');
 }
 
 const label = 'block text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5';
@@ -113,10 +153,68 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           allowFailure: false,
         }) as [bigint, bigint];
       }
+      // v7 probe: quoteToken() only exists from CampaignV3 on. Everything
+      // it gates is additive, so older campaigns simply render as before.
+      let v7: V7 | null = null;
+      try {
+        const c3 = { address: addr, abi: campaignV3Abi } as const;
+        const [quoteToken, reservedSeats, reservedSeatsUsed, publicSeatsUsed, gateToken,
+          gateMinBalance, launchFeeEscrowed, launchFeeRefunded] =
+          await rhcPublicClient.multicall({
+            contracts: [
+              { ...c3, functionName: 'quoteToken' },
+              { ...c3, functionName: 'reservedSeats' },
+              { ...c3, functionName: 'reservedSeatsUsed' },
+              { ...c3, functionName: 'publicSeatsUsed' },
+              { ...c3, functionName: 'gateToken' },
+              { ...c3, functionName: 'gateMinBalance' },
+              { ...c3, functionName: 'launchFeeEscrowed' },
+              { ...c3, functionName: 'launchFeeRefunded' },
+            ],
+            allowFailure: false,
+          }) as unknown as [`0x${string}`, number, bigint, bigint, `0x${string}`, bigint, bigint, boolean];
+
+        let mySeatBucket = 0, iAmAllowlisted = false;
+        let myQuoteBalance = 0n, myQuoteAllowance = 0n, myGateBalance = 0n;
+        if (me) {
+          [mySeatBucket, iAmAllowlisted] = await rhcPublicClient.multicall({
+            contracts: [
+              { ...c3, functionName: 'seatBucket', args: [me] },
+              { ...c3, functionName: 'allowlisted', args: [me] },
+            ],
+            allowFailure: false,
+          }) as unknown as [number, boolean];
+
+          if (quoteToken !== zero) {
+            [myQuoteBalance, myQuoteAllowance] = await rhcPublicClient.multicall({
+              contracts: [
+                { address: quoteToken, abi: erc20Abi, functionName: 'balanceOf', args: [me] },
+                { address: quoteToken, abi: erc20Abi, functionName: 'allowance', args: [me, addr] },
+              ],
+              allowFailure: false,
+            }) as [bigint, bigint];
+          }
+          if (gateToken !== zero) {
+            myGateBalance = await rhcPublicClient.readContract({
+              address: gateToken, abi: erc20Abi, functionName: 'balanceOf', args: [me],
+            }).catch(() => 0n) as bigint;
+          }
+        }
+
+        const known = QUOTE_ASSETS.find((q) => q.address.toLowerCase() === quoteToken.toLowerCase());
+        v7 = {
+          quoteToken, reservedSeats: Number(reservedSeats), reservedSeatsUsed, publicSeatsUsed,
+          mySeatBucket, iAmAllowlisted, gateToken, gateMinBalance, myGateBalance,
+          myQuoteBalance, myQuoteAllowance, launchFeeEscrowed, launchFeeRefunded,
+          quoteSymbol: known?.symbol ?? (quoteToken === zero ? 'ETH' : 'TOKEN'),
+          quoteDecimals: known?.decimals ?? 18,
+        };
+      } catch { /* v1–v6 campaign */ }
+
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
         totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4,
-        curve, curveGraduated, myCurveAllowance });
+        curve, curveGraduated, myCurveAllowance, v7 });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -150,6 +248,25 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const feesOwed = s.myFeeEntitlement > s.myFeesClaimed ? s.myFeeEntitlement - s.myFeesClaimed : 0n;
   const pct = s.goal > 0n ? Number((s.totalRaised * 100n) / s.goal) : 0;
 
+  // ── v7 derived ──────────────────────────────────────────────────────
+  const v7 = s.v7;
+  const qDec = v7?.quoteDecimals ?? 18;
+  const qSym = v7?.quoteSymbol ?? 'ETH';
+  const isErc20Quote = !!v7 && v7.quoteToken !== ZERO_ADDR;
+  /// Quote-aware formatter: ETH raises keep the existing fmtEth output,
+  /// ERC20 raises honour their own decimals (USDG is 6, not 18).
+  const q = (v: bigint, digits = 3) => (isErc20Quote ? fmtUnits(v, qDec, digits) : fmtEth(v, digits));
+  const wantAmount = isErc20Quote ? parseUnits(amount, qDec) : parseEther(amount || '0');
+  const needsApproval = isErc20Quote && !!v7 && v7.myQuoteAllowance < wantAmount;
+  const gated = !!v7 && v7.gateToken !== ZERO_ADDR;
+  const gateBlocked = gated && !!v7 && v7.myGateBalance < v7.gateMinBalance;
+  // Reserved seats are claimable only by allowlisted wallets, so the
+  // number a stranger can actually take is the public bucket alone.
+  const publicSeats = s.maxBackers > 0n ? Number(s.maxBackers) - (v7?.reservedSeats ?? 0) : 0;
+  const publicSeatsLeft = publicSeats - Number(v7?.publicSeatsUsed ?? 0n);
+  const takesReserved = !!v7 && v7.iAmAllowlisted && Number(v7.reservedSeatsUsed) < v7.reservedSeats;
+  const publicFull = !!v7 && s.maxBackers > 0n && !takesReserved && publicSeatsLeft <= 0;
+
   return shell(
     <>
       <div className="border border-[var(--border)] bg-[var(--card)]">
@@ -173,26 +290,47 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           {!s.launched && s.maxBackers > 0n && s.maxBackers <= 24n && (
             <div className="mb-3">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">Slots</span>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  Slots{v7 && v7.reservedSeats > 0 ? ' — team round' : ''}
+                </span>
                 <span className="text-xs font-mono text-[var(--accent)]">
                   {s.backerCount.toString()} / {s.maxBackers.toString()}
                 </span>
               </div>
+              {/* Reserved seats are drawn apart from public ones. Showing a
+                  stranger "3 of 10 left" when seven are allowlist-only earns
+                  them a revert instead of a seat. */}
               <div
                 className="grid gap-1"
                 style={{ gridTemplateColumns: `repeat(${Number(s.maxBackers)}, minmax(0, 1fr))` }}
               >
-                {Array.from({ length: Number(s.maxBackers) }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-4 ${
-                      i < Number(s.backerCount)
-                        ? 'bg-[var(--accent)]'
-                        : 'border border-[var(--accent)]'
-                    }`}
-                  />
-                ))}
+                {Array.from({ length: Number(s.maxBackers) }).map((_, i) => {
+                  const reserved = !!v7 && i >= publicSeats;
+                  const taken = reserved
+                    ? i - publicSeats < Number(v7?.reservedSeatsUsed ?? 0n)
+                    : i < Number(v7?.publicSeatsUsed ?? s.backerCount);
+                  return (
+                    <div
+                      key={i}
+                      title={reserved ? 'Reserved for the team allowlist' : 'Open seat'}
+                      className={`h-4 ${
+                        taken
+                          ? reserved ? 'bg-[var(--muted)]' : 'bg-[var(--accent)]'
+                          : reserved
+                            ? 'border border-dashed border-[var(--muted)]'
+                            : 'border border-[var(--accent)]'
+                      }`}
+                    />
+                  );
+                })}
               </div>
+              {v7 && v7.reservedSeats > 0 && (
+                <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  {publicSeatsLeft > 0 ? `${publicSeatsLeft} open` : 'open seats full'}
+                  {' · '}{v7.reservedSeats - Number(v7.reservedSeatsUsed)} reserved for the team
+                  {v7.iAmAllowlisted && ' · you are on the allowlist'}
+                </p>
+              )}
             </div>
           )}
 
@@ -202,9 +340,9 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           </div>
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              [fmtEth(s.totalRaised, 3) + ' ETH', `raised of ${fmtEth(s.goal, 3)}`],
+              [`${q(s.totalRaised)} ${qSym}`, `raised of ${q(s.goal)}`],
               [s.backerCount.toString() + (s.maxBackers > 0n ? ` / ${s.maxBackers}` : ''), 'backers'],
-              [fmtEth(s.minDeposit, 3), 'min per backer'],
+              [q(s.minDeposit), 'min per backer'],
               [new Date(Number(s.deadline) * 1000).toLocaleDateString(), 'deadline'],
             ].map(([v, k]) => (
               <div key={k as string} className="border border-[var(--border)] bg-[var(--background)] px-3 py-2">
@@ -222,32 +360,82 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           )}
 
           {isConnected && !s.launched && !s.cancelled && !s.refundable && now < s.deadline && (
-            <div className="mt-5 flex flex-wrap items-center gap-3">
+            <div className="mt-5 space-y-3">
+              {/* Gating and a full public bucket are the two reasons a
+                  deposit would revert. Say so BEFORE they sign, not after. */}
+              {gateBlocked && v7 && (
+                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--error)] border border-[var(--error)]/40 bg-[var(--error)]/5 px-3 py-2">
+                  {'> '}Token-gated: hold {fmtUnits(v7.gateMinBalance, 18, 2)} of{' '}
+                  <a href={explorerUrl(v7.gateToken)} target="_blank" rel="noopener noreferrer" className="underline">
+                    this token
+                  </a>{' '}to back. You hold {fmtUnits(v7.myGateBalance, 18, 2)}.
+                </p>
+              )}
+              {publicFull && !gateBlocked && (
+                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] border border-[var(--border)] px-3 py-2">
+                  {'> '}Open seats are full. The remaining seats are reserved for the team allowlist.
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
               {/* Seat round (min == max, slotted): one fixed-price button —
                   the SOL slot-claim feel. Open raise: free amount. */}
               {s.maxBackers > 0n && s.minDeposit === s.maxDeposit && s.minDeposit > 0n ? (
-                <button
-                  onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: s.minDeposit, chainId: robinhoodChain.id })}
-                  disabled={isPending || s.myContribution > 0n}
-                  className="btn-primary"
-                >
-                  {s.myContribution > 0n ? 'Seat Taken ✓' : `Take a Seat — ${fmtEth(s.minDeposit, 3)} ETH`}
-                </button>
+                isErc20Quote && v7 && v7.myQuoteAllowance < s.minDeposit ? (
+                  <button
+                    onClick={() => writeContract({ address: v7.quoteToken, abi: erc20Abi, functionName: 'approve', args: [addr, s.minDeposit], chainId: robinhoodChain.id })}
+                    disabled={isPending || gateBlocked || publicFull}
+                    className="btn-primary"
+                  >
+                    Approve {q(s.minDeposit)} {qSym}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => isErc20Quote
+                      ? writeContract({ address: addr, abi: campaignV3Abi, functionName: 'depositToken', args: [s.minDeposit], chainId: robinhoodChain.id })
+                      : writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: s.minDeposit, chainId: robinhoodChain.id })}
+                    disabled={isPending || s.myContribution > 0n || gateBlocked || publicFull}
+                    className="btn-primary"
+                  >
+                    {s.myContribution > 0n
+                      ? `Seat Taken ✓${v7?.mySeatBucket === 2 ? ' (reserved)' : ''}`
+                      : `Take a${takesReserved ? ' Reserved' : ''} Seat — ${q(s.minDeposit)} ${qSym}`}
+                  </button>
+                )
               ) : (
                 <>
                   <input
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="ETH"
+                    placeholder={qSym}
                     className="w-28 px-3 py-2.5 bg-[var(--background)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
                   />
-                  <button
-                    onClick={() => writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: parseEther(amount || '0'), chainId: robinhoodChain.id })}
-                    disabled={isPending}
-                    className="btn-primary"
-                  >
-                    Back This Launch
-                  </button>
+                  {/* ERC20 raises are two transactions. Naming the step keeps
+                      "why did nothing happen" from becoming a support ticket. */}
+                  {needsApproval ? (
+                    <button
+                      onClick={() => v7 && writeContract({ address: v7.quoteToken, abi: erc20Abi, functionName: 'approve', args: [addr, wantAmount], chainId: robinhoodChain.id })}
+                      disabled={isPending || wantAmount === 0n || gateBlocked || publicFull}
+                      className="btn-primary"
+                    >
+                      Approve {qSym} — step 1 of 2
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => isErc20Quote
+                        ? writeContract({ address: addr, abi: campaignV3Abi, functionName: 'depositToken', args: [wantAmount], chainId: robinhoodChain.id })
+                        : writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: wantAmount, chainId: robinhoodChain.id })}
+                      disabled={isPending || gateBlocked || publicFull}
+                      className="btn-primary"
+                    >
+                      Back This Launch
+                    </button>
+                  )}
+                  {isErc20Quote && v7 && (
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                      you hold {q(v7.myQuoteBalance)} {qSym}
+                    </span>
+                  )}
                 </>
               )}
               {s.myContribution > 0n && (
@@ -256,9 +444,10 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   disabled={isPending}
                   className="px-4 py-2.5 text-xs font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:border-[var(--error)] hover:text-[var(--error)] transition-colors"
                 >
-                  Withdraw {fmtEth(s.myContribution, 3)}
+                  Withdraw {q(s.myContribution)} {qSym}
                 </button>
               )}
+              </div>
             </div>
           )}
 
@@ -274,8 +463,32 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               disabled={isPending}
               className="mt-4 px-4 py-2.5 text-xs font-mono uppercase tracking-widest border border-[var(--error)] text-[var(--error)] hover:bg-[var(--error)] hover:text-black transition-colors"
             >
-              Refund {fmtEth(s.myContribution, 3)} ETH
+              Refund {q(s.myContribution)} {qSym}
             </button>
+          )}
+
+          {/* An ERC20-quoted raise escrows pons' launch fee in ETH at
+              creation. If the raise dies that ETH sits in the campaign
+              until someone calls for it — with no button, a creator sees
+              their money simply gone, which is exactly how we got called a
+              scam the first time. The call is permissionless and always
+              pays the creator, so anyone may trigger it. */}
+          {v7 && s.refundable && v7.launchFeeEscrowed > 0n && (
+            <div className="mt-4">
+              {v7.launchFeeRefunded ? (
+                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
+                  ✓ Launch fee of {fmtEth(v7.launchFeeEscrowed)} ETH returned to the creator
+                </p>
+              ) : (
+                <button
+                  onClick={() => writeContract({ address: addr, abi: campaignV3Abi, functionName: 'refundLaunchFee', chainId: robinhoodChain.id })}
+                  disabled={isPending}
+                  className="px-4 py-2.5 text-xs font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                >
+                  Return {fmtEth(v7.launchFeeEscrowed)} ETH launch fee to creator
+                </button>
+              )}
+            </div>
           )}
 
           {isConnected && iAmCreator && !s.launched && !s.cancelled && (

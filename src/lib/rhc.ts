@@ -183,6 +183,7 @@ export const campaignV3Abi = parseAbi([
   'function seatBucket(address) view returns (uint8)',
   'function allowlisted(address) view returns (bool)',
   'function launchFeeEscrowed() view returns (uint256)',
+  'function launchFeeRefunded() view returns (bool)',
   'function depositToken(uint256 amount)',
   'function refundLaunchFee()',
 ]);
