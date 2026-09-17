@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {RewardsVault, IERC20Pull, ISplitterLegPull} from "../src/RewardsVault.sol";
+import {RewardsVault, IERC20Pull, ISplitterLegPull, IEquityRouter} from "../src/RewardsVault.sol";
 
 contract MockStakeToken {
     mapping(address => uint256) public balanceOf;
@@ -25,7 +25,7 @@ contract RewardsVaultTest is Test {
 
     function setUp() public {
         token = new MockStakeToken();
-        vault = new RewardsVault(IERC20Pull(address(token)));
+        vault = new RewardsVault(IERC20Pull(address(token)), IEquityRouter(address(0)));
         for (uint160 i = 0; i < 2; i++) {
             address u = i == 0 ? alice : bob;
             token.mint(u, 1_000_000 ether);
