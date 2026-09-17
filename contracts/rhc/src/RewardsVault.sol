@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "./interfaces/IPons.sol";
+import {PoolKey} from "./interfaces/IUniV4.sol";
 
 interface IERC20Pull {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
@@ -11,6 +12,11 @@ interface IERC20Pull {
 
 interface ISplitterLegPull {
     function claimLeg(address asset) external;
+}
+
+interface IEquityRouter {
+    function routeEthTo(PoolKey calldata key, uint256 minOut, address recipient, bytes calldata hookData)
+        external payable returns (uint256 assetOut);
 }
 
 /// The platform token's holder-rewards engine — the SOL staking design
@@ -34,6 +40,13 @@ contract RewardsVault {
 
     IERC20Pull public immutable stakeToken;
 
+    /// Fixed at construction so this vault can only ever send your ETH to
+    /// you or through this one router — a router address the caller could
+    /// supply would just be a way to hand your claim to a stranger.
+    /// claim() never touches it, so a broken router can delay a stock
+    /// payout but can never trap a claim: plain ETH is always available.
+    IEquityRouter public immutable equityRouter;
+
     uint256 public totalStaked;
     uint256 public accRewardPerShare; // scaled by PRECISION
     uint256 public accountedEth;      // portion of balance already folded in
@@ -45,12 +58,14 @@ contract RewardsVault {
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
     event Claimed(address indexed user, uint256 ethAmount);
+    event ClaimedAs(address indexed user, address indexed asset, uint256 ethIn, uint256 assetOut);
     event Distributed(uint256 ethAmount, uint256 totalStaked);
 
     error ZeroAmount();
     error Insufficient();
     error EthSend();
     error Reentrancy();
+    error NoRouter();
 
     uint256 private _lock = 1;
     modifier nonReentrant() {
@@ -60,8 +75,9 @@ contract RewardsVault {
         _lock = 1;
     }
 
-    constructor(IERC20Pull stakeToken_) {
+    constructor(IERC20Pull stakeToken_, IEquityRouter equityRouter_) {
         stakeToken = stakeToken_;
+        equityRouter = equityRouter_;
     }
 
     /// ETH arrives from splitter legs (and anyone else who wants to pay
@@ -119,16 +135,58 @@ contract RewardsVault {
         emit Unstaked(msg.sender, amount);
     }
 
-    function claim() external nonReentrant {
+    /// Settle the caller's position and zero out what they're owed. The
+    /// ONE place a claim is accounted, so claim() and claimAs() can never
+    /// drift apart. Effects only — the caller does the interaction.
+    function _takeOwed() internal returns (uint256 owed) {
         distribute();
         _sync(msg.sender);
-        uint256 owed = pendingOf[msg.sender];
+        owed = pendingOf[msg.sender];
         if (owed == 0) revert ZeroAmount();
         pendingOf[msg.sender] = 0;
         accountedEth -= owed;
+    }
+
+    function claim() external nonReentrant {
+        uint256 owed = _takeOwed();
         emit Claimed(msg.sender, owed);
         (bool ok, ) = msg.sender.call{value: owed}("");
         if (!ok) revert EthSend();
+    }
+
+    /// Same claim, different asset in your wallet. The vault still only
+    /// ever owes ETH — this routes YOUR entitlement through a v4 swap in
+    /// the same transaction, and the asset is taken straight to you and
+    /// never custodied here.
+    ///
+    /// `key` and `minOut` are the caller's: we hold no list of blessed
+    /// assets, so anything with an ETH-paired v4 pool works the day it
+    /// exists, and a bad pool costs the caller only what their own minOut
+    /// permits. Reverting is the correct outcome for a pool that can't
+    /// fill — nothing is claimed and they can call claim() instead.
+    function claimAs(PoolKey calldata key, uint256 minOut)
+        external
+        nonReentrant
+        returns (uint256 assetOut)
+    {
+        if (address(equityRouter) == address(0)) revert NoRouter();
+        uint256 owed = _takeOwed();
+
+        uint256 balBefore = address(this).balance;
+        assetOut = equityRouter.routeEthTo{value: owed}(key, minOut, msg.sender, "");
+
+        // The router refunds unspent native to its caller — that's us, and
+        // it belongs to the claimer, not the staking pool. Clamped to what
+        // we actually sent so a coincident inbound payment can't be walked
+        // out as "refund".
+        uint256 back = address(this).balance + owed - balBefore;
+        if (back > owed) back = owed;
+        if (back > 0) {
+            (bool ok, ) = msg.sender.call{value: back}("");
+            if (!ok) revert EthSend();
+        }
+
+        emit ClaimedAs(msg.sender, key.currency1, owed - back, assetOut);
     }
 
     // ── cranks + views ───────────────────────────────────────────────
