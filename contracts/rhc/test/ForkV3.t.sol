@@ -9,6 +9,10 @@ import {IERC20, PonsTokenMeta, PonsSocials} from "../src/interfaces/IPons.sol";
 import {IPonsV2Factory, IPonsV2LaunchAndBuy} from "../src/interfaces/IPonsV2.sol";
 import {IPoolManagerMin, IV4StateView} from "../src/interfaces/IUniV4.sol";
 
+interface IPonsV2FactoryPairs {
+    function approvedPairTokens(address) external view returns (bool);
+}
+
 interface IERC20Std {
     function balanceOf(address) external view returns (uint256);
     function approve(address, uint256) external returns (bool);
@@ -29,6 +33,12 @@ contract ForkV3 is Test {
     address constant STATE_VIEW = 0xF3334192D15450CdD385c8B70e03f9A6bD9E673b;
     address constant USDG = 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168;
     address constant SPCX = 0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa;
+    // Every tokenized equity found live on-chain and confirmed as a
+    // pons-approved pair asset (2026-09-16).
+    address constant SNAP = 0xF6589F11Bc40b669e584073F428B05562F568733;
+    address constant META = 0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35;
+    address constant MSFT = 0xe93237C50D904957Cf27E7B1133b510C669c2e74;
+    address constant LLY  = 0x8005d266423c7ea827372c9c864491e5786600ea;
     string constant RPC = "https://rpc.mainnet.chain.robinhood.com";
 
     CampaignFactoryV5 cf;
@@ -99,6 +109,9 @@ contract ForkV3 is Test {
         address token = c.token();
         assertGt(token.code.length, 0, "token not deployed");
         assertGt(c.tokensAtLaunch(), 0, "no tokens from pooled ERC20 buy");
+        console2.log(sym, "campaign (fork-only):", address(c));
+        console2.log(sym, "token CA (fork-only):", token);
+        console2.log(sym, "curve (fork-only):", c.curve());
         console2.log(sym, "launch OK, tokens:", c.tokensAtLaunch());
         console2.log(sym, "excess refunded (quote units):", c.excessAtLaunch());
 
@@ -112,6 +125,21 @@ contract ForkV3 is Test {
 
     function test_forkv3_stockQuotedRaise_SPCX() public {
         _erc20Lifecycle(SPCX, "PLSPCX");
+    }
+
+    /// The whole tokenized-equity universe, not just one ticker: every
+    /// stock pons approves can quote a community raise. If pons approves
+    /// a new one tomorrow it works with no change on our side.
+    function test_forkv3_everyApprovedStock() public {
+        address[4] memory stocks = [SNAP, META, MSFT, LLY];
+        string[4] memory names = ["PLSNAP", "PLMETA", "PLMSFT", "PLLLY"];
+        for (uint256 i = 0; i < stocks.length; i++) {
+            assertTrue(
+                IPonsV2FactoryPairs(PONS_V2_FACTORY).approvedPairTokens(stocks[i]),
+                "pons dropped approval for this stock"
+            );
+            _erc20Lifecycle(stocks[i], names[i]);
+        }
     }
 
     function test_forkv3_native_seatRound_onLive() public {
