@@ -51,9 +51,16 @@ export function ConnectButton() {
         // should never meet a separate "switch network" ceremony.
         onClick={() => connect({ connector: connectors[0], chainId: robinhoodChain.id })}
         disabled={isPending}
-        className="btn-primary"
+        // Compact on phones: at 390px the full-width button pushed the
+        // hamburger off-screen and stretched the document sideways.
+        className="btn-primary !px-2.5 !text-[10px] sm:!px-4 sm:!text-xs whitespace-nowrap"
       >
-        {isPending ? 'Connecting…' : 'Connect Wallet'}
+        {isPending ? 'Connecting…' : (
+          <>
+            <span className="sm:hidden">Connect</span>
+            <span className="hidden sm:inline">Connect Wallet</span>
+          </>
+        )}
       </button>
     );
   }
