@@ -65,3 +65,4 @@ usdc-e2e-keys.*.json
 *-e2e-keys.*.json
 usdc-bot-key.*.json
 *-bot-key.*.json
+.claude/settings.local.json
