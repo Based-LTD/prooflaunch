@@ -10,9 +10,10 @@ import {
   TrendingUp, Zap, Receipt, Key, HelpCircle, Bot, ExternalLink,
   Undo2 as Undo2Icon, Wallet as WalletIcon,
 } from 'lucide-react';
-import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V6, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
 
 const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
+const LEG_DEPLOYER_V2 = '0x42a2495D9426fd5d88A01e724E62275DCe02dfF4';
 
 type TabId = 'overview' | 'backers' | 'creators' | 'bots' | 'fees' | 'security' | 'faq';
 
@@ -260,8 +261,8 @@ export default function RhcDocsPage() {
                 The Trustless Bot Stack
               </h3>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Carve up to 90% of the fee stream into launch bots — including the world&apos;s
-                first <em>trustless</em> burn and pool-feeder bots, deployed as ownerless
+                Carve up to 90% of the fee stream into launch bots — including what we believe are
+                the first <em>trustless</em> burn and pool-feeder bots anywhere, deployed as ownerless
                 contracts alongside your campaign. See the{' '}
                 <button type="button" onClick={() => setActiveTab('bots')} className="text-[var(--accent)] underline hover:text-[var(--foreground)]">
                   Bots tab
@@ -468,9 +469,12 @@ export default function RhcDocsPage() {
                   Contract addresses
                 </h3>
                 <div className="space-y-2 text-xs font-mono">
-                  <AddrRow name="CampaignFactory v4 (active — pons V2, creator tax)" addr={POOLLAUNCH_FACTORY_V4} />
-                  <AddrRow name="CampaignFactory v3 (pons V1 — trustless bot stack)" addr={POOLLAUNCH_FACTORY} />
-                  <AddrRow name="LegDeployer (bot-leg code)" addr={LEG_DEPLOYER} />
+                  <AddrRow name="CampaignFactory v6 (ACTIVE — creation buy-in, trustless v4 bots, creator tax)" addr={POOLLAUNCH_FACTORY_V6} />
+                  <AddrRow name="CampaignFactory v5 (pons V2 + trustless Uniswap-v4 bot legs)" addr={POOLLAUNCH_FACTORY_V5} />
+                  <AddrRow name="CampaignFactory v4 (pons V2, creator tax — no bot legs)" addr={POOLLAUNCH_FACTORY_V4} />
+                  <AddrRow name="CampaignFactory v3 (pons V1 — original bot stack)" addr={POOLLAUNCH_FACTORY} />
+                  <AddrRow name="LegDeployerV2 (v4 bot-leg code — EIP-170 satellite)" addr={LEG_DEPLOYER_V2} />
+                  <AddrRow name="LegDeployer (v3 bot-leg code)" addr={LEG_DEPLOYER} />
                   <AddrRow name="pons factory (launch target)" addr={PONS_FACTORY} />
                   <AddrRow name="Airdrop operator (📸 legs)" addr={AIRDROP_OPERATOR} />
                 </div>
@@ -488,7 +492,7 @@ export default function RhcDocsPage() {
                   Beta status
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  The contracts passed 21/21 tests including live-pool fork verification of every
+                  The contracts pass 75 tests across 14 suites, including live-pool fork verification of every
                   money path, but have not yet completed external review. Until then the UI caps
                   raise goals at 2 ETH. Oversized raises are proven safe (they graduate at
                   launch); we&apos;re walking before running.
