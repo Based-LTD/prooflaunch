@@ -216,7 +216,7 @@ export async function GET(_request: NextRequest) {
         poollaunch_factory: POOLLAUNCH_FACTORY,
         campaign_count: campaignCount,
         detail: ponsEnabled
-          ? `pons factory live (launchEnabled=true); PoolLaunch campaigns: ${campaignCount}`
+          ? `pons factory live (launchEnabled=true); ProofLaunch RHC campaigns: ${campaignCount}`
           : `pons factory DISABLED — they rotated again. New RHC launches will revert; rediscover the live factory (TokenLaunched topic scan, see docs/rhc-poollaunch-spec.md §8) and update config.`,
       };
     } catch (e) {

@@ -44,7 +44,7 @@ export default function RhcDocsPage() {
       <div className="border border-[var(--border)] bg-[var(--card)]">
         <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {'// POOL_LAUNCH.SYS // DOCS'}
+            {'// PROOF_LAUNCH.SYS // DOCS'}
           </span>
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
             ROBINHOOD CHAIN · v0.3.0
@@ -58,7 +58,7 @@ export default function RhcDocsPage() {
             Documentation
           </h1>
           <p className="text-xs font-mono text-[var(--muted)] mt-2">
-            PoolLaunch on Robinhood Chain — the pooled launch model, enforced by ownerless contracts
+            ProofLaunch on Robinhood Chain — the pooled launch model, enforced by ownerless contracts
           </p>
         </div>
       </div>
@@ -94,11 +94,11 @@ export default function RhcDocsPage() {
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <Rocket className="w-6 h-6 text-[var(--accent)]" />
-                <h2 className="text-2xl font-black uppercase tracking-tight">What is PoolLaunch?</h2>
+                <h2 className="text-2xl font-black uppercase tracking-tight">What is ProofLaunch on Robinhood Chain?</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                PoolLaunch is the Proof Launch pooled-launch model, rebuilt as <strong>trustless
-                smart contracts</strong> on Robinhood Chain. Communities pool ETH toward a raise
+                ProofLaunch on Robinhood Chain is our pooled-launch model, rebuilt as <strong>trustless
+                smart contracts</strong>. Communities pool ETH toward a raise
                 goal; when the goal is met, one transaction launches the token on{' '}
                 <strong>pons</strong> and buys it with the entire pool — snipe-exempt, on the
                 launch block. Backers claim tokens pro-rata and earn{' '}
@@ -165,7 +165,7 @@ export default function RhcDocsPage() {
                   <li>· <strong className="text-[var(--accent)]">Same price for all:</strong> one atomic pooled buy — no backer is front-run or favored</li>
                   <li>· <strong>Snipe-exempt:</strong> the pooled buy executes on the launch block, before snipers can</li>
                   <li>· <strong>Refunds are code:</strong> goal unmet by deadline (+3-day grace) → refunds open unconditionally</li>
-                  <li>· <strong>Nobody does this here:</strong> the RHC field fights over creator revenue — PoolLaunch is the only pooled-raise, backer-revenue protocol on the chain</li>
+                  <li>· <strong>Nobody does this here:</strong> the RHC field fights over creator revenue — ProofLaunch is the only pooled-raise, backer-revenue protocol on the chain</li>
                 </ul>
               </div>
             </section>
@@ -312,7 +312,7 @@ export default function RhcDocsPage() {
                   { emoji: '🔥', name: 'BURN', tag: 'Deflationary · Trustless', desc: 'Claims its fee share (WETH + tokens), market-buys the token on its pons pool, sends everything to the dead address. Per-crank cap keeps sandwich extraction negligible. Totals readable on-chain forever.' },
                   { emoji: '🌊', name: 'POOL FEEDER', tag: 'Liquidity · Trustless', desc: 'Mints full-range liquidity with its fee share and compounds the position\'s own earned trading fees every crank. The contract has NO withdraw function — protocol-owned liquidity locked by construction, not by promise \u2014 the code to withdraw was never written.' },
                   { emoji: '🏦', name: 'VAULT', tag: 'Treasury', desc: 'Any wallet you name (marketing, DAO, treasury) becomes a fee leg and pulls its share anytime. The address is immutable from creation — a public, permanent commitment.' },
-                  { emoji: '📸', name: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run', desc: 'PoolLaunch snapshots your token\'s holders and airdrops the leg\'s fees pro-rata (ETH + tokens), dust-filtered, with the snapshot reconciled against total supply before a single payment goes out. Platform-operated and labeled so.' },
+                  { emoji: '📸', name: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run', desc: 'ProofLaunch snapshots your token\'s holders and airdrops the leg\'s fees pro-rata (ETH + tokens), dust-filtered, with the snapshot reconciled against total supply before a single payment goes out. Platform-operated and labeled so.' },
                 ].map((a) => (
                   <div key={a.name} className="border border-[var(--border)] bg-[var(--background)] p-3">
                     <div className="flex items-center justify-between mb-1.5">
@@ -381,7 +381,7 @@ export default function RhcDocsPage() {
                   { label: 'Creation Fee', value: '0.001 ETH', color: 'border-[var(--accent)]', desc: 'A one-time buy-in when creating a campaign, paid on-chain to the platform — spam control, exact-amount enforced by the factory contract. Will be waived for platform-token holders once the token launches (an on-chain balance check, not a policy). pons separately charges 0.0005 ETH at launch time, paid from the pool.' },
                   { label: 'Backing Fee', value: 'None', color: 'border-[var(--success)]', desc: '100% of your ETH goes into the campaign contract.' },
                   { label: 'Withdrawal Fee', value: 'None', color: 'border-[var(--success)]', desc: 'Withdraw your full deposit any time before launch. Refunds after an expired raise are also full-amount.' },
-                  { label: 'Creator Tax', value: '0\u201310%', color: 'border-[var(--accent-gold)]', desc: 'The pons V2 trading tax, set at creation and never raisable. On pons it pays the dev; on PoolLaunch it pays your campaign\u2019s FeeSplitter \u2014 which means the backers. Every launch buy pays it too, and it round-trips straight back to the pool.' },
+                  { label: 'Creator Tax', value: '0\u201310%', color: 'border-[var(--accent-gold)]', desc: 'The pons V2 trading tax, set at creation and never raisable. On pons it pays the dev; here it pays your campaign\u2019s FeeSplitter \u2014 which means the backers. Every launch buy pays it too, and it round-trips straight back to the pool.' },
                   { label: 'Trading Fees Routing', value: '90 / 7 / 3', color: 'border-[var(--accent)]', desc: 'Of the creator fee stream (base fee + creator tax): 90% to backers pro-rata (minus any bots the creator stacked), 7% platform, 3% holder rewards. Immutable per campaign, enforced by the FeeSplitter contract. Fees arrive as native ETH and the token itself.' },
                 ].map((fee, i) => (
                   <div key={i} className={`bg-[var(--background)] p-4 border-l-4 ${fee.color}`}>
@@ -449,7 +449,7 @@ export default function RhcDocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">Security Model</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                The Solana platform earns trust operationally. PoolLaunch removes the need:
+                On Solana, ProofLaunch earns trust operationally. On Robinhood Chain, the contracts remove the need:
               </p>
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 space-y-3">
                 <h3 className="font-bold flex items-center gap-2 uppercase tracking-wide">
@@ -504,7 +504,7 @@ export default function RhcDocsPage() {
                   Participation Disclaimer
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  PoolLaunch is an experimental protocol. Nothing on this site is investment
+                  ProofLaunch on Robinhood Chain is an experimental protocol. Nothing on this site is investment
                   advice, a securities offering, or a solicitation. Tokens launched here are
                   highly speculative; most go to zero. Read the{' '}
                   <Link href="/legal" className="text-[var(--accent)] hover:underline font-bold">

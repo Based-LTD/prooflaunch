@@ -75,7 +75,7 @@ export default function RoadmapPage() {
           <h1 className="text-3xl font-black uppercase tracking-tight">Roadmap</h1>
         </div>
         <p className="text-[var(--foreground)]/80 leading-relaxed">
-          What&apos;s live, what&apos;s being built, and what&apos;s being weighed — for PoolLaunch
+          What&apos;s live, what&apos;s being built, and what&apos;s being weighed — for ProofLaunch on Robinhood Chain
           on Robinhood Chain, where all new development happens. No dates: this is a direction,
           not a contract. Reality changes the order more often than calendars do.
         </p>
@@ -170,7 +170,7 @@ export default function RoadmapPage() {
           <h2 className="text-2xl font-black uppercase tracking-tight">Suggest Something</h2>
         </div>
         <p className="text-sm text-[var(--muted)] leading-relaxed">
-          Got an idea that would make PoolLaunch better? Drop it in the Telegram or tag us on X.
+          Got an idea that would make ProofLaunch better? Drop it in the Telegram or tag us on X.
           We read every suggestion. Not every one becomes a feature — but every one shapes how we think.
         </p>
         <p className="text-xs font-mono uppercase tracking-widest text-[var(--muted)]">

@@ -1,7 +1,7 @@
 import { RhcProviders } from './providers';
 
 export const metadata = {
-  title: 'PoolLaunch on Robinhood Chain — prooflaunch.fun',
+  title: 'ProofLaunch on Robinhood Chain — prooflaunch.fun',
   description:
     'Community-pooled token launches on Robinhood Chain. Pool the raise, own the float, earn the fees — enforced by ownerless contracts, not promises.',
 };
