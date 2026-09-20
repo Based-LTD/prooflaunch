@@ -14,10 +14,12 @@
 import { parseAbi } from 'viem';
 import { rhcPublicClient } from './rhc';
 
-// Not deployed yet — flip when EquityRouter lands on mainnet, exactly
-// like V7_LIVE gates the v7 factory.
-export const EQUITY_ROUTER = '0x0000000000000000000000000000000000000000' as `0x${string}`;
-export const EQUITY_ROUTER_LIVE = false;
+// Deployed 2026-09-20 (contracts/rhc/DEPLOYMENTS.md). The LIVE flag is a
+// build-time env switch, default OFF: prod stays dark until the founder's
+// small-wallet test passes on a preview deploy with the env set. Going
+// live is then an env toggle + redeploy, not a code change.
+export const EQUITY_ROUTER = '0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943' as `0x${string}`;
+export const EQUITY_ROUTER_LIVE = process.env.NEXT_PUBLIC_EQUITY_ROUTER_LIVE === '1';
 
 export interface EquityAsset {
   symbol: string;

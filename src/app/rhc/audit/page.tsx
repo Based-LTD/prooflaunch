@@ -3,7 +3,8 @@
 // RHC audit page — mirrors the SOL /proof role: every address, every
 // split, verify-it-yourself. Ownerless contracts mean this page is a
 // map, not a promise.
-import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V6, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, LEG_DEPLOYER_V3, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
+import { EQUITY_ROUTER } from '@/lib/rhcEquity';
 import { RhcHeader } from '../components';
 
 const PLATFORM_LEG = '0xD994AE0945c787A487c6dbd5188512E358986E29';
@@ -12,6 +13,9 @@ const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
 const LEG_DEPLOYER_V2 = '0x42a2495D9426fd5d88A01e724E62275DCe02dfF4';
 
 const rows: [string, string, string][] = [
+  ['Factory v7 (deployed 2026-09-20 \u2014 not yet open)', POOLLAUNCH_FACTORY_V7, 'Team rounds, token gating, ERC20/stock-quoted raises, creator-set payout asset, one-crank-per-block bot legs. Flagged off in the UI until a small-wallet test; unaudited. Every campaign it creates carries the EquityRouter immutably.'],
+  ['EquityRouter (deployed 2026-09-20)', EQUITY_ROUTER, 'ETH in, any ETH-paired Uniswap v4 asset out \u2014 how a claim arrives as tokenized stock. Ownerless, holds nothing, no asset allowlist by design.'],
+  ['Leg Deployer V3', LEG_DEPLOYER_V3, 'Carries the v3 bot legs (one crank per block; tick range from pool spacing). Ownerless, stateless.'],
   ['PoolLaunch Factory v6 (ACTIVE)', POOLLAUNCH_FACTORY_V6, 'Creates every campaign today. v5 plus a 0.001 ETH creation buy-in forwarded instantly to the platform leg (the factory never holds a balance). Stateless policy; no owner, no admin, no upgrade path.'],
   ['PoolLaunch Factory v5', POOLLAUNCH_FACTORY_V5, 'pons V2 plus the trustless Uniswap-v4 bot legs (Burn, Pool Feeder). Dual-phase: curve buys before graduation, direct PoolManager swaps after. Read-only in the UI; its campaigns run forever.'],
   ['PoolLaunch Factory v4', POOLLAUNCH_FACTORY_V4, 'Targets pons V2: adjustable creator tax (0\u201310%, earned by backers), native-ETH fee flow. No bot legs. Read-only; its campaigns run forever.'],

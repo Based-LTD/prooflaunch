@@ -39,3 +39,17 @@ Cloudflare and fail spuriously.
 | LegDeployerV2 | `0x42a2495D9426fd5d88A01e724E62275DCe02dfF4` | 2026-09-14 | Carries the v4 bot legs' creation code (EIP-170). |
 | CampaignFactoryV3 (v5) | `0xa5aC43cd8ff09e294240E97c2a63466B2c2a80E8` | 2026-09-14 | Superseded by v6 (its campaigns run forever). pons V2 + trustless bot legs on Uniswap v4: BurnLegV2 (dual-phase: curve buy pre-grad, direct PoolManager swap after), FeedLPLegV2 (full-range locked-by-construction v4 position, fee-compounding; accumulates during curve phase). Graduation cranks proven PERMISSIONLESS. 21,447 bytes. Full suite 26/26. Deploy gotcha: forge's default EIP-1559 max-fee buffer (2× base) can exceed a thin deployer balance — pin with --legacy --with-gas-price just above base fee. |
 | CampaignFactoryV4 (v6) | `0xB86b783ccaCC20746ae9dd33CffE4a205B35E334` | 2026-09-15 | ACTIVE. v5 + creation buy-in: 0.001 ETH exact-fee with createCampaign, forwarded instantly to platform recipient (factory never holds a balance). Waiver hooks (feeWaiverToken/threshold) deployed DORMANT (zero) — redeploy with the platform token address once it exists for on-chain holder waiver. Reuses LegDeployerV2 0x42a2495D…. 6/6 fee-gate tests + fork create→launch. |
+
+## 2026-09-20 — v7 generation + EquityRouter (deployed, NOT yet open)
+
+Flags `V7_LIVE` / `EQUITY_ROUTER_LIVE` remain false until the founder's small-wallet test; nobody can create a v7 campaign from the UI yet. Constructor args verified by live read-back (`tools/_verify-v7-deploy.mjs`).
+
+| Contract | Address | Tx / block | Notes |
+|---|---|---|---|
+| EquityRouter | `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943` | `0x41d97f246282a526520e9b9d6a2d84aaa06d0cfcb2bf1abfe42383f15e26e49d` · 68239958 | ETH in, any ETH-paired v4 asset out. No asset allowlist by design. 2,370 B. |
+| LegDeployerV3 | `0x518B6b80736af35D25F98Cc403A7f2dD8a0763AB` | `0x808eac3fd2af5202d326419fb85047b29d3f925d6a0f2190bbb87ab4e9b0ee2e` · 68241203 | Carries BurnLegV3 + FeedLPLegV3 (one crank per block; ticks derived from spacing — review F1/F2/F4). |
+| CampaignFactoryV5 (v7) | `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B` | `0x1eb80c0235d3b0766ecf59c5c8a0d17f814911f670d2df48968872050ad5291c` · 68241233 | Team rounds, token gating, ERC20/stock-quoted raises, CREATE2 5EED, creation fee 0.001 ETH, `equityRouter` immutable = router above. Holder-rewards still → EOA `0x6ca08565…` (vault gated on platform token). Its constructor deployed the satellite below. |
+| CampaignDeployerV3 | `0xdDCf167F6DA48e8f6C1fC716fDFef4CCEEBd4fe3` | (same tx as factory) | CREATE2 satellite carrying CampaignV3 creation code (EIP-170). `factory()` = v7. 22,128 B. |
+
+Deploy gotchas learned: Foundry loads `.env` from the SHELL cwd, not `--root` — run from `contracts/rhc/`. Forge resolves the script path against cwd too. Deployer `0xC571bf97…` funded 0.002768 → spent ≈0.00093 across both.
+

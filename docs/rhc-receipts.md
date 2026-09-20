@@ -17,9 +17,9 @@ Snapshot: 2026-09-19.
 | Campaign factory v6 (creates every campaign today) | **Live** |
 | Trustless **burn** bot | **Live and executed on mainnet** (once — see §3). Live leg carries review finding F1 (per-call cap); fixed in v3 legs for v7 |
 | Trustless **pool-feeder** bot | Deployed as code, fork-proven, **never created by a mainnet campaign** |
-| v7 factory (team rounds, token gating, ERC20/stock-quoted raises) | Built, 4/4 on live fork, **not deployed** |
-| EquityRouter ("get paid in stock") | Built, 7/7 on live fork against real pools, **not deployed** |
-| Per-campaign equity payouts (`claimBackerAs` / `claimLegAs`, creator's default `payoutAsset`) | Built into v7's FeeSplitterV3, 5/5 on live fork (real MSFT + SPCX from a campaign's fees), **not deployed** — needs the router's mainnet address at deploy |
+| v7 factory (team rounds, token gating, ERC20/stock-quoted raises) | **Deployed 2026-09-20** `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B` — flagged off in the UI until a small-wallet test; unaudited |
+| EquityRouter ("get paid in stock") | **Deployed 2026-09-20** `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943` — flagged off in the UI; unaudited |
+| Per-campaign equity payouts (`claimBackerAs` / `claimLegAs`, creator's default `payoutAsset`) | **Live in the deployed v7 factory** (every campaign it creates carries the router immutably); no v7 campaign exists yet |
 | RewardsVault + `claimAs` | Built, 14/14, **not deployable** until the platform token exists (immutable `stakeToken`) |
 | Platform token on RHC | **Does not exist yet** |
 | Security review | **Self-review with receipts done 2026-09-19** — 10 findings, 6 fixed with tests, 2 accepted with rationale, 2 deferred: `docs/rhc-review-findings.md`. **No independent human review yet.** Brief: `docs/rhc-review-scope.md` |
@@ -53,6 +53,15 @@ Known exception to (1)/(2): the 📸 airdrop leg is platform-run.
 | Platform fee leg (7%) | `0xD994AE0945c787A487c6dbd5188512E358986E29` | EOA. Founder. |
 | Holder-rewards leg (3%) | `0x6ca08565CAf4f5CaAfB4BfeeCEcE6E0Ea3c65dcB` | EOA. Future platform-token buyback feed; will be repointed to RewardsVault by factory redeploy. |
 | Airdrop operator (📸) | `0xFd88ee2413514374654eD267A80ebE3319cAB3B9` | EOA, platform-run. The one non-trustless bot. |
+
+Deployed 2026-09-20, **not yet open** (UI flags off pending the founder's small-wallet test; unaudited) — every constructor arg read back from chain and matched:
+
+| Contract | Address | Fact |
+|---|---|---|
+| **CampaignFactory v7** | `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B` | tx `0x1eb80c0235d3b0766ecf59c5c8a0d17f814911f670d2df48968872050ad5291c`, block 68241233. `equityRouter()` = router below; `legDeployer()` = LegDeployerV3; `creationFee()` 0.001 ETH; 700/300 bps; `campaignCount()` 0. |
+| CampaignDeployerV3 (satellite) | `0xdDCf167F6DA48e8f6C1fC716fDFef4CCEEBd4fe3` | `factory()` = v7. Carries CampaignV3 creation code. |
+| LegDeployerV3 | `0x518B6b80736af35D25F98Cc403A7f2dD8a0763AB` | tx `0x808eac3fd2af5202d326419fb85047b29d3f925d6a0f2190bbb87ab4e9b0ee2e`, block 68241203. v3 bot legs: one crank per block. |
+| EquityRouter | `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943` | tx `0x41d97f246282a526520e9b9d6a2d84aaa06d0cfcb2bf1abfe42383f15e26e49d`, block 68239958. `poolManager()` = v4 PoolManager. Holds nothing; no allowlist. |
 
 Superseded factories (campaigns on them run forever; none create new ones):
 v5 `0xa5aC43cd8ff09e294240E97c2a63466B2c2a80E8` · v4 `0x552db842cdB40ea73Dcac6cfAe15AF1E03405a9D` · v3 `0xE2989dA79b04d64D9d68f476b6Ee8f971467b470` · v2 `0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5` · v1 `0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d` · LegDeployer (v3) `0xA530b670762A5e82062A8f2256B0d877Afc8eBe4` (nonce 1 → 0 legs).

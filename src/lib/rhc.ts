@@ -39,13 +39,18 @@ export const POOLLAUNCH_FACTORY_V2 = '0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5
 export const POOLLAUNCH_FACTORY_V1 = '0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d' as const; // legacy, read-only
 export const PONS_FACTORY = '0xF4fC0CD27fC8EcF17E55eE4c3f7201897dF3eb75' as const;
 
-// ── v7 (CampaignFactoryV5) — built, fork-proven, NOT YET DEPLOYED ────
-// Team rounds, token gating, ERC20/stock-quoted raises, 0x…5EED
-// signature addresses. Deploys after the external review; until then
-// V7_LIVE stays false and the UI keeps using v6 unchanged. Flipping
-// this flag plus filling the address is the entire switch-over.
-export const POOLLAUNCH_FACTORY_V7 = '0x0000000000000000000000000000000000000000' as const;
-export const V7_LIVE = false;
+// ── v7 (CampaignFactoryV5) — DEPLOYED 2026-09-20, not yet open ────────
+// Team rounds, token gating, ERC20/stock-quoted raises, creator-set
+// payout asset, 0x…5EED signature addresses. Constructor args verified
+// on-chain (tools/_verify-v7-deploy.mjs). V7_LIVE is a build-time env
+// switch, default OFF: the UI keeps using v6 until the founder's
+// small-wallet test passes on a preview deploy with the env set. Going
+// live is then an env toggle on the prod project + redeploy.
+export const POOLLAUNCH_FACTORY_V7 = '0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B' as const; // deployed 2026-09-20, flagged off until the small-wallet test
+export const LEG_DEPLOYER_V3 = '0x518B6b80736af35D25F98Cc403A7f2dD8a0763AB' as const;
+export const CAMPAIGN_DEPLOYER_V3 = '0xdDCf167F6DA48e8f6C1fC716fDFef4CCEEBd4fe3' as const;
+// Build-time env switch, default OFF (see rhcEquity.ts for the rationale).
+export const V7_LIVE = process.env.NEXT_PUBLIC_V7_LIVE === '1';
 
 // Quote assets a raise can be denominated in. ETH is native; the rest
 // must be pons-approved pair tokens (verified on-chain 2026-09-16) and
@@ -287,7 +292,12 @@ export interface CampaignRow {
 export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow[]> {
   const zero = '0x0000000000000000000000000000000000000000' as `0x${string}`;
   const who = me ?? zero;
-  const factories = [POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V2, POOLLAUNCH_FACTORY_V1];
+  // v7 joins the board only when the flag is on — a campaign created on
+  // it while dark would otherwise launch fine and then be invisible here.
+  const factories = [
+    ...(V7_LIVE ? [POOLLAUNCH_FACTORY_V7] : []),
+    POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V2, POOLLAUNCH_FACTORY_V1,
+  ];
 
   // THREE round-trips total, regardless of campaign count. The old
   // shape awaited one RPC call per campaign per factory sequentially —
