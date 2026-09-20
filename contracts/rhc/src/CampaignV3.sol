@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IERC20, PonsTokenMeta} from "./interfaces/IPons.sol";
 import {IPonsV2Factory, IPonsV2LaunchAndBuy, IPonsV2FeeEscrow, IPonsV2Curve, PonsV2LaunchParams} from "./interfaces/IPonsV2.sol";
+import {IEquityRouter} from "./interfaces/IEquityRouter.sol";
 import {FeeSplitterV3} from "./FeeSplitterV3.sol";
 
 interface IERC20Quote {
@@ -28,6 +29,7 @@ struct CampaignParams {
     uint256 gateMinBalance;
     uint16 reservedSeats;   // team round: seats only allowlisted wallets may take
     address[] allowlist;    // wallets eligible for reserved seats
+    address payoutAsset;    // creator's DEFAULT for fee claims (0 = ETH); every claimer may override
     PonsTokenMeta meta;
 }
 
@@ -60,6 +62,7 @@ contract CampaignV3 {
     uint16 public immutable creatorTaxBps;
     bool public immutable buybackEnabled;
     address public immutable quoteToken;
+    address public immutable payoutAsset; // UI default only — never enforced
     address public immutable gateToken;
     uint256 public immutable gateMinBalance;
     uint16 public immutable reservedSeats;
@@ -120,6 +123,7 @@ contract CampaignV3 {
         IPonsV2Factory ponsFactory_,
         IPonsV2LaunchAndBuy ponsLaunchAndBuy_,
         address ponsFeeEscrow_,
+        address equityRouter_,
         CampaignParams memory p,
         uint16 backerBps_,
         address[] memory legRecipients_,
@@ -144,6 +148,7 @@ contract CampaignV3 {
         creatorTaxBps = p.creatorTaxBps;
         buybackEnabled = p.buybackEnabled;
         quoteToken = p.quoteToken;
+        payoutAsset = p.payoutAsset;
         gateToken = p.gateToken;
         gateMinBalance = p.gateMinBalance;
         reservedSeats = p.reservedSeats;
@@ -153,7 +158,8 @@ contract CampaignV3 {
         launchFeeEscrowed = msg.value;
         for (uint256 i = 0; i < p.allowlist.length; i++) allowlisted[p.allowlist[i]] = true;
         feeSplitter = new FeeSplitterV3(
-            address(this), IPonsV2FeeEscrow(ponsFeeEscrow_), backerBps_, legRecipients_, legBps_
+            address(this), IPonsV2FeeEscrow(ponsFeeEscrow_), backerBps_, legRecipients_, legBps_,
+            IEquityRouter(equityRouter_)
         );
         meta = p.meta;
     }

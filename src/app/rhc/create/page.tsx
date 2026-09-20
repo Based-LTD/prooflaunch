@@ -12,6 +12,7 @@ import {
   POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, V7_LIVE, QUOTE_ASSETS,
   AIRDROP_OPERATOR, factoryV4Abi, factoryV5Abi, robinhoodChain, rhcPublicClient,
 } from '@/lib/rhc';
+import { EQUITY_ASSETS, PRICEY_FEE_BPS } from '@/lib/rhcEquity';
 import { grindVanitySalt, predictLegAddresses, SIGNATURE_SUFFIX } from '@/lib/rhcVanity';
 
 // Soft-launch guardrail: contracts allow any goal (oversized raises are
@@ -105,6 +106,10 @@ export default function CreateCampaignPage() {
   // the tokenized stocks are pons-approved pair tokens with their own
   // decimals, so every amount below is parsed against THIS, never 18.
   const [quoteIdx, setQuoteIdx] = useState(0);
+  // 0 = ETH; otherwise EQUITY_ASSETS[payoutIdx - 1]. A DEFAULT for fee
+  // claims — every claimer can override at claim time, so nobody is ever
+  // trapped in an asset. It's the line on the poster, not a lock.
+  const [payoutIdx, setPayoutIdx] = useState(0);
   const quote = QUOTE_ASSETS[quoteIdx];
   const isNativeQuote = quote.address === '0x0000000000000000000000000000000000000000';
   const [reservedSeats, setReservedSeats] = useState('0');
@@ -232,6 +237,7 @@ export default function CreateCampaignPage() {
         gateMinBalance: gateAddr.trim() ? parseEther(gateMin || '0') : 0n,
         reservedSeats: raiseStyle === 'seats' ? Math.min(Number(reservedSeats) || 0, seatCount) : 0,
         allowlist: (raiseStyle === 'seats' ? allowlist : []) as `0x${string}`[],
+        payoutAsset: (payoutIdx === 0 ? '0x0000000000000000000000000000000000000000' : EQUITY_ASSETS[payoutIdx - 1].address) as `0x${string}`,
         meta,
       };
       const burnBps = pctOf('burn');
@@ -668,6 +674,27 @@ export default function CreateCampaignPage() {
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
+                        {V7_LIVE && (
+                          <div className="sm:col-span-2 mb-1">
+                            <label className={labelClass}>Pay fees in</label>
+                            <select
+                              value={payoutIdx}
+                              onChange={(e) => setPayoutIdx(Number(e.target.value))}
+                              className={inputClass()}
+                            >
+                              <option value={0}>ETH (default)</option>
+                              {EQUITY_ASSETS.map((a, i) => (
+                                <option key={a.symbol} value={i + 1}>
+                                  {a.symbol} — {a.label}{a.feeBps >= PRICEY_FEE_BPS ? ` (pool fee ${(a.feeBps / 100).toFixed(1)}%)` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="mt-1 text-[10px] font-mono text-[var(--muted)] leading-relaxed">
+                              The default asset your backers&apos; fee share arrives as. &ldquo;Holders earn SpaceX&rdquo; is a real claim once you pick it —
+                              but every backer can still take ETH or any other stock at claim time. Nobody is locked in.
+                            </p>
+                          </div>
+                        )}
                         <label className={labelClass}>Raise goal</label>
                         <select
                           value={f.goal}

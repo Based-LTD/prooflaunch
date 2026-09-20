@@ -157,6 +157,14 @@ New surface to scrutinize:
   pool waits unaccounted and is inherited by first stakers (intended);
   pokeClaim try/catch spray. `stakeToken` is immutable — the vault
   cannot deploy until the platform token exists.
+- **FeeSplitterV3.claimBackerAs / claimLegAs** (added 2026-09-20): the
+  native entitlement routed through the factory-fixed EquityRouter;
+  effects before the one external call, `nonReentrant`, refund clamped
+  to the amount sent, plain `claimBacker` untouched. A caller-supplied
+  `PoolKey.hooks` is a contract of the caller's choosing that runs mid-
+  swap — confirm the pre-applied accounting leaves it nothing to take.
+  `payoutAsset` on the campaign is a UI default only; confirm nothing
+  enforces it.
 - **EquityRouter** (`EquityRouter.sol`, added 2026-09-17): ETH in,
   ERC20 out through a caller-supplied Uniswap v4 PoolKey. Ownerless,
   stateless between calls, holds nothing. **Deliberately has no asset

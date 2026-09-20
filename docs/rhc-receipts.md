@@ -19,6 +19,7 @@ Snapshot: 2026-09-19.
 | Trustless **pool-feeder** bot | Deployed as code, fork-proven, **never created by a mainnet campaign** |
 | v7 factory (team rounds, token gating, ERC20/stock-quoted raises) | Built, 4/4 on live fork, **not deployed** |
 | EquityRouter ("get paid in stock") | Built, 7/7 on live fork against real pools, **not deployed** |
+| Per-campaign equity payouts (`claimBackerAs` / `claimLegAs`, creator's default `payoutAsset`) | Built into v7's FeeSplitterV3, 5/5 on live fork (real MSFT + SPCX from a campaign's fees), **not deployed** — needs the router's mainnet address at deploy |
 | RewardsVault + `claimAs` | Built, 14/14, **not deployable** until the platform token exists (immutable `stakeToken`) |
 | Platform token on RHC | **Does not exist yet** |
 | Security review | **Self-review with receipts done 2026-09-19** — 10 findings, 6 fixed with tests, 2 accepted with rationale, 2 deferred: `docs/rhc-review-findings.md`. **No independent human review yet.** Brief: `docs/rhc-review-scope.md` |
@@ -133,8 +134,11 @@ PoolManager holds 20,515 ETH; MSFT 1,848 (30.6% of supply), META 2,050
 
 What *is* ours, and **not yet deployed**: pooled community raises (pons
 is single-creator), and letting the *claimer* choose the asset their
-ETH entitlement arrives as. `EquityRouter` + `RewardsVault.claimAs`,
-14/14 on a live fork against the real pools. Measured all-in routing
+ETH entitlement arrives as — at every claim surface: a campaign's
+backers and legs (`FeeSplitterV3.claimBackerAs` / `claimLegAs`, with a
+creator-set default that never locks anyone in) and $PROOF stakers
+(`RewardsVault.claimAs`). `EquityRouter` + both surfaces: 19/19 on a
+live fork against the real pools. Measured all-in routing
 cost at ~$122: SPCX 0.5%, MSFT 1%, META 5%, LLY 6%. Pool keys and fee
 tiers: `contracts/rhc/RWA_POOLS.md`. The protocol only ever owes ETH;
 the recipient does the swap. No allowlist of assets exists on-chain.
@@ -143,7 +147,7 @@ the recipient does the swap. No allowlist of assets exists on-chain.
 
 ## 6. Tests
 
-87 tests / 15 suites, all green including every fork suite. The `Review`
+92 tests / 16 suites, all green including every fork suite. The `Review`
 suite is one test per review finding (`docs/rhc-review-findings.md`). Fork suites run against live pons and live v4 pools:
 `ForkDeep` (burn leg, pool-feeder leg, oversized raise, real fee flow
 at 90/7/3), `ForkV3` (USDG-quoted, SPCX-quoted, every pons-approved

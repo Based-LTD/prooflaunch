@@ -33,6 +33,7 @@ contract CampaignDeployerV3 {
         IPonsV2Factory ponsFactory,
         IPonsV2LaunchAndBuy launchAndBuy,
         address ponsFeeEscrow,
+        address equityRouter,
         CampaignParams calldata p,
         uint16 backerBps,
         address[] calldata legs,
@@ -41,7 +42,7 @@ contract CampaignDeployerV3 {
         return keccak256(
             abi.encodePacked(
                 type(CampaignV3).creationCode,
-                abi.encode(creator, ponsFactory, launchAndBuy, ponsFeeEscrow, p, backerBps, legs, legBps)
+                abi.encode(creator, ponsFactory, launchAndBuy, ponsFeeEscrow, equityRouter, p, backerBps, legs, legBps)
             )
         );
     }
@@ -52,6 +53,7 @@ contract CampaignDeployerV3 {
         IPonsV2Factory ponsFactory,
         IPonsV2LaunchAndBuy launchAndBuy,
         address ponsFeeEscrow,
+        address equityRouter,
         CampaignParams calldata p,
         uint16 backerBps,
         address[] calldata legs,
@@ -59,7 +61,7 @@ contract CampaignDeployerV3 {
     ) external payable returns (CampaignV3 c) {
         if (msg.sender != factory) revert OnlyFactory();
         c = new CampaignV3{salt: salt, value: msg.value}(
-            creator, ponsFactory, launchAndBuy, ponsFeeEscrow, p, backerBps, legs, legBps
+            creator, ponsFactory, launchAndBuy, ponsFeeEscrow, equityRouter, p, backerBps, legs, legBps
         );
     }
 }
@@ -84,6 +86,10 @@ contract CampaignFactoryV5 {
     IV4StateView public immutable stateView;
     LegDeployerV3 public immutable legDeployer;
     CampaignDeployerV3 public immutable campaignDeployer;
+
+    /// One router for every campaign this factory creates. Immutable here
+    /// and never caller-supplied: see FeeSplitterV3.
+    address public immutable equityRouter;
 
     uint256 public immutable creationFee;
     IERC20 public immutable feeWaiverToken;
@@ -131,7 +137,8 @@ contract CampaignFactoryV5 {
         LegDeployerV3 legDeployer_,
         uint256 creationFee_,
         IERC20 feeWaiverToken_,
-        uint256 feeWaiverThreshold_
+        uint256 feeWaiverThreshold_,
+        address equityRouter_
     ) {
         platformFeeRecipient = platformFeeRecipient_;
         holderRewardsRecipient = holderRewardsRecipient_;
@@ -148,6 +155,7 @@ contract CampaignFactoryV5 {
         creationFee = creationFee_;
         feeWaiverToken = feeWaiverToken_;
         feeWaiverThreshold = feeWaiverThreshold_;
+        equityRouter = equityRouter_;
     }
 
     function creationFeeFor(address creator) public view returns (uint256) {
@@ -198,7 +206,7 @@ contract CampaignFactoryV5 {
             previewLegs(burnBps, lpBps, vaultRecipients, vaultBps, address(burnLeg), address(lpLeg));
 
         campaign = campaignDeployer.deploy{value: launchFeeEscrow}(
-            salt, msg.sender, ponsFactory, ponsLaunchAndBuy, ponsFeeEscrow,
+            salt, msg.sender, ponsFactory, ponsLaunchAndBuy, ponsFeeEscrow, equityRouter,
             p, backerBps, legs, legBpsArr
         );
 
@@ -271,7 +279,7 @@ contract CampaignFactoryV5 {
         (uint16 backerBps, address[] memory legs, uint16[] memory legBps) =
             previewLegs(burnBps, lpBps, vaultRecipients, vaultBps, predictedBurnLeg, predictedLpLeg);
         return campaignDeployer.initCodeHash(
-            creator, ponsFactory, ponsLaunchAndBuy, ponsFeeEscrow, p, backerBps, legs, legBps
+            creator, ponsFactory, ponsLaunchAndBuy, ponsFeeEscrow, equityRouter, p, backerBps, legs, legBps
         );
     }
 

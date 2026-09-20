@@ -160,8 +160,8 @@ export const campaignAbi = parseAbi([
 
 // v7 factory — the full option surface behind one CampaignParams struct.
 export const factoryV5Abi = parseAbi([
-  'function createCampaign((uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint16 creatorTaxBps, bool buybackEnabled, address quoteToken, address gateToken, uint256 gateMinBalance, uint16 reservedSeats, address[] allowlist, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta) p, uint16 burnBps, uint16 lpBps, address[] vaultRecipients, uint16[] vaultBps, bytes32 salt) payable returns (address)',
-  'function previewInitCodeHash(address creator, (uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint16 creatorTaxBps, bool buybackEnabled, address quoteToken, address gateToken, uint256 gateMinBalance, uint16 reservedSeats, address[] allowlist, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta) p, uint16 burnBps, uint16 lpBps, address[] vaultRecipients, uint16[] vaultBps, address predictedBurnLeg, address predictedLpLeg) view returns (bytes32)',
+  'function createCampaign((uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint16 creatorTaxBps, bool buybackEnabled, address quoteToken, address gateToken, uint256 gateMinBalance, uint16 reservedSeats, address[] allowlist, address payoutAsset, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta) p, uint16 burnBps, uint16 lpBps, address[] vaultRecipients, uint16[] vaultBps, bytes32 salt) payable returns (address)',
+  'function previewInitCodeHash(address creator, (uint256 goal, uint256 minDeposit, uint256 maxDeposit, uint256 maxBackers, uint256 deadline, uint256 launchConfigId, uint16 creatorTaxBps, bool buybackEnabled, address quoteToken, address gateToken, uint256 gateMinBalance, uint16 reservedSeats, address[] allowlist, address payoutAsset, (string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) meta) p, uint16 burnBps, uint16 lpBps, address[] vaultRecipients, uint16[] vaultBps, address predictedBurnLeg, address predictedLpLeg) view returns (bytes32)',
   'function creationFee() view returns (uint256)',
   'function creationFeeFor(address creator) view returns (uint256)',
   'function campaignDeployer() view returns (address)',
@@ -184,6 +184,7 @@ export const campaignV3Abi = parseAbi([
   'function allowlisted(address) view returns (bool)',
   'function launchFeeEscrowed() view returns (uint256)',
   'function launchFeeRefunded() view returns (bool)',
+  'function payoutAsset() view returns (address)',
   'function depositToken(uint256 amount)',
   'function refundLaunchFee()',
 ]);
@@ -237,6 +238,13 @@ export const splitterAbi = parseAbi([
   'function backerEntitlement(address backer, address asset) view returns (uint256)',
   'function distribute(address asset)',
   'function claimBacker(address asset)',
+  // v7 splitters only (FeeSplitterV3): route the ETH entitlement to an
+  // ETH-paired v4 asset in the same tx. Older splitters lack these and the
+  // page must not offer them.
+  'struct PoolKey { address currency0; address currency1; uint24 fee; int24 tickSpacing; address hooks; }',
+  'function equityRouter() view returns (address)',
+  'function claimBackerAs(PoolKey key, uint256 minOut) returns (uint256 assetOut)',
+  'function claimLegAs(PoolKey key, uint256 minOut) returns (uint256 assetOut)',
   'function claimLeg(address asset)',
 ]);
 

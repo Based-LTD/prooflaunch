@@ -63,7 +63,8 @@ contract ReviewTest is Test {
             address(0xFEE), address(0x4EAA), 700, 300,
             IPonsV2Factory(address(ponsF)), IPonsV2LaunchAndBuy(address(lab)), address(0xE5C60),
             IPoolManagerMin(address(0xB0)), address(0xB1), IV4StateView(address(0xB2)),
-            new LegDeployerV3(), FEE, IERC20(address(0)), 0
+            new LegDeployerV3(), FEE, IERC20(address(0)), 0,
+            address(0)
         );
         vm.deal(creator, 20 ether); vm.deal(alice, 20 ether);
         usdg.mint(alice, 100 ether);

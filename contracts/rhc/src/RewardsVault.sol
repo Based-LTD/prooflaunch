@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "./interfaces/IPons.sol";
 import {PoolKey} from "./interfaces/IUniV4.sol";
+import {IEquityRouter} from "./interfaces/IEquityRouter.sol";
 
 interface IERC20Pull {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
@@ -14,10 +15,6 @@ interface ISplitterLegPull {
     function claimLeg(address asset) external;
 }
 
-interface IEquityRouter {
-    function routeEthTo(PoolKey calldata key, uint256 minOut, address recipient, bytes calldata hookData)
-        external payable returns (uint256 assetOut);
-}
 
 /// The platform token's holder-rewards engine — the SOL staking design
 /// ([[proof-staking-design]]) rebuilt as an ownerless contract.

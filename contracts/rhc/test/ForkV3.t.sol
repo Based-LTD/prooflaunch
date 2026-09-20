@@ -58,7 +58,8 @@ contract ForkV3 is Test {
             PONS_V2_FEE_ESCROW,
             IPoolManagerMin(POOL_MANAGER), MEME_HOOK, IV4StateView(STATE_VIEW),
             new LegDeployerV3(),
-            FEE, IERC20(address(0)), 0
+            FEE, IERC20(address(0)), 0,
+            address(0)
         );
         vm.deal(creator, 3 ether);
         vm.deal(alice, 3 ether);

@@ -33,7 +33,8 @@ contract VanityTest is Test {
             address(0xE5C60),
             IPoolManagerMin(address(0xB0)), address(0xB1), IV4StateView(address(0xB2)),
             new LegDeployerV3(),
-            FEE, IERC20(address(0)), 0
+            FEE, IERC20(address(0)), 0,
+            address(0)
         );
         vm.deal(creator, 10 ether);
     }
@@ -62,6 +63,7 @@ contract VanityTest is Test {
                     IPonsV2Factory(address(ponsF)),
                     IPonsV2LaunchAndBuy(address(lab)),
                     address(0xE5C60),
+                    address(cf.equityRouter()), // threaded factory → campaign → splitter
                     p,
                     uint16(9000), // 10000 - 700 - 300, no bots, no vaults
                     legs,

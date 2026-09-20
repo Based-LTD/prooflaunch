@@ -29,13 +29,20 @@ interface Props {
   owed: bigint;
   account?: `0x${string}`;
   busy?: boolean;
+  /// The creator's default payout asset, if any: shown first and labelled.
+  /// The claimer still chooses — this only reorders the list.
+  preferred?: `0x${string}`;
   onClaimEth: () => void;
   onClaimAs: (asset: EquityAsset, minOut: bigint) => void;
 }
 
 type Quotes = Record<string, bigint | null | 'loading'>;
 
-export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs }: Props) {
+export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, preferred }: Props) {
+  const assets = preferred
+    ? [...EQUITY_ASSETS].sort((a, b) =>
+        (a.address.toLowerCase() === preferred.toLowerCase() ? -1 : 0) - (b.address.toLowerCase() === preferred.toLowerCase() ? -1 : 0))
+    : EQUITY_ASSETS;
   const [open, setOpen] = useState(false);
   const [quotes, setQuotes] = useState<Quotes>({});
   const nothing = owed === 0n;
@@ -85,8 +92,9 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs }: Pr
             // Take it as
           </div>
 
-          {EQUITY_ASSETS.map((a) => {
+          {assets.map((a) => {
             const q = quotes[a.symbol];
+            const isPreferred = !!preferred && a.address.toLowerCase() === preferred.toLowerCase();
             const pricey = a.feeBps >= PRICEY_FEE_BPS;
             const ready = typeof q === 'bigint' && q > 0n;
 
@@ -102,6 +110,9 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs }: Pr
                 <span className="flex items-baseline gap-2 min-w-0">
                   <span className="font-mono text-sm">{a.symbol}</span>
                   <span className="text-[11px] text-[var(--muted)] truncate">{a.label}</span>
+                  {isPreferred && (
+                    <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--accent)]">creator&apos;s pick</span>
+                  )}
                 </span>
 
                 <span className="flex items-baseline gap-2 shrink-0">

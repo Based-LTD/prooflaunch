@@ -12,6 +12,8 @@ import {
   RHC_WETH, robinhoodChain, QUOTE_ASSETS,
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
+import { ClaimAsPicker } from '../../ClaimAsPicker';
+import { EQUITY_ROUTER_LIVE, poolKeyFor, type EquityAsset } from '@/lib/rhcEquity';
 import { WpPanel } from '../../walletproof';
 
 interface State {
@@ -51,6 +53,8 @@ interface V7 {
   myQuoteAllowance: bigint;
   launchFeeEscrowed: bigint;
   launchFeeRefunded: boolean;
+  payoutAsset: `0x${string}`;     // creator's default for fee claims; 0 = ETH
+  splitterHasRouter: boolean;     // FeeSplitterV3 with a live EquityRouter → claimBackerAs works
 }
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as `0x${string}`;
@@ -159,7 +163,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       try {
         const c3 = { address: addr, abi: campaignV3Abi } as const;
         const [quoteToken, reservedSeats, reservedSeatsUsed, publicSeatsUsed, gateToken,
-          gateMinBalance, launchFeeEscrowed, launchFeeRefunded] =
+          gateMinBalance, launchFeeEscrowed, launchFeeRefunded, payoutAsset] =
           await rhcPublicClient.multicall({
             contracts: [
               { ...c3, functionName: 'quoteToken' },
@@ -170,9 +174,10 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               { ...c3, functionName: 'gateMinBalance' },
               { ...c3, functionName: 'launchFeeEscrowed' },
               { ...c3, functionName: 'launchFeeRefunded' },
+              { ...c3, functionName: 'payoutAsset' },
             ],
             allowFailure: false,
-          }) as unknown as [`0x${string}`, number, bigint, bigint, `0x${string}`, bigint, bigint, boolean];
+          }) as unknown as [`0x${string}`, number, bigint, bigint, `0x${string}`, bigint, bigint, boolean, `0x${string}`];
 
         let mySeatBucket = 0, iAmAllowlisted = false;
         let myQuoteBalance = 0n, myQuoteAllowance = 0n, myGateBalance = 0n;
@@ -201,11 +206,18 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           }
         }
 
+        // Only a FeeSplitterV3 built with a router can route claims; read it
+        // rather than assume, so an older or router-less splitter keeps the
+        // plain ETH button and never offers a call that would revert.
+        const splitterRouter = await rhcPublicClient.readContract({
+          address: feeSplitter, abi: splitterAbi, functionName: 'equityRouter',
+        }).catch(() => zero) as `0x${string}`;
         const known = QUOTE_ASSETS.find((q) => q.address.toLowerCase() === quoteToken.toLowerCase());
         v7 = {
           quoteToken, reservedSeats: Number(reservedSeats), reservedSeatsUsed, publicSeatsUsed,
           mySeatBucket, iAmAllowlisted, gateToken, gateMinBalance, myGateBalance,
           myQuoteBalance, myQuoteAllowance, launchFeeEscrowed, launchFeeRefunded,
+          payoutAsset, splitterHasRouter: splitterRouter !== zero,
           quoteSymbol: known?.symbol ?? (quoteToken === zero ? 'ETH' : 'TOKEN'),
           quoteDecimals: known?.decimals ?? 18,
         };
@@ -645,6 +657,22 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                     Your fee share ({s.isV4 ? 'ETH' : 'WETH'}): <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)}</span>
                   </span>
+                  {/* v7 + live router: the picker. "Claim" is still the button
+                      and still pays ETH; "as stock" is the affordance beside it,
+                      opened first to the creator's default. Anything older keeps
+                      the plain button — it must never offer a call that reverts. */}
+                  {v7 && v7.splitterHasRouter && EQUITY_ROUTER_LIVE && isErc20Quote === false ? (
+                    <div className="w-full sm:w-auto sm:min-w-[20rem]">
+                      <ClaimAsPicker
+                        owed={feesOwed}
+                        account={me}
+                        busy={isPending}
+                        preferred={v7.payoutAsset !== ZERO_ADDR ? v7.payoutAsset : undefined}
+                        onClaimEth={() => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [ZERO_ADDR], chainId: robinhoodChain.id })}
+                        onClaimAs={(a: EquityAsset, minOut: bigint) => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBackerAs', args: [poolKeyFor(a), minOut], chainId: robinhoodChain.id })}
+                      />
+                    </div>
+                  ) : (
                   <button
                     onClick={() => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [s.isV4 ? '0x0000000000000000000000000000000000000000' : RHC_WETH], chainId: robinhoodChain.id })}
                     disabled={isPending || feesOwed === 0n}
@@ -652,6 +680,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   >
                     Claim Fees
                   </button>
+                  )}
                   <button
                     onClick={() => act(s.isV4 ? 'pokeHarvest' : 'pokeCollect')}
                     disabled={isPending}

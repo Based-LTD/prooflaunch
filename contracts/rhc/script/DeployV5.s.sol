@@ -40,7 +40,8 @@ contract DeployV5 is Script {
             legs,
             0.001 ether,
             IERC20(address(0)),
-            0
+            0,
+            vm.envAddress("EQUITY_ROUTER") // deployed first; see DeployEquityRouter.s.sol
         );
         vm.stopBroadcast();
         console2.log("LegDeployerV3     :", address(legs));
@@ -49,5 +50,6 @@ contract DeployV5 is Script {
         console2.log("creationFee       :", f.creationFee());
         console2.log("platformBps       :", f.platformBps());
         console2.log("holderRewardsBps  :", f.holderRewardsBps());
+        console2.log("equityRouter      :", f.equityRouter());
     }
 }
