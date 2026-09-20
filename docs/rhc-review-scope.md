@@ -1,4 +1,4 @@
-# PoolLaunch (Robinhood Chain) — External Review Scope
+# ProofLaunch on Robinhood Chain — External Review Scope
 
 Prepared 2026-09-15 for an independent smart-contract review. This gate
 lifts the UI's 2 ETH beta goal cap. Repo: `contracts/rhc/` (Foundry).
@@ -145,13 +145,45 @@ New surface to scrutinize:
   caller-supplied (vanity 0x…5EED) — confirm no griefing via address
   pre-computation (deploy-before-them front-running reverts on
   collision; assess).
-- **RewardsVault**: Synthetix-style accumulator, ETH-only; solvency
-  invariant unit-tested under churn; ETH sent while unstaked pool
-  waits unaccounted and is inherited by first stakers (intended);
-  pokeClaim try/catch spray.
+- **RewardsVault**: Synthetix-style accumulator, ETH-only accounting;
+  solvency invariant unit-tested under churn; ETH sent while unstaked
+  pool waits unaccounted and is inherited by first stakers (intended);
+  pokeClaim try/catch spray. `stakeToken` is immutable — the vault
+  cannot deploy until the platform token exists.
+- **EquityRouter** (`EquityRouter.sol`, added 2026-09-17): ETH in,
+  ERC20 out through a caller-supplied Uniswap v4 PoolKey. Ownerless,
+  stateless between calls, holds nothing. **Deliberately has no asset
+  allowlist** — the caller names the pool, so any pool Robinhood lists
+  works with no deploy. Scrutinize: unlock/callback auth (`_unlocking`
+  is also the reentrancy guard); exact-input delta signs; the
+  `NotNativePair` guard on `currency0 == address(0)`; dust refund to
+  `msg.sender`; a malicious/degenerate pool can only cost the caller
+  what their own `minOut` permits — confirm nothing worse.
+- **RewardsVault.claimAs** (added 2026-09-17): claim your ETH
+  entitlement routed through EquityRouter in the same tx, asset taken
+  straight to the claimer. `_takeOwed()` is the single accounting path
+  behind `claim()` and `claimAs()` — confirm they cannot drift. Router
+  is an immutable constructor arg (caller-supplied would hand a claim
+  to a stranger); `claim()` never touches it, so a broken router can
+  delay but never trap. A failed swap must revert the whole tx and
+  leave the claim intact (tested). Router refunds are clamped to the
+  amount sent so a coincident inbound payment can't be walked out.
 
-Tests: 37 unit + ForkV3 (USDG-quoted lifecycle incl. withdraw, SPCX
-stock-quoted lifecycle, native seat-round) against live pons.
+**Structural question we most want an outside opinion on:** the
+protocol only ever owes ETH; the *recipient* optionally swaps their
+own entitlement into a tokenized equity on the way out. We chose this
+over "creator picks the payout asset" and over any voted/rotating menu
+precisely so there is no governance surface and no moment where the
+protocol chooses, holds, or distributes an equity. Is that separation
+as clean on-chain as we believe, and is there any path by which the
+vault or a campaign FeeSplitter ends up custodying an equity?
+
+Tests: 75 across 14 suites (77 assertions when parametric), including
+EquityRouter 7/7 and RewardsVaultClaimAs 7/7 on a live fork against
+the real MSFT/SPCX v4 pools, and ForkV3 (USDG-quoted lifecycle incl.
+withdraw, SPCX stock-quoted lifecycle, every pons-approved stock,
+native seat-round) against live pons. Pool keys and measured routing
+cost per asset: `contracts/rhc/RWA_POOLS.md`.
 
 ## Out of scope
 
