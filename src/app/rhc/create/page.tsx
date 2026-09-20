@@ -628,6 +628,41 @@ export default function CreateCampaignPage() {
               </section>
             )}
 
+            {/* ── FEE PAYOUT — the creator's DEFAULT asset for fee claims.
+                Renders for BOTH raise styles: it's about how fees leave,
+                not how the raise is shaped. Every claimer can override. ── */}
+            {V7_LIVE && (
+              <section className="border border-[var(--border)] bg-[var(--card)]">
+                <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                    {'// FEE_PAYOUT'}
+                  </span>
+                  <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                    default only · claimers choose
+                  </span>
+                </div>
+                <div className="p-4">
+                  <label className={labelClass}>Pay fees in</label>
+                  <select
+                    value={payoutIdx}
+                    onChange={(e) => setPayoutIdx(Number(e.target.value))}
+                    className={inputClass()}
+                  >
+                    <option value={0}>ETH (default)</option>
+                    {EQUITY_ASSETS.map((a, i) => (
+                      <option key={a.symbol} value={i + 1}>
+                        {a.symbol} — {a.label}{a.feeBps >= PRICEY_FEE_BPS ? ` (pool fee ${(a.feeBps / 100).toFixed(1)}%)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-[10px] font-mono text-[var(--muted)] leading-relaxed">
+                    The default asset your backers&apos; fee share arrives as. &ldquo;Holders earn SpaceX&rdquo; is a real claim once you pick it —
+                    but every backer can still take ETH or any other stock at claim time. Nobody is locked in.
+                  </p>
+                </div>
+              </section>
+            )}
+
             {/* ── RAISE STYLE — two presets, both riding the goal engine ── */}
             <section className="border border-[var(--border)] bg-[var(--card)]">
               <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
@@ -674,27 +709,6 @@ export default function CreateCampaignPage() {
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        {V7_LIVE && (
-                          <div className="sm:col-span-2 mb-1">
-                            <label className={labelClass}>Pay fees in</label>
-                            <select
-                              value={payoutIdx}
-                              onChange={(e) => setPayoutIdx(Number(e.target.value))}
-                              className={inputClass()}
-                            >
-                              <option value={0}>ETH (default)</option>
-                              {EQUITY_ASSETS.map((a, i) => (
-                                <option key={a.symbol} value={i + 1}>
-                                  {a.symbol} — {a.label}{a.feeBps >= PRICEY_FEE_BPS ? ` (pool fee ${(a.feeBps / 100).toFixed(1)}%)` : ''}
-                                </option>
-                              ))}
-                            </select>
-                            <p className="mt-1 text-[10px] font-mono text-[var(--muted)] leading-relaxed">
-                              The default asset your backers&apos; fee share arrives as. &ldquo;Holders earn SpaceX&rdquo; is a real claim once you pick it —
-                              but every backer can still take ETH or any other stock at claim time. Nobody is locked in.
-                            </p>
-                          </div>
-                        )}
                         <label className={labelClass}>Raise goal</label>
                         <select
                           value={f.goal}
