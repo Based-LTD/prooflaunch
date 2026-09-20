@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {Test, console2} from "forge-std/Test.sol";
 import {CampaignV3, CampaignParams} from "../src/CampaignV3.sol";
 import {CampaignFactoryV5} from "../src/CampaignFactoryV5.sol";
-import {LegDeployerV2} from "../src/LegDeployerV2.sol";
+import {LegDeployerV3} from "../src/LegDeployerV3.sol";
 import {IERC20, PonsTokenMeta, PonsSocials} from "../src/interfaces/IPons.sol";
 import {IPonsV2Factory, IPonsV2LaunchAndBuy} from "../src/interfaces/IPonsV2.sol";
 import {IPoolManagerMin, IV4StateView} from "../src/interfaces/IUniV4.sol";
@@ -32,7 +32,7 @@ contract VanityTest is Test {
             IPonsV2LaunchAndBuy(address(lab)),
             address(0xE5C60),
             IPoolManagerMin(address(0xB0)), address(0xB1), IV4StateView(address(0xB2)),
-            new LegDeployerV2(),
+            new LegDeployerV3(),
             FEE, IERC20(address(0)), 0
         );
         vm.deal(creator, 10 ether);

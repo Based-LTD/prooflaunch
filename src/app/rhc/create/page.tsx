@@ -143,7 +143,9 @@ export default function CreateCampaignPage() {
   const stackValid = activeStack.every((b) => {
     const p = Number(b.pct) || 0;
     if (p < 0) return false;
-    if (b.kind === 'vault' && p > 0 && !/^0x[0-9a-fA-F]{40}$/.test(b.addr || '')) return false;
+    // Well-formed is not enough: a zero-address vault leg strands its fee
+    // share in the splitter forever (nothing can claim as address(0)).
+    if (b.kind === 'vault' && p > 0 && (!/^0x[0-9a-fA-F]{40}$/.test(b.addr || '') || /^0x0{40}$/i.test(b.addr || ''))) return false;
     return true;
   });
 

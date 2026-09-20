@@ -114,8 +114,15 @@ Production evidence: first human E2E completed 2026-09-15 — campaign
 
 - pons proxy upgradeability (above) — the ecosystem-wide assumption.
 - Fee flow cadence depends on pons' sweeper for curve-phase fees.
-- BurnLegV2 swaps with minOut 0 under a 0.2 ETH per-crank cap —
-  sandwich loss bounded by cap × pool depth; challenge the bound.
+- BurnLegV2 (live) swaps with minOut 0 under a 0.2 ETH per-*call* cap —
+  the review found the cap loopable in one tx (finding F1). BurnLegV3
+  makes it one crank per block; cross-block bracketing remains, bounded
+  per block. No oracle on v4 core, so absolute immunity is out of scope.
+- pons memeHook is fixed per factory deploy and not readable per launch
+  (finding F4): a hook rotation between a campaign's creation and its
+  graduation bricks that campaign's legs with funds inside.
+
+Findings and fixes with tests: `docs/rhc-review-findings.md`.
 - The 📸 airdrop leg is a platform-operated EOA by design (labeled).
 
 ## v7 addendum (contracts built, NOT yet deployed — review together)

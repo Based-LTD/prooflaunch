@@ -15,13 +15,13 @@ Snapshot: 2026-09-19.
 | | Status |
 |---|---|
 | Campaign factory v6 (creates every campaign today) | **Live** |
-| Trustless **burn** bot | **Live and executed on mainnet** (once — see §3) |
+| Trustless **burn** bot | **Live and executed on mainnet** (once — see §3). Live leg carries review finding F1 (per-call cap); fixed in v3 legs for v7 |
 | Trustless **pool-feeder** bot | Deployed as code, fork-proven, **never created by a mainnet campaign** |
 | v7 factory (team rounds, token gating, ERC20/stock-quoted raises) | Built, 4/4 on live fork, **not deployed** |
 | EquityRouter ("get paid in stock") | Built, 7/7 on live fork against real pools, **not deployed** |
 | RewardsVault + `claimAs` | Built, 14/14, **not deployable** until the platform token exists (immutable `stakeToken`) |
 | Platform token on RHC | **Does not exist yet** |
-| External security review | **Not done.** Scope brief: `docs/rhc-review-scope.md` |
+| Security review | **Self-review with receipts done 2026-09-19** — 10 findings, 6 fixed with tests, 2 accepted with rationale, 2 deferred: `docs/rhc-review-findings.md`. **No independent human review yet.** Brief: `docs/rhc-review-scope.md` |
 | Holder-snapshot airdrop leg | **Operated by us, not trustless** — labelled as such wherever it appears |
 
 UI caps raise goals at 2 ETH until the review completes.
@@ -143,8 +143,8 @@ the recipient does the swap. No allowlist of assets exists on-chain.
 
 ## 6. Tests
 
-75 tests / 14 suites (77 assertions when parametric), all green as of
-`74629b8`. Fork suites run against live pons and live v4 pools:
+87 tests / 15 suites, all green including every fork suite. The `Review`
+suite is one test per review finding (`docs/rhc-review-findings.md`). Fork suites run against live pons and live v4 pools:
 `ForkDeep` (burn leg, pool-feeder leg, oversized raise, real fee flow
 at 90/7/3), `ForkV3` (USDG-quoted, SPCX-quoted, every pons-approved
 stock, native seat round), `EquityRouter`, `RewardsVaultClaimAs`,

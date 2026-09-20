@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {CampaignFactoryV5} from "../src/CampaignFactoryV5.sol";
-import {LegDeployerV2} from "../src/LegDeployerV2.sol";
+import {LegDeployerV3} from "../src/LegDeployerV3.sol";
 import {IERC20} from "../src/interfaces/IPons.sol";
 import {IPonsV2Factory, IPonsV2LaunchAndBuy} from "../src/interfaces/IPonsV2.sol";
 import {IPoolManagerMin, IV4StateView} from "../src/interfaces/IUniV4.sol";
@@ -18,11 +18,15 @@ import {IPoolManagerMin, IV4StateView} from "../src/interfaces/IUniV4.sol";
 /// every upgrade here works — existing campaigns keep their terms forever.
 ///
 /// Fee waiver stays dormant (address(0), 0) for the same reason.
+///
+/// Deploys LegDeployerV3 first: the v3 legs (one crank per block, tick
+/// range derived from pool spacing) are not on mainnet yet. LegDeployerV2
+/// stays live for the v5/v6 factories that point at it.
 contract DeployV5 is Script {
-    address constant LEG_DEPLOYER_V2 = 0x42a2495D9426fd5d88A01e724E62275DCe02dfF4;
 
     function run() external {
         vm.startBroadcast();
+        LegDeployerV3 legs = new LegDeployerV3();
         CampaignFactoryV5 f = new CampaignFactoryV5(
             vm.envAddress("PLATFORM_RECIPIENT"),
             vm.envAddress("REWARDS_RECIPIENT"),
@@ -33,12 +37,13 @@ contract DeployV5 is Script {
             IPoolManagerMin(0x8366a39CC670B4001A1121B8F6A443A643e40951),
             0xE5e702641Ea86F4ae6cC3cDaeD2B886f976Be044,
             IV4StateView(0xF3334192D15450CdD385c8B70e03f9A6bD9E673b),
-            LegDeployerV2(LEG_DEPLOYER_V2),
+            legs,
             0.001 ether,
             IERC20(address(0)),
             0
         );
         vm.stopBroadcast();
+        console2.log("LegDeployerV3     :", address(legs));
         console2.log("CampaignFactoryV5 :", address(f));
         console2.log("campaignDeployerV3:", address(f.campaignDeployer()));
         console2.log("creationFee       :", f.creationFee());

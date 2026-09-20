@@ -126,6 +126,9 @@ contract CampaignV3 {
         uint16[] memory legBps_
     ) payable {
         if (p.goal == 0 || p.deadline <= block.timestamp) revert BadAmount();
+        // A native raise below pons' launch fee can fill and then never
+        // launch (pooled - fee underflows) — trapping backers until grace.
+        if (p.quoteToken == address(0) && p.goal < ponsFactory_.launchFee()) revert BadAmount();
         // reserved seats only mean something in a slotted raise, and can't
         // exceed the seat count
         if (p.reservedSeats > 0 && (p.maxBackers == 0 || p.reservedSeats > p.maxBackers)) revert BadAmount();
@@ -254,6 +257,7 @@ contract CampaignV3 {
         address c;
         if (quoteToken == address(0)) {
             uint256 pooled = address(this).balance;
+            if (pooled <= fee) revert NotLaunchable(); // pons raised its fee past the pool: grace → refunds
             (t, c, ) = ponsLaunchAndBuy.launchAndBuy{value: pooled}(
                 p, launchConfigId, address(0), pooled - fee, 0, address(this), new address[](0)
             );
@@ -271,6 +275,10 @@ contract CampaignV3 {
             curve = c;
             IERC20Quote(quoteToken).approve(address(ponsLaunchAndBuy), 0);
             excessAtLaunch = IERC20Quote(quoteToken).balanceOf(address(this));
+            // The escrow was sized at creation; pons' fee may have dropped
+            // since. Whatever native is left is the creator's, and nothing
+            // else in an ERC20 raise ever legitimately holds ETH here.
+            _returnNativeToCreator();
         }
         tokensAtLaunch = IERC20(t).balanceOf(address(this));
         emit Launch(t, c, totalRaisedAtLaunch, tokensAtLaunch, excessAtLaunch);
@@ -328,12 +336,24 @@ contract CampaignV3 {
         _payQuote(msg.sender, amount);
     }
 
-    /// A dead ERC20-quoted raise returns the creator's escrowed launch fee.
+    /// ERC20-quoted raises only: return the creator's native escrow when
+    /// the raise is dead, and sweep any native left after launch (fee
+    /// surplus, stray sends). Never callable while a raise is live — the
+    /// escrow is what launch spends. Native-quoted raises hold backers'
+    /// ETH and revert here unconditionally.
     function refundLaunchFee() external nonReentrant {
-        if (!refundable() || launchFeeRefunded || launchFeeEscrowed == 0) revert NotRefundable();
+        if (quoteToken == address(0)) revert NotRefundable();
+        if (!launched && !refundable()) revert NotRefundable();
+        if (address(this).balance == 0) revert NotRefundable();
+        _returnNativeToCreator();
+    }
+
+    function _returnNativeToCreator() internal {
+        uint256 amount = address(this).balance;
+        if (amount == 0) return;
         launchFeeRefunded = true;
-        emit LaunchFeeRefunded(creator, launchFeeEscrowed);
-        (bool ok, ) = creator.call{value: launchFeeEscrowed}("");
+        emit LaunchFeeRefunded(creator, amount);
+        (bool ok, ) = creator.call{value: amount}("");
         if (!ok) revert PayFailed();
     }
 

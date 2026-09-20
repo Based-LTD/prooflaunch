@@ -5,9 +5,9 @@ import {CampaignV3, CampaignParams} from "./CampaignV3.sol";
 import {IPonsV2Factory, IPonsV2LaunchAndBuy} from "./interfaces/IPonsV2.sol";
 import {IPoolManagerMin, IV4StateView} from "./interfaces/IUniV4.sol";
 import {IERC20} from "./interfaces/IPons.sol";
-import {LegDeployerV2} from "./LegDeployerV2.sol";
-import {BurnLegV2} from "./BurnLegV2.sol";
-import {FeedLPLegV2} from "./FeedLPLegV2.sol";
+import {LegDeployerV3} from "./LegDeployerV3.sol";
+import {BurnLegV3} from "./BurnLegV3.sol";
+import {FeedLPLegV3} from "./FeedLPLegV3.sol";
 import {ICampaignV2View, IFeeSplitterLegV2, IPonsV2FactoryLegView} from "./V4LegBase.sol";
 
 /// Carries CampaignV3's creation code out of the factory (EIP-170) and
@@ -82,7 +82,7 @@ contract CampaignFactoryV5 {
     IPoolManagerMin public immutable poolManager;
     address public immutable memeHook;
     IV4StateView public immutable stateView;
-    LegDeployerV2 public immutable legDeployer;
+    LegDeployerV3 public immutable legDeployer;
     CampaignDeployerV3 public immutable campaignDeployer;
 
     uint256 public immutable creationFee;
@@ -113,6 +113,7 @@ contract CampaignFactoryV5 {
     error TaxTooHigh();
     error BadFee();
     error BotsNeedNativeQuote();
+    error BadVault();
 
     CampaignV3[] public campaigns;
 
@@ -127,7 +128,7 @@ contract CampaignFactoryV5 {
         IPoolManagerMin poolManager_,
         address memeHook_,
         IV4StateView stateView_,
-        LegDeployerV2 legDeployer_,
+        LegDeployerV3 legDeployer_,
         uint256 creationFee_,
         IERC20 feeWaiverToken_,
         uint256 feeWaiverThreshold_
@@ -170,6 +171,11 @@ contract CampaignFactoryV5 {
         bytes32 salt
     ) external payable returns (CampaignV3 campaign) {
         if (vaultRecipients.length != vaultBps.length) revert LengthMismatch();
+        // A zero vault leg strands its share in the splitter forever: legOwed
+        // accrues to address(0) and only address(0) could claim it.
+        for (uint256 i = 0; i < vaultRecipients.length; i++) {
+            if (vaultRecipients[i] == address(0) || vaultBps[i] == 0) revert BadVault();
+        }
         if (p.creatorTaxBps > ponsFactory.maxCreatorTaxBps()) revert TaxTooHigh();
         // v4-leg bots trade the native pool; ERC20-quoted raises defer them
         if (p.quoteToken != address(0) && (burnBps > 0 || lpBps > 0)) revert BotsNeedNativeQuote();
@@ -183,9 +189,9 @@ contract CampaignFactoryV5 {
             if (!ok) revert BadFee();
         }
 
-        BurnLegV2 burnLeg = BurnLegV2(payable(address(0)));
+        BurnLegV3 burnLeg = BurnLegV3(payable(address(0)));
         if (burnBps > 0) burnLeg = legDeployer.deployBurn(poolManager, memeHook);
-        FeedLPLegV2 lpLeg = FeedLPLegV2(payable(address(0)));
+        FeedLPLegV3 lpLeg = FeedLPLegV3(payable(address(0)));
         if (lpBps > 0) lpLeg = legDeployer.deployLp(poolManager, memeHook, stateView);
 
         (uint16 backerBps, address[] memory legs, uint16[] memory legBpsArr) =

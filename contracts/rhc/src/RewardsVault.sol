@@ -31,10 +31,11 @@ interface IEquityRouter {
 ///   - no owner, no pause, no upgrade; stake token fixed at construction
 ///   - pull-based everywhere; pokeClaim() is a permissionless crank that
 ///     pulls this vault's leg from any campaign splitter
-///   - ETH-only rewards accounting. Token-side leg fees (campaign tokens)
-///     can be pulled in and sit here inert — never lost (this vault holds
-///     them; a future vault generation can be pointed at by new factories,
-///     and stakers migrate by unstaking) but v1 pays ETH only.
+///   - ETH-only rewards accounting, and ETH-only intake: pokeClaim refuses
+///     any other asset, because nothing can move a token OUT of this
+///     ownerless contract. ERC20 legs (campaign tokens, ERC20-quoted
+///     raises) stay owed in their splitters until a vault generation that
+///     accounts them is pointed at by a factory redeploy.
 contract RewardsVault {
     uint256 private constant PRECISION = 1e27;
 
@@ -66,6 +67,7 @@ contract RewardsVault {
     error EthSend();
     error Reentrancy();
     error NoRouter();
+    error NativeOnly();
 
     uint256 private _lock = 1;
     modifier nonReentrant() {
@@ -195,6 +197,11 @@ contract RewardsVault {
     /// Permissionless; "nothing to claim" reverts are tolerated so bots
     /// can spray it across every splitter.
     function pokeClaim(ISplitterLegPull splitter, address asset) external {
+        // v1 accounts native only. Pulling an ERC20 in here would trap it:
+        // no function can move a token out of this ownerless contract. So
+        // refuse, and leave ERC20 legs owed in the splitter for a vault
+        // generation that can account them (a factory redeploy repoints).
+        if (asset != address(0)) revert NativeOnly();
         try splitter.claimLeg(asset) {} catch {}
         distribute();
     }
