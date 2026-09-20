@@ -14,11 +14,11 @@ Snapshot: 2026-09-19.
 
 | | Status |
 |---|---|
-| Campaign factory v6 (creates every campaign today) | **Live** |
+| Campaign factory v6 | Superseded by v7 on 2026-09-20; its campaigns run forever |
 | Trustless **burn** bot | **Live and executed on mainnet** (once — see §3). Live leg carries review finding F1 (per-call cap); fixed in v3 legs for v7 |
 | Trustless **pool-feeder** bot | Deployed as code, fork-proven, **never created by a mainnet campaign** |
-| v7 factory (team rounds, token gating, ERC20/stock-quoted raises) | **Deployed 2026-09-20** `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B` — flagged off in the UI until a small-wallet test; unaudited |
-| EquityRouter ("get paid in stock") | **Deployed 2026-09-20** `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943` — flagged off in the UI; unaudited |
+| v7 factory (team rounds, token gating, ERC20/stock-quoted raises) | **Live since 2026-09-20** `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B` — creates every new campaign; unaudited |
+| EquityRouter ("get paid in stock") | **Live since 2026-09-20** `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943` — unaudited |
 | Per-campaign equity payouts (`claimBackerAs` / `claimLegAs`, creator's default `payoutAsset`) | **Live in the deployed v7 factory** (every campaign it creates carries the router immutably); no v7 campaign exists yet |
 | RewardsVault + `claimAs` | Built, 14/14, **not deployable** until the platform token exists (immutable `stakeToken`) |
 | Platform token on RHC | **Does not exist yet** |
@@ -48,13 +48,13 @@ Known exception to (1)/(2): the 📸 airdrop leg is platform-run.
 
 | Contract | Address | Fact |
 |---|---|---|
-| **CampaignFactory v6** (active) | `0xB86b783ccaCC20746ae9dd33CffE4a205B35E334` | `creationFee()` = 0.001 ETH, `platformBps()` = 700, `holderRewardsBps()` = 300, `campaignCount()` = 1. No owner function exists in the ABI. |
+| CampaignFactory v6 (superseded 2026-09-20) | `0xB86b783ccaCC20746ae9dd33CffE4a205B35E334` | `creationFee()` = 0.001 ETH, `platformBps()` = 700, `holderRewardsBps()` = 300, `campaignCount()` = 1. No owner function exists in the ABI. |
 | LegDeployerV2 | `0x42a2495D9426fd5d88A01e724E62275DCe02dfF4` | Carries bot-leg creation code (RHC enforces EIP-170 24,576 B). Nonce 2 → exactly **one** leg contract ever created. |
 | Platform fee leg (7%) | `0xD994AE0945c787A487c6dbd5188512E358986E29` | EOA. Founder. |
 | Holder-rewards leg (3%) | `0x6ca08565CAf4f5CaAfB4BfeeCEcE6E0Ea3c65dcB` | EOA. Future platform-token buyback feed; will be repointed to RewardsVault by factory redeploy. |
 | Airdrop operator (📸) | `0xFd88ee2413514374654eD267A80ebE3319cAB3B9` | EOA, platform-run. The one non-trustless bot. |
 
-Deployed 2026-09-20, **not yet open** (UI flags off pending the founder's small-wallet test; unaudited) — every constructor arg read back from chain and matched:
+Live since 2026-09-20 (unaudited) — every constructor arg read back from chain and matched:
 
 | Contract | Address | Fact |
 |---|---|---|

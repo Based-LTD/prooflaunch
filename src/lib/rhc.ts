@@ -39,14 +39,13 @@ export const POOLLAUNCH_FACTORY_V2 = '0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5
 export const POOLLAUNCH_FACTORY_V1 = '0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d' as const; // legacy, read-only
 export const PONS_FACTORY = '0xF4fC0CD27fC8EcF17E55eE4c3f7201897dF3eb75' as const;
 
-// ── v7 (CampaignFactoryV5) — DEPLOYED 2026-09-20, not yet open ────────
+// ── v7 (CampaignFactoryV5) — LIVE since 2026-09-20 ────────────────────
 // Team rounds, token gating, ERC20/stock-quoted raises, creator-set
 // payout asset, 0x…5EED signature addresses. Constructor args verified
 // on-chain (tools/_verify-v7-deploy.mjs). V7_LIVE is a build-time env
-// switch, default OFF: the UI keeps using v6 until the founder's
-// small-wallet test passes on a preview deploy with the env set. Going
-// live is then an env toggle on the prod project + redeploy.
-export const POOLLAUNCH_FACTORY_V7 = '0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B' as const; // deployed 2026-09-20, flagged off until the small-wallet test
+// switch (NEXT_PUBLIC_V7_LIVE=1), ON in production since 2026-09-20 —
+// every prod deploy must carry it (project env or --build-env).
+export const POOLLAUNCH_FACTORY_V7 = '0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B' as const; // ACTIVE since 2026-09-20
 export const LEG_DEPLOYER_V3 = '0x518B6b80736af35D25F98Cc403A7f2dD8a0763AB' as const;
 export const CAMPAIGN_DEPLOYER_V3 = '0xdDCf167F6DA48e8f6C1fC716fDFef4CCEEBd4fe3' as const;
 // Build-time env switch, default OFF (see rhcEquity.ts for the rationale).

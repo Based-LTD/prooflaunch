@@ -40,9 +40,9 @@ Cloudflare and fail spuriously.
 | CampaignFactoryV3 (v5) | `0xa5aC43cd8ff09e294240E97c2a63466B2c2a80E8` | 2026-09-14 | Superseded by v6 (its campaigns run forever). pons V2 + trustless bot legs on Uniswap v4: BurnLegV2 (dual-phase: curve buy pre-grad, direct PoolManager swap after), FeedLPLegV2 (full-range locked-by-construction v4 position, fee-compounding; accumulates during curve phase). Graduation cranks proven PERMISSIONLESS. 21,447 bytes. Full suite 26/26. Deploy gotcha: forge's default EIP-1559 max-fee buffer (2× base) can exceed a thin deployer balance — pin with --legacy --with-gas-price just above base fee. |
 | CampaignFactoryV4 (v6) | `0xB86b783ccaCC20746ae9dd33CffE4a205B35E334` | 2026-09-15 | ACTIVE. v5 + creation buy-in: 0.001 ETH exact-fee with createCampaign, forwarded instantly to platform recipient (factory never holds a balance). Waiver hooks (feeWaiverToken/threshold) deployed DORMANT (zero) — redeploy with the platform token address once it exists for on-chain holder waiver. Reuses LegDeployerV2 0x42a2495D…. 6/6 fee-gate tests + fork create→launch. |
 
-## 2026-09-20 — v7 generation + EquityRouter (deployed, NOT yet open)
+## 2026-09-20 — v7 generation + EquityRouter (LIVE)
 
-Flags `V7_LIVE` / `EQUITY_ROUTER_LIVE` remain false until the founder's small-wallet test; nobody can create a v7 campaign from the UI yet. Constructor args verified by live read-back (`tools/_verify-v7-deploy.mjs`).
+Prod built with `NEXT_PUBLIC_V7_LIVE=1` / `NEXT_PUBLIC_EQUITY_ROUTER_LIVE=1` (build-time flags — every prod deploy must carry them). v7 creates every new campaign from this date; v6 is superseded. Constructor args verified by live read-back (`tools/_verify-v7-deploy.mjs`).
 
 | Contract | Address | Tx / block | Notes |
 |---|---|---|---|

@@ -13,13 +13,13 @@ const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
 const LEG_DEPLOYER_V2 = '0x42a2495D9426fd5d88A01e724E62275DCe02dfF4';
 
 const rows: [string, string, string][] = [
-  ['Factory v7 (deployed 2026-09-20 \u2014 not yet open)', POOLLAUNCH_FACTORY_V7, 'Team rounds, token gating, ERC20/stock-quoted raises, creator-set payout asset, one-crank-per-block bot legs. Flagged off in the UI until a small-wallet test; unaudited. Every campaign it creates carries the EquityRouter immutably.'],
+  ['Factory v7 (ACTIVE since 2026-09-20)', POOLLAUNCH_FACTORY_V7, 'Creates every new campaign. Team rounds, token gating, ERC20/stock-quoted raises, creator-set payout asset, one-crank-per-block bot legs; every campaign it creates carries the EquityRouter immutably. Self-reviewed with published findings; no independent audit yet.'],
   ['EquityRouter (deployed 2026-09-20)', EQUITY_ROUTER, 'ETH in, any ETH-paired Uniswap v4 asset out \u2014 how a claim arrives as tokenized stock. Ownerless, holds nothing, no asset allowlist by design.'],
   ['Leg Deployer V3', LEG_DEPLOYER_V3, 'Carries the v3 bot legs (one crank per block; tick range from pool spacing). Ownerless, stateless.'],
-  ['PoolLaunch Factory v6 (ACTIVE)', POOLLAUNCH_FACTORY_V6, 'Creates every campaign today. v5 plus a 0.001 ETH creation buy-in forwarded instantly to the platform leg (the factory never holds a balance). Stateless policy; no owner, no admin, no upgrade path.'],
-  ['PoolLaunch Factory v5', POOLLAUNCH_FACTORY_V5, 'pons V2 plus the trustless Uniswap-v4 bot legs (Burn, Pool Feeder). Dual-phase: curve buys before graduation, direct PoolManager swaps after. Read-only in the UI; its campaigns run forever.'],
-  ['PoolLaunch Factory v4', POOLLAUNCH_FACTORY_V4, 'Targets pons V2: adjustable creator tax (0\u201310%, earned by backers), native-ETH fee flow. No bot legs. Read-only; its campaigns run forever.'],
-  ['PoolLaunch Factory v3', POOLLAUNCH_FACTORY, 'pons V1 generation \u2014 the original trustless Burn + Pool Feeder bot legs. Read-only in the UI; its campaigns run forever.'],
+  ['Factory v6', POOLLAUNCH_FACTORY_V6, 'Created every campaign until 2026-09-20; superseded by v7, its campaigns run forever. v5 plus a 0.001 ETH creation buy-in forwarded instantly to the platform leg (the factory never holds a balance). Stateless policy; no owner, no admin, no upgrade path.'],
+  ['Factory v5', POOLLAUNCH_FACTORY_V5, 'pons V2 plus the trustless Uniswap-v4 bot legs (Burn, Pool Feeder). Dual-phase: curve buys before graduation, direct PoolManager swaps after. Read-only in the UI; its campaigns run forever.'],
+  ['Factory v4', POOLLAUNCH_FACTORY_V4, 'Targets pons V2: adjustable creator tax (0\u201310%, earned by backers), native-ETH fee flow. No bot legs. Read-only; its campaigns run forever.'],
+  ['Factory v3', POOLLAUNCH_FACTORY, 'pons V1 generation \u2014 the original trustless Burn + Pool Feeder bot legs. Read-only in the UI; its campaigns run forever.'],
   ['Leg Deployer V2', LEG_DEPLOYER_V2, 'Carries the v4 bot-leg creation code for factories v5+ (Robinhood Chain enforces the 24KB contract size limit). Ownerless, stateless.'],
   ['Leg Deployer', LEG_DEPLOYER, 'Carries the v3 Burn + Pool Feeder creation code. Ownerless, stateless.'],
   ['pons Factory (target)', PONS_FACTORY, 'The launchpad our campaigns launch through. pons rotates factories — campaigns pin theirs at creation.'],

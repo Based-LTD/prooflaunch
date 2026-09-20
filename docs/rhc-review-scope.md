@@ -125,7 +125,7 @@ Production evidence: first human E2E completed 2026-09-15 — campaign
 Findings and fixes with tests: `docs/rhc-review-findings.md`.
 - The 📸 airdrop leg is a platform-operated EOA by design (labeled).
 
-## v7 addendum (deployed 2026-09-20, flagged off until a small-wallet test — review together)
+## v7 addendum (LIVE since 2026-09-20 — review together)
 
 Addresses: factory `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B`, satellite `0xdDCf167F6DA48e8f6C1fC716fDFef4CCEEBd4fe3`, LegDeployerV3 `0x518B6b80736af35D25F98Cc403A7f2dD8a0763AB`, EquityRouter `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943`. Verified read-back: `tools/_verify-v7-deploy.mjs`.
 
