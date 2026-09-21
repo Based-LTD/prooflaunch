@@ -823,7 +823,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                                   ? <>~{s.projectedShares && feesOwed === 0n ? fmtShares(s.projectedShares, payout.decimals) : '…'} {payout.symbol}</>
                                   : <>{fmtEth(earned, 6)} ETH</>}
                               </span>
-                              {payout && <span className="text-xs text-[var(--muted)]"> ≈ {fmtEth(earned, 6)} ETH · paid in {payout.symbol}, the creator&apos;s pick — or take ETH or another stock</span>}
+                              {payout && <span className="text-xs text-[var(--muted)]"> ≈ {fmtEth(earned, 6)} ETH · paid in {payout.symbol}, the creator&apos;s pick</span>}
                             </div>
                             {gasNote}
                             {feesOwed > 0n && !waiting ? (
@@ -834,6 +834,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                                     account={me}
                                     busy={isPending || lowGas}
                                     preferred={payout?.address}
+                                    allowOtherAssets={false}
                                     onClaimEth={() => { void startAction('claimFees'); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [ZERO_ADDR], chainId: robinhoodChain.id }); }}
                                     onClaimAs={(a: EquityAsset, minOut: bigint) => { void startAction('claimFeesAs', { asset: a }); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBackerAs', args: [poolKeyFor(a), minOut], chainId: robinhoodChain.id }); }}
                                   />
@@ -852,8 +853,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                                     <button onClick={() => collect({ claimAs: payout })} disabled={isPending || lowGas} className="btn-primary !px-3 !py-1.5 !text-[10px]">
                                       Claim as {payout.symbol} · 2 signatures
                                     </button>
-                                    <button onClick={() => collect({ claimEth: true })} disabled={isPending || lowGas} className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors">
-                                      as ETH instead
+                                    <button onClick={() => collect({ claimEth: true })} disabled={isPending || lowGas} className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] underline underline-offset-4 hover:text-[var(--foreground)] disabled:opacity-40">
+                                      take ETH instead
                                     </button>
                                   </>
                                 ) : (

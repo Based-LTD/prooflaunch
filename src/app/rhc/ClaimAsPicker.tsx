@@ -32,13 +32,18 @@ interface Props {
   /// The creator's default payout asset, if any: shown first and labelled.
   /// The claimer still chooses — this only reorders the list.
   preferred?: `0x${string}`;
+  /// Campaign pages pass false: the creator chose the payout, so the only
+  /// alternative offered is ETH (the safety hatch if the pool/router can't
+  /// fill). The full pick-any-stock menu is for the $PROOF vault, where
+  /// there is no creator to defer to.
+  allowOtherAssets?: boolean;
   onClaimEth: () => void;
   onClaimAs: (asset: EquityAsset, minOut: bigint) => void;
 }
 
 type Quotes = Record<string, bigint | null | 'loading'>;
 
-export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, preferred }: Props) {
+export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, preferred, allowOtherAssets = true }: Props) {
   const assets = preferred
     ? [...EQUITY_ASSETS].sort((a, b) =>
         (a.address.toLowerCase() === preferred.toLowerCase() ? -1 : 0) - (b.address.toLowerCase() === preferred.toLowerCase() ? -1 : 0))
@@ -97,14 +102,12 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
                   : `${preferredAsset.symbol} unavailable — claim ETH`}
             </button>
             <button
-              className="px-3 py-2 text-[11px] font-mono uppercase tracking-widest
-                         border border-[var(--border)] text-[var(--muted)]
-                         hover:text-[var(--fg)] hover:border-[var(--fg)] transition-colors"
+              className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] underline underline-offset-4 hover:text-[var(--foreground)] disabled:opacity-40"
               disabled={busy}
               onClick={onClaimEth}
-              title="Take your fee share as plain ETH instead"
+              title="Safety hatch: take your fee share as plain ETH instead"
             >
-              as ETH · {fmtEth(owed)}
+              take {fmtEth(owed)} ETH instead
             </button>
           </>
         ) : (
@@ -117,7 +120,7 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
           </button>
         )}
 
-        {EQUITY_ROUTER_LIVE && !nothing && (
+        {EQUITY_ROUTER_LIVE && !nothing && (allowOtherAssets || !preferredAsset) && (
           <button
             className="px-3 py-2 text-[11px] font-mono uppercase tracking-widest
                        border border-[var(--border)] text-[var(--muted)]
