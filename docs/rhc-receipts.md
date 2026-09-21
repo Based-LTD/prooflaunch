@@ -89,6 +89,25 @@ Two campaigns have ever been created. Both launched. Both are ours (tests).
 | Curve | `0xd90eb3450e1232AE6bbc4d7B658149c18a920966` |
 | FeeSplitter | `0x4D267d821731BB54A76C2071C4E39858464Ba922` — legs: holder-rewards 300 bps · **burn leg 1000 bps** · platform 700 bps → backers 8000 bps. Immutable at creation. |
 
+### `RWA TEST` — the first v7 campaign ever created (2026-09-20)
+
+Created by the founder during the first prod test, minutes after v7 went live. Every row below is a mainnet transaction.
+
+| Step | Receipt |
+|---|---|
+| Created | tx `0x981bea3cab31fe525c20e2aaac8401ed64be8db462b2844d11b165c1317ea008`, block 68382591 — `campaigns(0)` on factory v7 |
+| Campaign | `0x78BFd61594413C4B4A846839a145122F94Da5eEd` — the `…5EED` signature address, ground in the browser and deployed via CREATE2; 2 seats × 0.01 ETH; creator tax 300 bps |
+| Creator's payout default | `payoutAsset()` = **SPCX** `0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa` — "holders earn SpaceX", set at creation; every claimer may still override |
+| Seat 1 | tx `0x981c5d0bdd597a4ce634e2f00247b3c5ba2b22275298a1acb99f0c6a5e1a197b` (creator, 0.01) |
+| Seat 2 | tx `0xf5d522c306d1d6f70fa3480a9cd967cd9fc5b809b3324825c5043fe73c0cf46f` (second wallet, 0.01) |
+| **Withdraw before launch** | tx `0x8437cd3786316ba6516b4d6c2925ccf6a520eff2e55a21fee14b23be474ffd41`, block 68389211 — seat freed, `totalRaised` back to 0.01. Design rule 3 (no stranding) exercised on mainnet |
+| Seat re-taken | tx `0x09c2de4e10470d9074322590d50ea2429e4be4d3e7826323ee8c33fb30076aa3` — the third deposit would have reverted `SlotsFull` had the withdraw not freed the seat |
+| Launched | tx `0x82ba0c2928cd096a7afde197b78a2388d4cbdcc8827c72b6043db81bed356843`, block 68389373 — one tx: token created on pons + pooled buy; 11,020,062.16 tokens for 0.02 ETH, excess 0 |
+| Token | `0xC107792DfEa2DB8d61f3B93C709Ea1d5e337F6Fb` (`RWA TEST`, supply 1,000,000,000) · curve `0x5b61753bC33Ea2d0F112a88644584921E0Cc6851` |
+| FeeSplitter | `0xFA3662B35FE3b698b97756d64f49D32fCD0f38Dc` — `equityRouter()` = `0x0A568a0A…` (router threaded); legs holder-rewards 300 · platform 700; backers 9000 |
+
+Fee claims as stock: pending — rows added when the founder's claim lands.
+
 ### The burn bot, executed on mainnet
 
 | | |
