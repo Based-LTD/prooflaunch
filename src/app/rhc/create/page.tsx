@@ -9,7 +9,7 @@ import { useAccount, useReadContract, useSwitchChain, useWriteContract, useWaitF
 import { parseEther, parseUnits, formatUnits, decodeEventLog, isAddress } from 'viem';
 import { AlertCircle, Upload, X } from 'lucide-react';
 import {
-  POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, V7_LIVE, QUOTE_ASSETS,
+  POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, V7_LIVE, QUOTE_ASSETS, clearBoardCache,
   AIRDROP_OPERATOR, factoryV4Abi, factoryV5Abi, robinhoodChain, rhcPublicClient,
 } from '@/lib/rhc';
 import { EQUITY_ASSETS, PRICEY_FEE_BPS } from '@/lib/rhcEquity';
@@ -175,6 +175,7 @@ export default function CreateCampaignPage() {
           const ev = decodeEventLog({ abi: factoryV4Abi, data: log.data, topics: log.topics });
           if (ev.eventName === 'CampaignCreated') {
             setCreated((ev.args as { campaign: string }).campaign);
+            clearBoardCache(); // the board must show this campaign on the very next visit
           }
         } catch { /* not ours */ }
       }

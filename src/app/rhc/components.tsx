@@ -107,7 +107,9 @@ export function ConnectButton() {
             role="alert"
             className="absolute right-0 top-full mt-1 max-w-[18rem] px-2 py-1 text-[10px] font-mono leading-snug text-[var(--error)] border border-[var(--error)]/40 bg-[var(--background)] z-50"
           >
-            {error.message.split('\n')[0].slice(0, 140)}
+            {/wallet|Provider not found/i.test(error.name + error.message) && /not found/i.test(error.message)
+              ? 'No wallet extension answered in this browser. Install or unlock one, then try again.'
+              : error.message.split('\n')[0].slice(0, 140)}
           </p>
         )}
       </div>

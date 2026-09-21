@@ -13,11 +13,11 @@ import {
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
 import { ClaimAsPicker } from '../../ClaimAsPicker';
-import { EQUITY_ROUTER_LIVE, poolKeyFor, type EquityAsset } from '@/lib/rhcEquity';
+import { EQUITY_ROUTER_LIVE, poolKeyFor, fmtShares, type EquityAsset } from '@/lib/rhcEquity';
 import { WpPanel } from '../../walletproof';
 
 interface State {
-  meta: { name: string; symbol: string; description: string };
+  meta: { name: string; symbol: string; description: string; logo: string };
   creator: `0x${string}`;
   goal: bigint; minDeposit: bigint; maxDeposit: bigint; maxBackers: bigint;
   deadline: bigint; totalRaised: bigint; backerCount: bigint;
@@ -88,7 +88,27 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const { writeContract, data: txHash, isPending, error: writeErr, reset } = useWriteContract();
   const { data: walletClient } = useWalletClient();
   const [watchState, setWatchState] = useState<'idle' | 'asking' | 'ok' | 'nope'>('idle');
-  const { isSuccess: txConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isSuccess: txConfirmed, data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
+
+  // ── action receipts (punch list #5) ─────────────────────────────────
+  // A tx that confirms used to produce nothing but a reload. Snapshot what
+  // the wallet held when the action was sent; when it confirms, say what
+  // actually changed — "Sold 1,000,000 $X for 0.0041 ETH" — with the hash.
+  type ActionKind = 'buy' | 'sell' | 'approve' | 'claimTokens' | 'claimFees' | 'claimFeesAs' | 'collect' | 'other';
+  interface PendingAction { kind: ActionKind; amount?: bigint; asset?: EquityAsset; tokBefore: bigint; ethBefore: bigint; assetBefore?: bigint; label?: string }
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [lastReceipt, setLastReceipt] = useState<{ text: string; hash: `0x${string}` } | null>(null);
+  const balanceOfAbi = [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
+  const startAction = async (kind: ActionKind, opts: { amount?: bigint; asset?: EquityAsset; label?: string } = {}) => {
+    setLastReceipt(null);
+    if (!me) { setPendingAction({ kind, ...opts, tokBefore: 0n, ethBefore: 0n }); return; }
+    const [ethBefore, assetBefore] = await Promise.all([
+      rhcPublicClient.getBalance({ address: me }).catch(() => 0n),
+      opts.asset ? rhcPublicClient.readContract({ address: opts.asset.address, abi: balanceOfAbi, functionName: 'balanceOf', args: [me] }).catch(() => 0n) as Promise<bigint> : Promise.resolve(undefined),
+    ]);
+    setPendingAction({ kind, ...opts, tokBefore: s?.myTokenBalance ?? 0n, ethBefore, assetBefore });
+  };
+  const fmtTok = (v: bigint) => (Number(v) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
   const load = useCallback(async () => {
     try {
@@ -233,10 +253,44 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   }, [addr, me]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (txConfirmed) { reset(); load(); } }, [txConfirmed, reset, load]);
+  useEffect(() => {
+    if (!txConfirmed || !receipt) return;
+    (async () => {
+      await load();
+      const a = pendingAction;
+      if (a && me && s) {
+        const sym = s.meta.symbol;
+        const gas = receipt.gasUsed * receipt.effectiveGasPrice;
+        const [tokAfter, ethAfter, assetAfter] = await Promise.all([
+          rhcPublicClient.readContract({ address: s.token, abi: balanceOfAbi, functionName: 'balanceOf', args: [me] }).catch(() => a.tokBefore) as Promise<bigint>,
+          rhcPublicClient.getBalance({ address: me }).catch(() => a.ethBefore),
+          a.asset ? rhcPublicClient.readContract({ address: a.asset.address, abi: balanceOfAbi, functionName: 'balanceOf', args: [me] }).catch(() => a.assetBefore ?? 0n) as Promise<bigint> : Promise.resolve(undefined),
+        ]);
+        const ethNet = ethAfter - a.ethBefore + gas; // what the tx paid you, before gas
+        const tokDelta = tokAfter - a.tokBefore;
+        let text = 'Confirmed';
+        if (a.kind === 'buy') text = `Bought ${fmtTok(tokDelta)} $${sym} for ${fmtEth(a.amount ?? 0n)} ETH`;
+        else if (a.kind === 'sell') text = `Sold ${fmtTok(a.amount ?? -tokDelta)} $${sym} for ${fmtEth(ethNet, 6)} ETH`;
+        else if (a.kind === 'approve') text = `Approved the curve to take $${sym} you sell — now hit Sell`;
+        else if (a.kind === 'claimTokens') text = `Claimed ${fmtTok(tokDelta)} $${sym} into your wallet`;
+        else if (a.kind === 'claimFees') text = `Claimed ${fmtEth(ethNet, 6)} ETH of fees`;
+        else if (a.kind === 'claimFeesAs' && a.asset) text = `Claimed fees as ${a.asset.symbol}: ${fmtShares((assetAfter ?? 0n) - (a.assetBefore ?? 0n), a.asset.decimals)} ${a.asset.symbol} landed in your wallet`;
+        else if (a.kind === 'collect') text = 'Collected accrued fees from pons into the splitter — your share is updated below';
+        else if (a.label) text = a.label;
+        setLastReceipt({ text: `${text} · gas ${fmtEth(gas, 7)} ETH`, hash: receipt.transactionHash });
+      }
+      setPendingAction(null);
+      reset();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txConfirmed, receipt]);
 
-  const act = (functionName: 'withdraw' | 'launch' | 'claimTokens' | 'refund' | 'cancel' | 'pokeCollect' | 'pokeHarvest') =>
+  const act = (functionName: 'withdraw' | 'launch' | 'claimTokens' | 'refund' | 'cancel' | 'pokeCollect' | 'pokeHarvest') => {
+    const kind: ActionKind = functionName === 'claimTokens' ? 'claimTokens' : functionName === 'pokeHarvest' || functionName === 'pokeCollect' ? 'collect' : 'other';
+    const labels: Record<string, string> = { withdraw: 'Withdrawn — your seat is free and your deposit is back', launch: 'Launched — token created on pons and the pooled buy executed', refund: 'Refunded — your deposit is back', cancel: 'Campaign cancelled — refunds open' };
+    void startAction(kind, { label: labels[functionName] });
     writeContract({ address: addr, abi: campaignAbi, functionName, chainId: robinhoodChain.id });
+  };
 
   const shell = (children: React.ReactNode) => (
     <div className="max-w-3xl mx-auto pb-8"><RhcHeader />{children}</div>
@@ -292,9 +346,25 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         </div>
 
         <div className="p-4">
-          {s.meta.description && (
-            <p className="text-sm font-mono text-[var(--muted)] mb-4">{s.meta.description}</p>
-          )}
+          {/* Avatar + name — the board card's anatomy; the detail page had
+              no picture at all until the first prod test (punch list #1). */}
+          <div className="flex items-start gap-3 mb-4">
+            {s.meta.logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={s.meta.logo} alt={s.meta.name} className="w-14 h-14 object-cover border border-[var(--border)] flex-shrink-0" />
+            ) : (
+              <div className="w-14 h-14 border border-[var(--accent)] bg-[var(--background)] flex items-center justify-center flex-shrink-0">
+                <span className="font-mono font-semibold text-[var(--accent)] text-sm">{s.meta.symbol.slice(0, 4)}</span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="font-mono font-semibold text-base truncate">{s.meta.name}</div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">${s.meta.symbol}</div>
+              {s.meta.description && (
+                <p className="text-sm font-mono text-[var(--muted)] mt-1">{s.meta.description}</p>
+              )}
+            </div>
+          </div>
 
           {/* Slot grid — the SOL detail treatment: filled blocks for
               backers in, outlined for open slots. Open raises (maxBackers
@@ -593,7 +663,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                           className="w-24 px-2 py-2 bg-[var(--card)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-none text-sm font-mono"
                         />
                         <button
-                          onClick={() => writeContract({ address: s.curve!, abi: curveAbi, functionName: 'buy', args: [parseEther(buyAmt || '0'), 0n, me!], value: parseEther(buyAmt || '0'), chainId: robinhoodChain.id })}
+                          onClick={() => { void startAction('buy', { amount: parseEther(buyAmt || '0') }); writeContract({ address: s.curve!, abi: curveAbi, functionName: 'buy', args: [parseEther(buyAmt || '0'), 0n, me!], value: parseEther(buyAmt || '0'), chainId: robinhoodChain.id }); }}
                           disabled={isPending || !me || !Number(buyAmt)}
                           className="btn-primary"
                         >
@@ -621,7 +691,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                         </button>
                         {s.myCurveAllowance < (s.myTokenBalance > 0n ? s.myTokenBalance : 1n) ? (
                           <button
-                            onClick={() => writeContract({ address: s.token, abi: erc20Abi, functionName: 'approve', args: [s.curve!, 2n ** 256n - 1n], chainId: robinhoodChain.id })}
+                            onClick={() => { void startAction('approve'); writeContract({ address: s.token, abi: erc20Abi, functionName: 'approve', args: [s.curve!, 2n ** 256n - 1n], chainId: robinhoodChain.id }); }}
                             disabled={isPending || !me}
                             title="One-time: allow the pons curve to take the tokens you sell"
                             className="btn-primary"
@@ -630,7 +700,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                           </button>
                         ) : (
                           <button
-                            onClick={() => writeContract({ address: s.curve!, abi: curveAbi, functionName: 'sell', args: [parseEther(sellAmt || '0'), 0n, me!], chainId: robinhoodChain.id })}
+                            onClick={() => { void startAction('sell', { amount: parseEther(sellAmt || '0') }); writeContract({ address: s.curve!, abi: curveAbi, functionName: 'sell', args: [parseEther(sellAmt || '0'), 0n, me!], chainId: robinhoodChain.id }); }}
                             disabled={isPending || !me || !Number(sellAmt)}
                             className="btn-primary"
                           >
@@ -668,13 +738,13 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                         account={me}
                         busy={isPending}
                         preferred={v7.payoutAsset !== ZERO_ADDR ? v7.payoutAsset : undefined}
-                        onClaimEth={() => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [ZERO_ADDR], chainId: robinhoodChain.id })}
-                        onClaimAs={(a: EquityAsset, minOut: bigint) => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBackerAs', args: [poolKeyFor(a), minOut], chainId: robinhoodChain.id })}
+                        onClaimEth={() => { void startAction('claimFees'); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [ZERO_ADDR], chainId: robinhoodChain.id }); }}
+                        onClaimAs={(a: EquityAsset, minOut: bigint) => { void startAction('claimFeesAs', { asset: a }); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBackerAs', args: [poolKeyFor(a), minOut], chainId: robinhoodChain.id }); }}
                       />
                     </div>
                   ) : (
                   <button
-                    onClick={() => writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [s.isV4 ? '0x0000000000000000000000000000000000000000' : RHC_WETH], chainId: robinhoodChain.id })}
+                    onClick={() => { void startAction('claimFees'); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [s.isV4 ? '0x0000000000000000000000000000000000000000' : RHC_WETH], chainId: robinhoodChain.id }); }}
                     disabled={isPending || feesOwed === 0n}
                     className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-40"
                   >
@@ -702,6 +772,15 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           {writeErr && (
             <p className="mt-4 text-xs font-mono text-[var(--error)]">
               {(writeErr as Error).message.split('\n')[0].slice(0, 160)}
+            </p>
+          )}
+          {lastReceipt && !isPending && !txHash && (
+            <p className="mt-4 text-xs font-mono text-[var(--success)] border border-[var(--success)]/40 bg-[var(--success)]/5 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>✓ {lastReceipt.text}</span>
+              <a href={`https://robinhoodchain.blockscout.com/tx/${lastReceipt.hash}`} target="_blank" rel="noopener noreferrer"
+                className="text-[10px] uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]">
+                tx ↗
+              </a>
             </p>
           )}
         </div>

@@ -5,7 +5,7 @@
 // How It Works terminal block. Same site, different chain.
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
-import { fetchAllCampaigns, parseRows, readBoardCache, writeBoardCache, CampaignRow } from '@/lib/rhc';
+import { fetchAllCampaigns, parseRows, readBoardCache, writeBoardCache, takeBoardDirty, CampaignRow } from '@/lib/rhc';
 import { CampaignCard } from './components';
 import { RhcHero } from './RhcHero';
 import { WpStatsBar } from './walletproof';
@@ -38,9 +38,12 @@ export default function RhcBoardPage() {
     // Instant paint from the session cache, then the CDN-cached API
     // (~100ms warm), with direct chain reads as the fallback of last
     // resort — the SOL board's exact loading strategy.
-    const cached = readBoardCache();
+    // After a create/launch the session cache is already cleared and the
+    // dirty flag is set: skip the stale paint and bust the CDN key once.
+    const dirty = takeBoardDirty();
+    const cached = dirty ? null : readBoardCache();
     if (cached) setRows(cached);
-    fetch('/api/rhc/campaigns')
+    fetch(dirty ? `/api/rhc/campaigns?t=${Date.now()}` : '/api/rhc/campaigns', dirty ? { cache: 'no-store' } : undefined)
       .then(async (res) => {
         if (!res.ok) throw new Error('api ' + res.status);
         return parseRows(await res.text());

@@ -387,6 +387,29 @@ export function readBoardCache(me?: `0x${string}`): CampaignRow[] | null {
   } catch { return null; }
 }
 
+/// Call after anything that changes the board (a create, a launch). Drops
+/// every session-cache variant and flags the next board load to bypass
+/// the CDN too — otherwise a brand-new campaign can be invisible for up
+/// to 30 s (punch list #2, found on the first prod test).
+const BOARD_DIRTY_KEY = 'rhc-board-dirty';
+export function clearBoardCache(): void {
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith(BOARD_CACHE_KEY)) sessionStorage.removeItem(k);
+    }
+    sessionStorage.setItem(BOARD_DIRTY_KEY, '1');
+  } catch { /* storage blocked */ }
+}
+/// True once after clearBoardCache(); consuming it clears the flag.
+export function takeBoardDirty(): boolean {
+  try {
+    const d = sessionStorage.getItem(BOARD_DIRTY_KEY) === '1';
+    if (d) sessionStorage.removeItem(BOARD_DIRTY_KEY);
+    return d;
+  } catch { return false; }
+}
+
 export function writeBoardCache(rows: CampaignRow[], me?: `0x${string}`): void {
   try {
     sessionStorage.setItem(BOARD_CACHE_KEY + (me ?? ''), serializeRows(rows));
