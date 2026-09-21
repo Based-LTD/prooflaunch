@@ -1102,8 +1102,8 @@ export default function CreateCampaignPage() {
                   <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
                     Each bot becomes a fee leg on your campaign&apos;s splitter, carved from the
                     backer share — immutable from creation, pull-based forever. Burn and Pool
-                    Feeder run as ownerless contracts on the Uniswap-v4 pool — the world&apos;s
-                    first trustless launch bots: anyone can crank them, nobody can stop them.
+                    Feeder run as ownerless contracts on the Uniswap-v4 pool: anyone can crank
+                    them, nobody can stop them, nobody can change them.
                   </p>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">

@@ -378,8 +378,8 @@ export default function DocsPage() {
               </div>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
                 On Robinhood Chain the flagship bots go further: Burn and Pool Feeder run as{' '}
-                <strong className="text-[var(--foreground)]">ownerless contracts</strong> — the
-                world&apos;s first trustless launch bots.{' '}
+                <strong className="text-[var(--foreground)]">ownerless contracts</strong> — no
+                operator, no off switch, anyone can crank them.{' '}
                 <Link href="/rhc/docs" className="text-[var(--accent)] hover:underline">
                   Robinhood Chain bot docs →
                 </Link>

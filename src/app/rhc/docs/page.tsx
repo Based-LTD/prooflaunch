@@ -166,7 +166,7 @@ export default function RhcDocsPage() {
                   <li>· <strong className="text-[var(--accent)]">Same price for all:</strong> one atomic pooled buy — no backer is front-run or favored</li>
                   <li>· <strong>Snipe-exempt:</strong> the pooled buy executes on the launch block, before snipers can</li>
                   <li>· <strong>Refunds are code:</strong> goal unmet by deadline (+3-day grace) → refunds open unconditionally</li>
-                  <li>· <strong>Nobody does this here:</strong> the RHC field fights over creator revenue — ProofLaunch is the only pooled-raise, backer-revenue protocol on the chain</li>
+                  <li>· <strong>Backer revenue, not creator revenue:</strong> the launchpads on this chain route the fee stream to the creator. Here the campaign contract is the creator, so it goes to the wallets that funded the launch</li>
                 </ul>
               </div>
             </section>
@@ -268,9 +268,9 @@ export default function RhcDocsPage() {
                 The Trustless Bot Stack
               </h3>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Carve up to 90% of the fee stream into launch bots — including what we believe are
-                the first <em>trustless</em> burn and pool-feeder bots anywhere, deployed as ownerless
-                contracts alongside your campaign. See the{' '}
+                Carve up to 90% of the fee stream into launch bots — burn and pool-feeder bots deployed
+                as ownerless contracts alongside your campaign: no operator, no off switch, anyone can
+                crank them. See the{' '}
                 <button type="button" onClick={() => setActiveTab('bots')} className="text-[var(--accent)] underline hover:text-[var(--foreground)]">
                   Bots tab
                 </button>{' '}
@@ -296,8 +296,7 @@ export default function RhcDocsPage() {
                 a Burn or Pool Feeder bot, the factory deploys a dedicated contract wired to your
                 campaign&apos;s fee splitter. It has no owner, no operator, and no off switch:{' '}
                 <strong>anyone</strong> can crank it, <strong>nobody</strong> can stop it, and its
-                terms can never change. As far as we know, these are the first trustless launch
-                bots anywhere — and they are <strong>dual-phase</strong>: during the bonding-curve
+                terms can never change. They are <strong>dual-phase</strong>: during the bonding-curve
                 phase they trade on the curve itself; after graduation they talk to the Uniswap-v4
                 PoolManager directly (no router, proven third-party-allowed on live-pool forks).
               </p>
