@@ -1,7 +1,11 @@
 # ProofLaunch on Robinhood Chain — External Review Scope
 
-Prepared 2026-09-15 for an independent smart-contract review. This gate
-lifts the UI's 2 ETH beta goal cap. Repo: `contracts/rhc/` (Foundry).
+Prepared 2026-09-15, revised 2026-09-21, for an independent smart-contract
+review. This gate lifts the UI's 2 ETH beta goal cap. Every live contract is
+source-verified (exact match on Sourcify); `contracts/rhc/DEPLOYMENTS.md`
+is the address ledger, `docs/rhc-receipts.md` has a tx hash for every claim
+made about mainnet behaviour, `docs/rhc-review-findings.md` is our own
+adversarial pass (one test per finding in `test/Review.t.sol`). Repo: `contracts/rhc/` (Foundry).
 
 ## What this system is
 
@@ -21,7 +25,19 @@ Design constitution (every finding should be judged against these):
    deadline + 3-day grace if launch never happened.
 4. All distribution is pull-based; no recipient can grief another.
 
-## In-scope contracts (live generation, v6)
+## In-scope contracts (live generation, v7 — ACTIVE since 2026-09-20)
+
+| Contract | Address | Role |
+|---|---|---|
+| CampaignFactoryV5 (v7) | `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B` | ACTIVE factory: 90/7/3 policy, 0.001 ETH creation fee, team rounds, token gating, ERC20/stock-quoted raises, `equityRouter` immutable |
+| CampaignDeployerV3 | `0xdDCf167F6DA48e8f6C1fC716fDFef4CCEEBd4fe3` | CREATE2 satellite carrying CampaignV3 creation code; factory-only `deploy` |
+| EquityRouter | `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943` | ETH → ETH-paired v4 asset for the claimer; no allowlist, no owner, holds nothing |
+| LegDeployerV3 | `0x518B6b80736af35D25F98Cc403A7f2dD8a0763AB` | Satellite for BurnLegV3 / FeedLPLegV3 (one crank per block) |
+| CampaignV3 | per-campaign (e.g. `0x78BFd61594413C4B4A846839a145122F94Da5eEd`) | Pool, seats, gating, launch via pons LaunchAndBuy, claims, refunds, excess, launch-fee escrow for ERC20 quotes |
+| FeeSplitterV3 | per-campaign (e.g. `0xFA3662B35FE3b698b97756d64f49D32fCD0f38Dc`) | Immutable split; per-asset accounting; `harvest()` from pons FeeEscrow; `claimBackerAs`/`claimLegAs` through the router |
+| BurnLegV3 / FeedLPLegV3 | per-campaign (optional) | Dual-phase bots; `lastCrankBlock` guard; tick range derived from pool spacing |
+
+### Prior live generation (v6) — campaigns run forever, factory read-only in the UI
 
 | Contract | Address | Role |
 |---|---|---|
@@ -34,8 +50,8 @@ Design constitution (every finding should be judged against these):
 | V4LegBase | inherited | unlock/callback plumbing, settlement, pool key derivation |
 
 Prior generations (v1–v5) remain live with immutable campaigns but are
-read-only in the UI; review effort should focus on the v6 lineage
-above (v5 shares all code except the factory fee gate).
+read-only in the UI. Review effort should focus on the v7 lineage; v6
+shares the leg code and the fee-gate logic.
 
 ## External dependencies (pons V2 — NOT in scope, but the trust surface)
 
@@ -129,8 +145,9 @@ Findings and fixes with tests: `docs/rhc-review-findings.md`.
 
 Addresses: factory `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B`, satellite `0xdDCf167F6DA48e8f6C1fC716fDFef4CCEEBd4fe3`, LegDeployerV3 `0x518B6b80736af35D25F98Cc403A7f2dD8a0763AB`, EquityRouter `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943`. Verified read-back: `tools/_verify-v7-deploy.mjs`.
 
-The v7 generation is code-complete and fork-proven; it deploys only
-after this review. Files: CampaignV3.sol (CampaignParams struct),
+The v7 generation deployed on 2026-09-20 (addresses above) and has
+completed a human end-to-end on mainnet including the first routed stock
+claim (receipts §4–5). Files: CampaignV3.sol (CampaignParams struct),
 FeeSplitterV3.sol, CampaignFactoryV5.sol (+ CampaignDeployerV3
 satellite), RewardsVault.sol.
 
@@ -188,19 +205,67 @@ New surface to scrutinize:
 
 **Structural question we most want an outside opinion on:** the
 protocol only ever owes ETH; the *recipient* optionally swaps their
-own entitlement into a tokenized equity on the way out. We chose this
-over "creator picks the payout asset" and over any voted/rotating menu
-precisely so there is no governance surface and no moment where the
+own entitlement into a tokenized equity on the way out. The creator's
+`payoutAsset` is a UI default only — nothing on-chain enforces it, and
+the claimer can always take ETH. We chose this over any enforced or
+voted/rotating menu precisely so there is no governance surface and no moment where the
 protocol chooses, holds, or distributes an equity. Is that separation
 as clean on-chain as we believe, and is there any path by which the
 vault or a campaign FeeSplitter ends up custodying an equity?
 
-Tests: 75 across 14 suites (77 assertions when parametric), including
+Tests: 115 across 18 suites (`forge test --threads 1`), including
 EquityRouter 7/7 and RewardsVaultClaimAs 7/7 on a live fork against
 the real MSFT/SPCX v4 pools, and ForkV3 (USDG-quoted lifecycle incl.
 withdraw, SPCX stock-quoted lifecycle, every pons-approved stock,
 native seat-round) against live pons. Pool keys and measured routing
 cost per asset: `contracts/rhc/RWA_POOLS.md`.
+
+## v8 addendum (BUILT 2026-09-21, tested, NOT deployed — please review before it is)
+
+Files: `FeeSplitterV4.sol`, `SplitterDeployerV4.sol`, `CampaignV4.sol`,
+`CampaignFactoryV6.sol`, `script/DeployV6.s.sol`; tests
+`HoldWeighted.t.sol` (17) and `PreLaunchLock.t.sol` (6). Deploy order is
+forced by immutables: platform token (on v7) → RewardsVault (its
+`stakeToken`) → v8 (its `holderRewardsRecipient` = the vault).
+
+- **The fee stream follows the tokens.** `heldBps(backer)` =
+  min(balance, allocation) / allocation, where balance = wallet +
+  vault stake (raw staticcall to `forfeitTo` for `stakeToken()` /
+  `stakedOf()`, only counted when `stakeToken == campaign.token()`);
+  unclaimed tokens (still in the campaign, incl. a lock) count as held.
+  Fresh entitlement is judged once (`backerSettled`) into kept
+  (paid or `backerBanked`) and lost (`legOwed[forfeitTo]`). `settle()`
+  is a permissionless crank. `claimBacker` does NOT revert when kept is
+  0 but fresh > 0 (it records the forfeiture) — challenge that choice.
+  **Known edge, stated in the header:** without a `settle` crank a
+  seller can buy back just before claiming and recover fees accrued
+  while out; the pons round trip (~8% at a 3% tax) is the only
+  deterrent. Is there a cheap on-chain fix that keeps "no operator"?
+- **Pre-launch lock** (`CampaignV4`): `depositLocked(until)` /
+  `extendLock(until)`; `claimTokens()` reverts `StillLocked`; only ever
+  longer; `MAX_LOCK` 4y; cleared by pre-launch `withdraw`;
+  `claimExcess()` so a lock never traps the oversized-raise refund.
+  Confirm the lock cannot be used to grief (e.g. a locked seat blocking
+  anything for others) and that `excessClaimed` / `tokensClaimed`
+  interplay has no double-pay.
+- **Satellite**: FeeSplitterV4 is created by `SplitterDeployerV4`
+  with `msg.sender` (the campaign under construction) as `campaign`;
+  confirm a splitter can never be pointed at a campaign that did not
+  deploy it. `forfeitTo = legs[0]` relies on the factory's leg order.
+- **Static-call surface**: `_stakedInVault` calls `forfeitTo` with
+  arbitrary code behind it (today an EOA, later the vault). Views only,
+  but confirm gas/return-data griefing is bounded.
+
+## Repository hygiene disclosure (2026-09-21)
+
+A throwaway LaunchLab test-pool keypair (Solana, dust balance, no
+tokens) had been inline in a tools script since 2026-07-17 in this
+public repo. Found in our own sweep; the file was removed from all
+history (`git filter-repo`, force-push), the tool now reads the key
+from the environment, and the wallet is treated as burned. GitHub may
+still serve the orphaned commit by hash until their support purge. No
+platform or user key was involved; noted here because a reviewer may
+find the fork or the SHA.
 
 ## Out of scope
 
