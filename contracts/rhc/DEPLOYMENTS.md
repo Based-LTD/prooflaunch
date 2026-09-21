@@ -53,3 +53,26 @@ Prod built with `NEXT_PUBLIC_V7_LIVE=1` / `NEXT_PUBLIC_EQUITY_ROUTER_LIVE=1` (bu
 
 Deploy gotchas learned: Foundry loads `.env` from the SHELL cwd, not `--root` — run from `contracts/rhc/`. Forge resolves the script path against cwd too. Deployer `0xC571bf97…` funded 0.002768 → spent ≈0.00093 across both.
 
+
+## v8 — hold-weighted fees (built 2026-09-21, NOT DEPLOYED)
+
+Founder decision 2026-09-21: "backers who sell stop receiving fee share",
+like the SOL side, with the forfeited share going to platform-token stakers.
+
+| Contract | Status | Notes |
+|---|---|---|
+| `FeeSplitterV4` | built, 14/14 tests | Standalone (V3 claim paths are non-virtual). `heldBps` = min(balance, allocation)/allocation; unclaimed = held. Fresh entitlement judged once (`backerSettled`); kept is paid or banked, lost → `legOwed[forfeitTo]`. `settle(backer, asset)` is a permissionless crank that locks a seller's forfeiture. `backerOwed(backer, asset)` is the UI number — NOT entitlement − claimed. |
+| `SplitterDeployerV4` | built | Carries the splitter's creation code out of the campaign (with it inlined, CampaignDeployerV4 hit 26.7KB > EIP-170). `msg.sender` becomes the splitter's campaign. |
+| `CampaignV4` | built | CampaignV3 + FeeSplitterV4 via the satellite; constructor gains `splitterDeployer_` after `equityRouter_`. `forfeitTo = legs[0]` = holder-rewards (the factory's leg order is load-bearing). |
+| `CampaignFactoryV6` (v8) | built | v7 + `splitterDeployer` immutable; `previewInitCodeHash` encodes it after the router (the browser grinder reads the hash on-chain, so no frontend encoding change). |
+| `script/DeployV6.s.sol` | ready | env: `PLATFORM_RECIPIENT`, `REWARDS_RECIPIENT` (**the RewardsVault** — deploy the platform token via v7, then the vault, then this), `EQUITY_ROUTER`, `LEG_DEPLOYER` (existing `0x518B6b80…`). |
+
+Frontend work owed at deploy time: probe `forfeitTo()` on the splitter; if
+present use `backerOwed` for the fee card (entitlement − claimed overstates
+a seller), show hold % beside the claim, and word the zero-paid claim as
+"your share went to stakers". Fork test against the live router
+(`ForkClaimBackerAs` is V3-only) before deploy.
+
+Known edge, stated in the contract header: without a `settle` crank a
+seller can buy back just before claiming. The crank is permissionless and
+the vault (or anyone) can run it; the pons round trip costs ~8% at a 3% tax.
