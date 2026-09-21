@@ -13,7 +13,7 @@ import {
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
 import { ClaimAsPicker } from '../../ClaimAsPicker';
-import { EQUITY_ROUTER_LIVE, EQUITY_ASSETS, poolKeyFor, fmtShares, type EquityAsset } from '@/lib/rhcEquity';
+import { EQUITY_ROUTER_LIVE, EQUITY_ASSETS, poolKeyFor, fmtShares, quoteEquityOut, minOutFrom, type EquityAsset } from '@/lib/rhcEquity';
 import { WpPanel } from '../../walletproof';
 
 interface State {
@@ -32,6 +32,9 @@ interface State {
   curveGraduated: boolean;
   myCurveAllowance: bigint;
   ponsOwed: bigint; // creator fees sitting in pons' escrow, owed to this splitter, not yet collected
+  backerBps: number; // splitter's backer share (9000 = 90%), for projecting what a collect yields you
+  projectedShare: bigint; // YOUR cut of ponsOwed once collected — shown so 'nothing to claim' can never be the read
+  projectedShares: bigint | null; // that cut quoted in the creator's payout asset, if any
   v7: V7 | null; // null for v1–v6 campaigns; this page serves every generation
 }
 
@@ -99,11 +102,11 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   // the wallet held when the action was sent; when it confirms, say what
   // actually changed — "Sold 1,000,000 $X for 0.0041 ETH" — with the hash.
   type ActionKind = 'buy' | 'sell' | 'approve' | 'claimTokens' | 'claimFees' | 'claimFeesAs' | 'collect' | 'other';
-  interface PendingAction { kind: ActionKind; amount?: bigint; asset?: EquityAsset; tokBefore: bigint; ethBefore: bigint; assetBefore?: bigint; label?: string }
+  interface PendingAction { kind: ActionKind; amount?: bigint; asset?: EquityAsset; tokBefore: bigint; ethBefore: bigint; assetBefore?: bigint; label?: string; then?: { claimAs: EquityAsset } }
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [lastReceipt, setLastReceipt] = useState<{ text: string; hash: `0x${string}` } | null>(null);
   const balanceOfAbi = [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
-  const startAction = async (kind: ActionKind, opts: { amount?: bigint; asset?: EquityAsset; label?: string } = {}) => {
+  const startAction = async (kind: ActionKind, opts: { amount?: bigint; asset?: EquityAsset; label?: string; then?: { claimAs: EquityAsset } } = {}) => {
     setLastReceipt(null);
     if (!me) { setPendingAction({ kind, ...opts, tokBefore: 0n, ethBefore: 0n }); return; }
     const [ethBefore, assetBefore] = await Promise.all([
@@ -166,6 +169,10 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             abi: [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }] as const,
             functionName: 'balanceOf', args: [feeSplitter],
           }).catch(() => 0n) as bigint
+        : 0n;
+      const backerBps = Number(await rhcPublicClient.readContract({ address: feeSplitter, abi: splitterAbi, functionName: 'backerBps' }).catch(() => 9000));
+      const projectedShare = ponsOwed > 0n && totalRaisedAtLaunch > 0n
+        ? (ponsOwed * BigInt(backerBps) * myContribution) / (10_000n * totalRaisedAtLaunch)
         : 0n;
 
       let myFeeEntitlement = 0n, myFeesClaimed = 0n, myTokenBalance = 0n;
@@ -260,7 +267,12 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
         totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4,
-        curve, curveGraduated, myCurveAllowance, ponsOwed, v7 });
+        curve, curveGraduated, myCurveAllowance, ponsOwed, backerBps, projectedShare, projectedShares: null, v7 });
+      // Quote the projection in the creator's pick, off the critical path.
+      if (v7 && me && projectedShare > 0n && v7.payoutAsset !== zero && EQUITY_ROUTER_LIVE) {
+        const asset = EQUITY_ASSETS.find((a) => a.address.toLowerCase() === v7!.payoutAsset.toLowerCase());
+        if (asset) quoteEquityOut(asset, projectedShare, me).then((q) => setS((prev) => (prev ? { ...prev, projectedShares: q } : prev)));
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -295,6 +307,26 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       }
       setPendingAction(null);
       reset();
+      // One-click "collect & claim": once the collect has landed and the
+      // page has reloaded, quote the claimer's now-real share and prompt
+      // the second signature. If they reject it, step ② stays on screen.
+      if (a?.kind === 'collect' && a.then && me && s) {
+        const asset = a.then.claimAs;
+        const [ent, claimed] = await Promise.all([
+          rhcPublicClient.readContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'backerEntitlement', args: [me, ZERO_ADDR] }).catch(() => 0n) as Promise<bigint>,
+          rhcPublicClient.readContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'backerClaimed', args: [me, ZERO_ADDR] }).catch(() => 0n) as Promise<bigint>,
+        ]);
+        const owed = ent > claimed ? ent - claimed : 0n;
+        if (owed > 0n) {
+          const q = await quoteEquityOut(asset, owed, me);
+          if (q && q > 0n) {
+            setTimeout(() => {
+              void startAction('claimFeesAs', { asset });
+              writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBackerAs', args: [poolKeyFor(asset), minOutFrom(q)], chainId: robinhoodChain.id });
+            }, 150);
+          }
+        }
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txConfirmed, receipt]);
@@ -736,68 +768,111 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                 </p>
               )}
 
-              {s.myContribution > 0n && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                    Your fee share: <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)} {s.isV4 ? 'ETH' : 'WETH'}</span>
-                    {v7 && v7.payoutAsset !== ZERO_ADDR && v7.splitterHasRouter && (
-                      <> · arrives as <span className="text-[var(--accent)]">{EQUITY_ASSETS.find((a) => a.address.toLowerCase() === v7.payoutAsset.toLowerCase())?.symbol ?? 'stock'}</span> (creator&apos;s pick) unless you choose otherwise</>
-                    )}
-                  </span>
-                  {/* v7 + live router: the picker. "Claim" is still the button
-                      and still pays ETH; "as stock" is the affordance beside it,
-                      opened first to the creator's default. Anything older keeps
-                      the plain button — it must never offer a call that reverts. */}
-                  {v7 && v7.splitterHasRouter && EQUITY_ROUTER_LIVE && isErc20Quote === false ? (
-                    <div className="w-full sm:w-auto sm:min-w-[20rem]">
-                      <ClaimAsPicker
-                        owed={feesOwed}
-                        account={me}
-                        busy={isPending}
-                        preferred={v7.payoutAsset !== ZERO_ADDR ? v7.payoutAsset : undefined}
-                        onClaimEth={() => { void startAction('claimFees'); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [ZERO_ADDR], chainId: robinhoodChain.id }); }}
-                        onClaimAs={(a: EquityAsset, minOut: bigint) => { void startAction('claimFeesAs', { asset: a }); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBackerAs', args: [poolKeyFor(a), minOut], chainId: robinhoodChain.id }); }}
-                      />
+              {/* ── FEES — one ordered story, one enabled button at a time.
+                  ① what pons still holds (anyone may collect)  ② your share
+                  (claim as the creator's pick, or ETH, or another stock).
+                  The old layout stacked a disabled "Nothing to claim" ABOVE
+                  the real next step — the founder's word for it was
+                  "confusing, ugly, and no SPCX to claim". ── */}
+              {(() => {
+                const payout = v7 && v7.payoutAsset !== ZERO_ADDR && v7.splitterHasRouter && EQUITY_ROUTER_LIVE && isErc20Quote === false
+                  ? EQUITY_ASSETS.find((a) => a.address.toLowerCase() === v7.payoutAsset.toLowerCase()) : undefined;
+                const canRoute = !!v7 && v7.splitterHasRouter && EQUITY_ROUTER_LIVE && isErc20Quote === false;
+                const iBack = s.myContribution > 0n;
+                const waiting = s.ponsOwed > 0n;
+                const collect = (then?: EquityAsset) => {
+                  void startAction('collect', { then: then ? { claimAs: then } : undefined });
+                  writeContract({ address: addr, abi: campaignAbi, functionName: s.isV4 ? 'pokeHarvest' : 'pokeCollect', chainId: robinhoodChain.id });
+                };
+                const step = (n: string, title: string, sub: React.ReactNode, right: React.ReactNode, tone = 'text-[var(--foreground)]') => (
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-3">
+                    <div className="min-w-0">
+                      <div className={`text-[10px] font-mono uppercase tracking-widest ${tone}`}>{n}{title}</div>
+                      <div className="text-xs font-mono text-[var(--muted)] mt-0.5">{sub}</div>
                     </div>
-                  ) : (
-                  <button
-                    onClick={() => { void startAction('claimFees'); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [s.isV4 ? '0x0000000000000000000000000000000000000000' : RHC_WETH], chainId: robinhoodChain.id }); }}
-                    disabled={isPending || feesOwed === 0n}
-                    className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-40"
-                  >
-                    Claim Fees
-                  </button>
-                  )}
-                </div>
-              )}
+                    <div className="flex flex-wrap items-center gap-2">{right}</div>
+                  </div>
+                );
+                return (
+                  <div className="mt-5 border border-[var(--border)] bg-[var(--background)]">
+                    <div className="border-b border-[var(--border)] px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                        {'// '}FEES — {(s.backerBps / 100).toFixed(0)}% of every trade&apos;s creator tax goes to backers
+                      </span>
+                      {payout && (
+                        <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                          pays out in <span className="text-[var(--accent)]">{payout.symbol}</span> · creator&apos;s pick · you may take ETH or another stock
+                        </span>
+                      )}
+                    </div>
 
-              {/* Collect is a PERMISSIONLESS crank and the amount waiting at
-                  pons is public — neither belongs behind "you backed this"
-                  (punch list #8). Any connected wallet may pull it down. */}
-              {isConnected && (
-                <div className="flex flex-wrap items-center gap-3 mt-3">
-                  {s.ponsOwed > 0n && (
-                    <span className="w-full text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                      {'> '}{fmtEth(s.ponsOwed, 6)} ETH of creator fees are waiting at pons — Collect, then backers Claim
-                    </span>
-                  )}
-                  <button
-                    onClick={() => act(s.isV4 ? 'pokeHarvest' : 'pokeCollect')}
-                    disabled={isPending}
-                    title="Permissionless: pull accrued creator fees from pons into the splitter"
-                    className={s.ponsOwed > 0n
-                      ? 'btn-primary !px-3 !py-1.5 !text-[10px]'
-                      : 'px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors'}
-                  >
-                    Collect From pons{s.ponsOwed > 0n ? ` — ${fmtEth(s.ponsOwed, 5)} ETH waiting` : ''}
-                  </button>
-                </div>
-              )}
-              {!isConnected && s.ponsOwed > 0n && (
-                <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                  {'> '}{fmtEth(s.ponsOwed, 6)} ETH of creator fees are waiting at pons — connect to collect (anyone may)
-                </p>
-              )}
+                    {waiting && step('① ', 'Collect from pons',
+                      <>{fmtEth(s.ponsOwed, 6)} ETH of creator fees are waiting · anyone may collect</>,
+                      isConnected ? (
+                        <>
+                          {iBack && payout && (
+                            <button onClick={() => collect(payout)} disabled={isPending} className="btn-primary !px-3 !py-1.5 !text-[10px]">
+                              Collect &amp; claim as {payout.symbol} · 2 signatures
+                            </button>
+                          )}
+                          <button
+                            onClick={() => collect()}
+                            disabled={isPending}
+                            className={iBack && payout
+                              ? 'px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors'
+                              : 'btn-primary !px-3 !py-1.5 !text-[10px]'}
+                          >
+                            {iBack && payout ? 'Just collect' : `Collect ${fmtEth(s.ponsOwed, 5)} ETH`}
+                          </button>
+                        </>
+                      ) : <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">connect to collect</span>,
+                      'text-[var(--accent)]')}
+
+                    {iBack && (
+                      <div className={waiting ? 'border-t border-[var(--border)]' : ''}>
+                        {step(waiting ? '② ' : '', 'Your share',
+                          feesOwed > 0n
+                            ? <>{fmtEth(feesOwed, 6)} ETH ready to claim{payout ? <> — as {payout.symbol}, ETH, or another stock</> : null}</>
+                            : waiting
+                              ? <>≈ {fmtEth(s.projectedShare, 6)} ETH after collect{payout && s.projectedShares ? <> ≈ <span className="text-[var(--accent)]">~{fmtShares(s.projectedShares, payout.decimals)} {payout.symbol}</span></> : null}</>
+                              : <>no fees yet — every buy and sell pays this token&apos;s creator tax to its backers</>,
+                          feesOwed > 0n ? (
+                            canRoute ? (
+                              <div className="w-full sm:w-auto sm:min-w-[22rem]">
+                                <ClaimAsPicker
+                                  owed={feesOwed}
+                                  account={me}
+                                  busy={isPending}
+                                  preferred={payout?.address}
+                                  onClaimEth={() => { void startAction('claimFees'); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [ZERO_ADDR], chainId: robinhoodChain.id }); }}
+                                  onClaimAs={(a: EquityAsset, minOut: bigint) => { void startAction('claimFeesAs', { asset: a }); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBackerAs', args: [poolKeyFor(a), minOut], chainId: robinhoodChain.id }); }}
+                                />
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { void startAction('claimFees'); writeContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'claimBacker', args: [s.isV4 ? ZERO_ADDR : RHC_WETH], chainId: robinhoodChain.id }); }}
+                                disabled={isPending}
+                                className="btn-primary !px-3 !py-1.5 !text-[10px]"
+                              >
+                                Claim {fmtEth(feesOwed, 6)} {s.isV4 ? 'ETH' : 'WETH'}
+                              </button>
+                            )
+                          ) : !waiting && !s.isV4 ? (
+                            <button onClick={() => collect()} disabled={isPending} className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors">
+                              Collect from pons
+                            </button>
+                          ) : null)}
+                      </div>
+                    )}
+
+                    {!iBack && !waiting && (
+                      <div className="px-3 py-3 text-xs font-mono text-[var(--muted)]">
+                        No fees waiting. Every buy and sell pays this token&apos;s creator tax to the wallets that backed the raise.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
