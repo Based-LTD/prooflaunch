@@ -2,6 +2,11 @@
 # Verify the live ProofLaunch contracts on Robinhood Chain's Blockscout so
 # the source people read on the explorer is provably the deployed bytecode.
 #
+# 2026-09-21: Blockscout's /api is behind a Cloudflare browser challenge and
+# rejects forge. Until that changes, use the BROWSER path in verify/README.md
+# (one standard-input.json for every contract). This script stays for the day
+# the API answers again.
+#
 # Run from contracts/rhc (foundry.toml settings — via_ir, optimizer runs 200 —
 # must match the deploy build):   bash verify.sh
 #
