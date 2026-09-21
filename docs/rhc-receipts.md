@@ -19,7 +19,7 @@ Snapshot: 2026-09-19.
 | Trustless **pool-feeder** bot | Deployed as code, fork-proven, **never created by a mainnet campaign** |
 | v7 factory (team rounds, token gating, ERC20/stock-quoted raises) | **Live since 2026-09-20** `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B` — creates every new campaign; unaudited |
 | EquityRouter ("get paid in stock") | **Live since 2026-09-20** `0x0A568a0AdcC45F8f6597f0219df39FA9ACA82943` — unaudited |
-| Per-campaign equity payouts (`claimBackerAs` / `claimLegAs`, creator's default `payoutAsset`) | **Live in the deployed v7 factory** (every campaign it creates carries the router immutably); no v7 campaign exists yet |
+| Per-campaign equity payouts (`claimBackerAs` / `claimLegAs`, creator's default `payoutAsset`) | **Live and executed on mainnet** — first claim 2026-09-20, §3 |
 | RewardsVault + `claimAs` | Built, 14/14, **not deployable** until the platform token exists (immutable `stakeToken`) |
 | Platform token on RHC | **Does not exist yet** |
 | Security review | **Self-review with receipts done 2026-09-19** — 10 findings, 6 fixed with tests, 2 accepted with rationale, 2 deferred: `docs/rhc-review-findings.md`. **No independent human review yet.** Brief: `docs/rhc-review-scope.md` |
@@ -106,7 +106,22 @@ Created by the founder during the first prod test, minutes after v7 went live. E
 | Token | `0xC107792DfEa2DB8d61f3B93C709Ea1d5e337F6Fb` (`RWA TEST`, supply 1,000,000,000) · curve `0x5b61753bC33Ea2d0F112a88644584921E0Cc6851` |
 | FeeSplitter | `0xFA3662B35FE3b698b97756d64f49D32fCD0f38Dc` — `equityRouter()` = `0x0A568a0A…` (router threaded); legs holder-rewards 300 · platform 700; backers 9000 |
 
-Fee claims as stock: pending — rows added when the founder's claim lands.
+### The first "holders earn stock" claim on the chain
+
+Trading on `RWA TEST` (two buys, two sells, plus the launch buy — ~$105 of volume) accrued 3% creator tax at pons. Then:
+
+| Step | Receipt |
+|---|---|
+| Collect from pons | tx `0x79061dce45019382cdaea7807c282febdb5941909994a7d8bff3454df321e8ab`, block 68488141 — `pokeHarvest()` called by backer `0x52DBFc1482E178feB5237c814B14B37fF3A6856F`; 0.001788 ETH moved FeeEscrow → FeeSplitter; the splitter accounted it 90/7/3 |
+| **Claim as SPCX** | tx `0x5bb1671588c40cfbedb8463a5170ae4aa034fd65e9ad3bb6dc2954177ab342c6`, block 68488561 — `claimBackerAs(SPCX pool, minOut)`: `ClaimedAs(0x52DB…, SPCX, ethIn 0.0008044590629919, assetOut 0.013859316094286204)` |
+| Same tx, the router | `EquityRouter.Routed(payer = the splitter, recipient = 0x52DB…, SPCX, 0.000804 ETH → 0.013859 SPCX)` |
+| Same tx, the stock | `SPCX.Transfer(from = Uniswap v4 PoolManager 0x8366a39C…, to = 0x52DB…, 0.013859316094286204)` — **straight from the pool to the wallet. Neither the splitter nor the router ever held the stock.** |
+| Splitter after | `accounted(ETH)` = 0.000983 — the creator wallet's 0.000804 share and the two legs (platform 0.000125, holder-rewards 0.0000536) still unclaimed, pull-based, waiting for their owners |
+
+The backer's fee share was 50% of the 90% backer pool of 0.001788 ETH = 0.000804 ETH, delivered as 0.01386 SPCX at the live pool price — ~1.9% all-in below spot, inside the measured 0.3–0.5% pool fee plus the claimer's own 1% slippage bound.
+
+Honest scale: one claim, under a dollar of fees. It proves the path on mainnet — pons → splitter → router → v4 pool → wallet, permissionless at every hop — not volume.
+
 
 ### The burn bot, executed on mainnet
 
