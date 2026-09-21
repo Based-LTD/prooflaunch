@@ -13,7 +13,7 @@ import {
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
 import { ClaimAsPicker } from '../../ClaimAsPicker';
-import { EQUITY_ROUTER_LIVE, poolKeyFor, fmtShares, type EquityAsset } from '@/lib/rhcEquity';
+import { EQUITY_ROUTER_LIVE, EQUITY_ASSETS, poolKeyFor, fmtShares, type EquityAsset } from '@/lib/rhcEquity';
 import { WpPanel } from '../../walletproof';
 
 interface State {
@@ -739,7 +739,10 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               {s.myContribution > 0n && (
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                    Your fee share ({s.isV4 ? 'ETH' : 'WETH'}): <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)}</span>
+                    Your fee share: <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)} {s.isV4 ? 'ETH' : 'WETH'}</span>
+                    {v7 && v7.payoutAsset !== ZERO_ADDR && v7.splitterHasRouter && (
+                      <> · arrives as <span className="text-[var(--accent)]">{EQUITY_ASSETS.find((a) => a.address.toLowerCase() === v7.payoutAsset.toLowerCase())?.symbol ?? 'stock'}</span> (creator&apos;s pick) unless you choose otherwise</>
+                    )}
                   </span>
                   {/* v7 + live router: the picker. "Claim" is still the button
                       and still pays ETH; "as stock" is the affordance beside it,

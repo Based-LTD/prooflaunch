@@ -44,7 +44,7 @@ export default async function OpenGraphImage() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ width: 12, height: 12, background: '#00d97e', display: 'flex' }} />
-            <span>MAINNET · LIVE</span>
+            <span>MAINNET · ROBINHOOD CHAIN</span>
           </div>
           <span style={{ color: AMBER }}>// PROOF_LAUNCH.SYS</span>
         </div>
@@ -119,7 +119,7 @@ export default async function OpenGraphImage() {
                 display: 'flex',
               }}
             >
-              The proving grounds for token launches
+              Pool the raise · own the float · earn the fees
             </div>
           </div>
         </div>
@@ -137,7 +137,7 @@ export default async function OpenGraphImage() {
             letterSpacing: '0.15em',
           }}
         >
-          <span>SLOTS · BACKERS · LAUNCH</span>
+          <span>POOL · LAUNCH · EARN IN ETH OR STOCK</span>
           <span style={{ color: AMBER }}>prooflaunch.fun</span>
         </div>
       </div>

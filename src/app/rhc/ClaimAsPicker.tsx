@@ -46,6 +46,13 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
   const [open, setOpen] = useState(false);
   const [quotes, setQuotes] = useState<Quotes>({});
   const nothing = owed === 0n;
+  // The creator's pick IS the default — that was the decision ("creators
+  // set, claimers override"). ETH becomes the alternative, not the other
+  // way round. Its quote loads eagerly so the primary button can show
+  // shares before anyone opens the drawer.
+  const preferredAsset = preferred ? EQUITY_ASSETS.find((a) => a.address.toLowerCase() === preferred.toLowerCase()) : undefined;
+  const pq = preferredAsset ? quotes[preferredAsset.symbol] : undefined;
+  const preferredReady = typeof pq === 'bigint' && pq > 0n;
 
   const loadQuotes = useCallback(async () => {
     if (!account || nothing) return;
@@ -62,16 +69,53 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
     if (open) void loadQuotes();
   }, [open, loadQuotes]);
 
+  useEffect(() => {
+    if (!preferredAsset || !account || nothing || !EQUITY_ROUTER_LIVE) return;
+    let live = true;
+    setQuotes((prev) => ({ ...prev, [preferredAsset.symbol]: 'loading' }));
+    quoteEquityOut(preferredAsset, owed, account).then((q) => { if (live) setQuotes((prev) => ({ ...prev, [preferredAsset.symbol]: q })); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferredAsset?.symbol, account, owed, nothing]);
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <button
-          className="btn-primary flex-1"
-          disabled={busy || nothing}
-          onClick={onClaimEth}
-        >
-          {nothing ? 'Nothing to claim' : `Claim ${fmtEth(owed)} ETH`}
-        </button>
+      <div className="flex flex-wrap items-center gap-2">
+        {preferredAsset && EQUITY_ROUTER_LIVE && !nothing ? (
+          <>
+            {/* Primary: the creator's pick, with the live share quote. */}
+            <button
+              className="btn-primary flex-1"
+              disabled={busy || !preferredReady}
+              onClick={() => preferredReady && onClaimAs(preferredAsset, minOutFrom(pq as bigint))}
+              title={preferredReady ? undefined : pq === null ? `${preferredAsset.symbol} can't be quoted right now — claim ETH instead` : 'Quoting…'}
+            >
+              {pq === 'loading' || pq === undefined
+                ? `Claim as ${preferredAsset.symbol} · quoting…`
+                : preferredReady
+                  ? `Claim as ${preferredAsset.symbol} · ~${fmtShares(pq as bigint, preferredAsset.decimals)}`
+                  : `${preferredAsset.symbol} unavailable — claim ETH`}
+            </button>
+            <button
+              className="px-3 py-2 text-[11px] font-mono uppercase tracking-widest
+                         border border-[var(--border)] text-[var(--muted)]
+                         hover:text-[var(--fg)] hover:border-[var(--fg)] transition-colors"
+              disabled={busy}
+              onClick={onClaimEth}
+              title="Take your fee share as plain ETH instead"
+            >
+              as ETH · {fmtEth(owed)}
+            </button>
+          </>
+        ) : (
+          <button
+            className="btn-primary flex-1"
+            disabled={busy || nothing}
+            onClick={onClaimEth}
+          >
+            {nothing ? 'Nothing to claim' : `Claim ${fmtEth(owed)} ETH`}
+          </button>
+        )}
 
         {EQUITY_ROUTER_LIVE && !nothing && (
           <button
@@ -81,7 +125,7 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
           >
-            as stock {open ? '▴' : '▾'}
+            {preferredAsset ? 'other stock' : 'as stock'} {open ? '▴' : '▾'}
           </button>
         )}
       </div>

@@ -20,18 +20,21 @@ const sans = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://prooflaunch.fun"),
-  title: "Proof Launch | Shared Token Launches on Solana",
-  description: "The launchpad where communities form BEFORE tokens launch. Back projects you believe in and participate in community-driven launches.",
-  keywords: ["solana", "token launchpad", "launchpad", "bonding curve", "defi", "proof launch", "pump.fun", "meteora", "DBC", "DAMM"],
+  // Robinhood Chain is the front door (2026-09-19); Solana is the credential.
+  // RHC pages override title/description in their own layout; everything
+  // else — including the shared-link preview of "/" — reads this.
+  title: "ProofLaunch | Community Token Launches on Robinhood Chain",
+  description: "Pool the raise with your community, own the float, earn the fee stream in ETH or tokenized stock. Ownerless contracts enforce every promise on Robinhood Chain.",
+  keywords: ["robinhood chain", "tokenized stocks", "RWA", "pons", "token launchpad", "community launch", "bonding curve", "defi", "prooflaunch", "solana"],
   openGraph: {
-    title: "Proof Launch | Shared Token Launches on Solana",
-    description: "Communities form BEFORE tokens launch. Back projects you believe in and participate in community-driven launches.",
+    title: "ProofLaunch | Community Token Launches on Robinhood Chain",
+    description: "Pool the raise with your community, own the float, earn the fee stream in ETH or tokenized stock. Ownerless contracts enforce every promise on Robinhood Chain.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Proof Launch | Shared Token Launches on Solana",
-    description: "Communities form BEFORE tokens launch. Back projects you believe in and participate in community-driven launches.",
+    title: "ProofLaunch | Community Token Launches on Robinhood Chain",
+    description: "Pool the raise with your community, own the float, earn the fee stream in ETH or tokenized stock. Ownerless contracts enforce every promise on Robinhood Chain.",
   },
 };
 
