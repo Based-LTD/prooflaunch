@@ -40,9 +40,10 @@ function timeLeft(deadline: bigint): string {
 
 export function ConnectButton() {
   const { address, isConnected, chainId } = useAccount();
-  const { connect, connectors, isPending, error, reset } = useConnect();
+  const { connectAsync, connectors, isPending, error, reset } = useConnect();
   const [pick, setPick] = useState(false);
-  const { disconnect } = useDisconnect();
+  const [localErr, setLocalErr] = useState<string | null>(null);
+  const { disconnect, disconnectAsync } = useDisconnect();
   const { switchChain } = useSwitchChain();
 
   if (!isConnected) {
@@ -55,12 +56,35 @@ export function ConnectButton() {
     // only when nothing announced itself. And always SHOW the error.
     const named = connectors.filter((c) => c.id !== 'injected');
     const choices = named.length > 0 ? named : connectors;
-    const go = (c: (typeof connectors)[number]) => {
+    const stale = (e: unknown) => {
+      const m = e instanceof Error ? `${e.name} ${e.message}` : String(e);
+      return /AlreadyConnected|already connected/i.test(m);
+    };
+    const go = async (c: (typeof connectors)[number]) => {
       reset();
+      setLocalErr(null);
       setPick(false);
-      // Connecting requests Robinhood Chain in the same step — users
-      // should never meet a separate "switch network" ceremony.
-      connect({ connector: c, chainId: robinhoodChain.id });
+      try {
+        // Connecting requests Robinhood Chain in the same step — users
+        // should never meet a separate "switch network" ceremony.
+        await connectAsync({ connector: c, chainId: robinhoodChain.id });
+      } catch (e) {
+        // "Connector already connected": the extension still holds a
+        // session while our account state says otherwise (wallet switched,
+        // or the site was disconnected from the extension side). Treat it
+        // as stale — drop it and connect fresh — instead of showing the
+        // user a contradiction (founder, 2026-09-20).
+        if (stale(e)) {
+          try { await disconnectAsync({ connector: c }); } catch { /* nothing to drop */ }
+          try { await disconnectAsync(); } catch { /* no other connections */ }
+          try { await connectAsync({ connector: c, chainId: robinhoodChain.id }); return; } catch (e2) { setLocalErr(e2 instanceof Error ? e2.message : String(e2)); return; }
+        }
+        // any other failure is already rendered via `error` below
+      }
+    };
+    const resetConnection = () => {
+      try { localStorage.removeItem('wagmi.store'); } catch { /* storage blocked */ }
+      window.location.reload();
     };
     const label = isPending ? 'Connecting…' : choices.length === 0 ? 'No wallet found' : null;
     return (
@@ -102,14 +126,22 @@ export function ConnectButton() {
           </div>
         )}
 
-        {error && !pick && (
+        {(localErr || error) && !pick && (
           <p
             role="alert"
             className="absolute right-0 top-full mt-1 max-w-[18rem] px-2 py-1 text-[10px] font-mono leading-snug text-[var(--error)] border border-[var(--error)]/40 bg-[var(--background)] z-50"
           >
-            {/wallet|Provider not found/i.test(error.name + error.message) && /not found/i.test(error.message)
-              ? 'No wallet extension answered in this browser. Install or unlock one, then try again.'
-              : error.message.split('\n')[0].slice(0, 140)}
+            {localErr
+              ? localErr.split('\n')[0].slice(0, 140)
+              : error && /Provider not found|not found/i.test(error.name + error.message)
+                ? 'No wallet extension answered in this browser. Install or unlock one, then try again.'
+                : error && stale(error)
+                  ? 'The wallet thinks it is still connected. Resetting the connection…'
+                  : (error?.message ?? '').split('\n')[0].slice(0, 140)}
+            {' '}
+            <button type="button" onClick={resetConnection} className="underline underline-offset-2 text-[var(--foreground)]">
+              reset connection
+            </button>
           </p>
         )}
       </div>
