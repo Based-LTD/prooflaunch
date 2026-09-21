@@ -241,3 +241,69 @@ $PROOF holders receive — STILL OPEN with founder.]
 
 **E5** WalletProof will be pointed at our own launch, live. Judge us
 with the same lens we built for everyone else.
+
+---
+
+## Thread F — what shipped (post-dated 2026-09-20; every number has a tx in docs/rhc-receipts.md)
+
+Voice notes: short sentences, no em dashes, no "first", no profit
+promises, never the m-word. F3 wants the claim tx as a screenshot from
+the explorer, and F2 a screenshot of the FEE PAYOUT picker on /rhc/create.
+
+**F1**
+ProofLaunch is live on Robinhood Chain.
+
+Pooled token launches on pons. The community funds the launch, one
+transaction creates the token and buys with the whole pool, and the
+backers earn 90% of the creator fee stream. Enforced by contracts with
+no admin key. Not by us.
+
+prooflaunch.fun
+
+**F2**
+New this week: the creator decides what the fee stream pays out in.
+
+ETH in, stock out. Set "holders earn SpaceX" when you create the raise.
+Every backer's fee share gets swapped into SPCX on the way to their
+wallet, in the same transaction they claim it.
+
+**F3**
+It already happened on mainnet.
+
+Campaign RWA TEST. Two seats, 0.02 ETH raise, 3% creator tax. After a
+handful of trades a backer claimed. 0.0008 ETH of fees left pons and
+landed as 0.01386 SPCX in their wallet, straight out of the Uniswap v4
+pool.
+
+Tx 0x5bb1671588c40cfbedb8463a5170ae4aa034fd65e9ad3bb6dc2954177ab342c6
+
+**F4**
+Neither our contracts nor our router ever touched the stock. Pool to
+wallet, one hop.
+
+The protocol only ever owes ETH. The claimer picks the asset and sets
+their own slippage bound. If the pool can't fill, plain ETH is one
+click away. Nothing can trap a claim.
+
+**F5**
+Tiny numbers. One claim on a test-sized raise. We are not going to
+dress that up as volume.
+
+What it proves is the path: pons to splitter to router to v4 pool to
+wallet, permissionless at every hop. Nobody at ProofLaunch can pause
+it, redirect it, or take a cut that isn't written in the contract.
+
+**F6**
+Also shipped: a burn bot and a locked-liquidity feeder that run as
+ownerless contracts (anyone can crank them, nobody can switch them
+off), wallet-gated team rounds, and 92 tests including forks against
+the live pools.
+
+Receipts for every line above, with hashes:
+github.com/Based-LTD/prooflaunch/blob/main/docs/rhc-receipts.md
+
+**F7**
+Next: our own token, launched through these same contracts, on the
+same terms every creator gets.
+
+Soon.
