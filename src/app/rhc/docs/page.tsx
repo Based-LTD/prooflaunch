@@ -8,9 +8,10 @@ import Link from 'next/link';
 import {
   ArrowLeft, Rocket, Users, Shield, Coins, CheckCircle, AlertTriangle,
   TrendingUp, Zap, Receipt, Key, HelpCircle, Bot, ExternalLink,
-  Undo2 as Undo2Icon, Wallet as WalletIcon,
+  Undo2 as Undo2Icon, Wallet as WalletIcon, Lock, MessageCircle, Eye, Landmark,
 } from 'lucide-react';
-import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V6, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, LEG_DEPLOYER_V3, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
+import { EQUITY_ROUTER } from '@/lib/rhcEquity';
 
 const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
 const LEG_DEPLOYER_V2 = '0x42a2495D9426fd5d88A01e724E62275DCe02dfF4';
@@ -145,7 +146,7 @@ export default function RhcDocsPage() {
                   { num: '1', title: 'Back the Pool', desc: 'Deposit ETH into the Campaign contract. Withdraw in full any time before launch — the contract can\'t say no.' },
                   { num: '2', title: 'Goal Met → Launch', desc: 'The creator launches early, or anyone can trigger it after the deadline. One transaction creates the token on pons and buys it with the whole pool — snipe-exempt on the launch block. Creator holds 0%.' },
                   { num: '3', title: 'Claim Pro-Rata', desc: 'Your token share equals your share of the raise, snapshotted at launch. Claim from the campaign page — the contract computes it, nobody can adjust it.' },
-                  { num: '4', title: 'Fees Stream Forever', desc: 'Every trade pays creator fees into the FeeSplitter. 90% belongs to backers pro-rata, pull-based — claim whenever you like, in WETH and in the token itself.' },
+                  { num: '4', title: 'Fees Stream Forever', desc: 'Every trade pays creator fees into the FeeSplitter. 90% belongs to backers pro-rata, pull-based — claim whenever you like, in ETH or, if the creator set one, as tokenized stock (SpaceX, Microsoft…) swapped in the same transaction.' },
                 ].map((step) => (
                   <div key={step.num} className="flex items-start gap-4 p-4 bg-[var(--background)] border-l-4 border-[var(--warning)]">
                     <div className="w-8 h-8 bg-[var(--warning)] text-black flex items-center justify-center text-sm font-black flex-shrink-0">
@@ -188,7 +189,12 @@ export default function RhcDocsPage() {
                 { icon: Undo2Icon, color: 'text-[var(--error)]', title: 'Withdraw Anytime Pre-Launch', desc: 'Full-amount withdrawal until the moment of launch, no fee, no permission. It\'s a contract function — the platform can\'t block it.' },
                 { icon: Key, color: 'text-[var(--warning)]', title: 'Creator Holds 0%', desc: 'The Campaign contract is the pons creator. The pooled buy lands in the contract and is claimable only pro-rata by backers.' },
                 { icon: Zap, color: 'text-[var(--success)]', title: 'Same Price For Everyone', desc: 'One atomic pooled buy at launch, snipe-exempt on the launch block. Every backer enters at the identical price.' },
-                { icon: WalletIcon, color: 'text-[var(--accent-gold)]', title: 'Claim Tokens + Fees', desc: 'After launch, claim your token share once, then claim your fee share whenever you like — 90% of creator fees flow to backers pro-rata, in WETH and in the token, forever. Pull-based: your money waits for you in the contract.' },
+                { icon: WalletIcon, color: 'text-[var(--accent-gold)]', title: 'Claim Tokens + Fees', desc: 'After launch, claim your token share once, then claim your fee share whenever you like — 90% of the creator tax on every trade flows to backers pro-rata, in ETH, forever. Pull-based: your money waits for you in the contract.' },
+                { icon: Landmark, color: 'text-[var(--accent)]', title: 'Fees in Stock, If the Creator Says So', desc: 'Creators can set the payout asset to a tokenized stock. Your ETH fee share is swapped through the Uniswap v4 pool on the way to your wallet, in the same transaction you claim — the contract never holds the shares. Plain ETH is always one click away as the safety hatch.' },
+                { icon: Eye, color: 'text-[var(--success)]', title: 'The Roster Shows Who Is Still In', desc: 'Every backer wallet, its stake, and after launch its live token balance against what it was allocated. Read from the contract, not self-reported. If a genesis wallet sold, everyone can see it.' },
+                { icon: MessageCircle, color: 'text-[var(--muted)]', title: 'Chat With the Room', desc: 'Every campaign page has a chat. One wallet signature to post; the server verifies every message came from the wallet it says.' },
+                { icon: Lock, color: 'text-[var(--accent-gold)]', title: 'Lock Your Seat (next contract generation)', desc: 'Pick a lock when you take a seat — 3 months to 2 years. Your tokens stay in the campaign contract until the date, visible to every backer before launch. Only ever extendable; nobody can shorten it, including us. A locked seat still earns its full fee share. Built and tested, ships with v8.' },
+                { icon: TrendingUp, color: 'text-[var(--error)]', title: 'Sell and You Stop Earning (next contract generation)', desc: 'Your fee share follows the tokens: sell half, earn half; sell all and your share goes to platform-token stakers. Staked or locked tokens count as held. Built and tested, ships with v8.' },
                 { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Refunds Are Automatic Law', desc: 'Goal unmet by the deadline plus a 3-day grace window → refunds open unconditionally. No support ticket, no discretion — code.' },
               ].map((item, i) => {
                 const Icon = item.icon;
@@ -232,7 +238,8 @@ export default function RhcDocsPage() {
             </div>
             <div className="space-y-4 pt-2">
               {[
-                { num: '1', title: 'Submit Your Token (gas only)', desc: 'Name, symbol, logo, socials, raise goal, per-backer min/max, slot cap, deadline, creator tax (0\u201310%, the pons dial \u2014 except here your BACKERS earn it), pons buyback toggle, bot stack. Everything becomes immutable contract state \u2014 backers can verify the exact terms on-chain before depositing a single wei.' },
+                { num: '1', title: 'Submit Your Token (0.001 ETH + gas)', desc: 'Name, symbol, logo, banner, socials, raise goal, per-backer min/max, seat count, deadline, creator tax (0\u201310%, the pons dial \u2014 except here your BACKERS earn it), pons buyback toggle, bot stack. Team rounds: reserve seats for an allowlist. Token gating: require a balance to back. Raise in ETH, USDG or a tokenized stock. Everything becomes immutable contract state \u2014 backers can verify the exact terms on-chain before depositing a single wei.' },
+                { num: '1b', title: 'Set the Payout Asset', desc: 'Choose what your backers\u2019 fee stream pays out in: ETH, or a tokenized stock such as SpaceX or Microsoft. \u201cHolders earn SpaceX\u201d is set at creation and read from the contract. Backers can always take ETH instead.' },
                 { num: '2', title: 'Rally the Raise', desc: 'Share your campaign link. Backers deposit ETH; the board shows live progress read straight from the chain.' },
                 { num: '3', title: 'Launch When Ready', desc: 'Goal met → you launch whenever you want (or anyone can after the deadline, so a funded raise can never be held hostage). One transaction: token created on pons + the whole pool buys, snipe-exempt.' },
               ].map((step) => (
@@ -309,7 +316,7 @@ export default function RhcDocsPage() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                 {[
-                  { emoji: '🔥', name: 'BURN', tag: 'Deflationary · Trustless', desc: 'Claims its fee share (WETH + tokens), market-buys the token on its pons pool, sends everything to the dead address. Per-crank cap keeps sandwich extraction negligible. Totals readable on-chain forever.' },
+                  { emoji: '🔥', name: 'BURN', tag: 'Deflationary · Trustless', desc: 'Claims its fee share (ETH), market-buys the token on its pons pool, sends everything to the dead address. Per-crank cap keeps sandwich extraction negligible. Totals readable on-chain forever.' },
                   { emoji: '🌊', name: 'POOL FEEDER', tag: 'Liquidity · Trustless', desc: 'Mints full-range liquidity with its fee share and compounds the position\'s own earned trading fees every crank. The contract has NO withdraw function — protocol-owned liquidity locked by construction, not by promise \u2014 the code to withdraw was never written.' },
                   { emoji: '🏦', name: 'VAULT', tag: 'Treasury', desc: 'Any wallet you name (marketing, DAO, treasury) becomes a fee leg and pulls its share anytime. The address is immutable from creation — a public, permanent commitment.' },
                   { emoji: '📸', name: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run', desc: 'ProofLaunch snapshots your token\'s holders and airdrops the leg\'s fees pro-rata (ETH + tokens), dust-filtered, with the snapshot reconciled against total supply before a single payment goes out. Platform-operated and labeled so.' },
@@ -361,7 +368,7 @@ export default function RhcDocsPage() {
                 Every bot was proven against the live pons trading pool in fork tests before
                 deployment: real launches, real swaps, burn balances verifiably at the dead
                 address, LP positions minted and compounding, and the full 90/7/3 fee flow
-                measured in both WETH and tokens — 21/21 tests green. The full suite ships in
+                measured in ETH and tokens — 21/21 tests green. The full suite ships in
                 the open-source repo.
               </p>
             </section>
@@ -404,11 +411,11 @@ export default function RhcDocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">How Fees Flow</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                pons routes a share of every trade to the token&apos;s creator — and the creator
-                is your Campaign&apos;s FeeSplitter. (pons itself splits total fees roughly 70/30
-                creator/protocol, so &quot;90% to backers&quot; means 90% of the creator share.)
-                Fees accrue in <strong>both pool assets</strong> — WETH and the token itself —
-                and the splitter accounts for each separately.
+                Every trade on pons pays a <strong>1% protocol fee to pons</strong> plus the token&apos;s
+                <strong> creator tax</strong> (0–10%, set at creation). The creator is your
+                Campaign&apos;s FeeSplitter, so the creator tax is what gets split below. It accrues
+                in ETH at pons&apos; fee escrow until anyone cranks it into the splitter — the
+                campaign page&apos;s claim button does that for you as its first signature.
               </p>
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 mt-4">
                 <h3 className="font-bold mb-3 uppercase tracking-wide">The 90/7/3 Split (no bots stacked)</h3>
@@ -429,9 +436,33 @@ export default function RhcDocsPage() {
                 <p className="text-xs text-[var(--muted)] mt-3 uppercase tracking-wide leading-relaxed">
                   Everything is pull-based: the splitter only does accounting, so no recipient can
                   grief anyone else&apos;s claim and no operator needs to be alive for you to get
-                  paid. distribute() and pokeCollect() are permissionless cranks — run them
+                  paid. distribute() and pokeHarvest() are permissionless cranks — run them
                   yourself from any explorer.
                 </p>
+              </div>
+
+              <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 mt-4 space-y-2">
+                <h3 className="font-bold uppercase tracking-wide flex items-center gap-2"><Landmark className="w-4 h-4 text-[var(--accent)]" /> Claim as stock</h3>
+                <p className="text-sm text-[var(--muted)] leading-relaxed">
+                  The splitter only ever owes ETH. When you claim, it can route your ETH through the
+                  <strong> EquityRouter</strong> into an ETH-paired Uniswap v4 pool — SpaceX, Microsoft,
+                  Meta, Snap, Eli Lilly — and the shares land in your wallet straight from the pool.
+                  Neither the splitter nor the router ever holds the stock. You set your own slippage
+                  bound; if the pool can&apos;t fill, the claim reverts and stays yours. The creator
+                  picks the default; the page shows the live share quote before you sign. First
+                  mainnet claim: 0.0008 ETH → 0.0139 SPCX, receipts in the repo.
+                </p>
+              </div>
+
+              <div className="bg-[var(--accent-gold)]/10 border-2 border-[var(--accent-gold)]/30 p-4 mt-4 space-y-2">
+                <h3 className="font-bold text-[var(--accent-gold)] uppercase tracking-wide flex items-center gap-2"><Lock className="w-4 h-4" /> Coming with v8: the fee stream follows the tokens</h3>
+                <ul className="text-sm text-[var(--muted)] space-y-1 leading-relaxed">
+                  <li>· <strong className="text-[var(--foreground)]">Sell and you stop earning.</strong> A claim pays your share times the fraction of your launch allocation you still hold. Sell half, earn half. Sell all, and that share goes to the holder-rewards leg — platform-token stakers.</li>
+                  <li>· <strong className="text-[var(--foreground)]">Judged once.</strong> Anyone can call settle() on a wallet that sold, locking its forfeiture in. Buying back right before a claim recovers nothing that accrued while you were out. Fees judged while you held are banked and stay yours.</li>
+                  <li>· <strong className="text-[var(--foreground)]">Held means held.</strong> Tokens still in the campaign (unclaimed or locked) and tokens staked in the rewards vault count as held.</li>
+                  <li>· <strong className="text-[var(--foreground)]">Pre-launch lock.</strong> Pick a lock when you take a seat. The tokens stay in the campaign contract until the date; the roster shows it before launch; only you can change it, and only to make it longer.</li>
+                  <li>· <strong className="text-[var(--foreground)]">Status:</strong> built, 115 tests across 18 suites, not yet deployed. The order is fixed: platform token first, then the rewards vault, then v8 — the vault can only exist once the token does.</li>
+                </ul>
               </div>
             </section>
           </>
@@ -469,7 +500,10 @@ export default function RhcDocsPage() {
                   Contract addresses
                 </h3>
                 <div className="space-y-2 text-xs font-mono">
-                  <AddrRow name="CampaignFactory v6 (ACTIVE — creation buy-in, trustless v4 bots, creator tax)" addr={POOLLAUNCH_FACTORY_V6} />
+                  <AddrRow name="CampaignFactory v7 (ACTIVE — team rounds, token gating, stock-quoted raises, claim-as-stock)" addr={POOLLAUNCH_FACTORY_V7} />
+                  <AddrRow name="EquityRouter (claim-as-stock; no allowlist, no owner)" addr={EQUITY_ROUTER} />
+                  <AddrRow name="LegDeployerV3 (v7 bot-leg code — EIP-170 satellite)" addr={LEG_DEPLOYER_V3} />
+                  <AddrRow name="CampaignFactory v6 (superseded — creation buy-in, trustless v4 bots, creator tax)" addr={POOLLAUNCH_FACTORY_V6} />
                   <AddrRow name="CampaignFactory v5 (pons V2 + trustless Uniswap-v4 bot legs)" addr={POOLLAUNCH_FACTORY_V5} />
                   <AddrRow name="CampaignFactory v4 (pons V2, creator tax — no bot legs)" addr={POOLLAUNCH_FACTORY_V4} />
                   <AddrRow name="CampaignFactory v3 (pons V1 — original bot stack)" addr={POOLLAUNCH_FACTORY} />
@@ -492,8 +526,10 @@ export default function RhcDocsPage() {
                   Beta status
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  The contracts pass 75 tests across 14 suites, including live-pool fork verification of every
-                  money path, but have not yet completed external review. Until then the UI caps
+                  Every live contract is source-verified (exact bytecode match on Sourcify, imported by
+                  the explorer), so what you read on-chain is what runs. The contracts pass 115 tests
+                  across 18 suites, including live-pool fork verification of every money path and a
+                  self-review with one test per finding, but have not yet completed external review. Until then the UI caps
                   raise goals at 2 ETH. Oversized raises are proven safe (they graduate at
                   launch); we&apos;re walking before running.
                 </p>
@@ -532,6 +568,10 @@ export default function RhcDocsPage() {
                 { q: 'What wallet do I use?', a: 'Phantom works — it has an EVM side. MetaMask and Rabby too. The connect button adds and switches to Robinhood Chain automatically.' },
                 { q: 'How do I get ETH on Robinhood Chain?', a: 'Bridge through the official Robinhood Chain bridge, or transfer from Robinhood. Gas is ~0.1 gwei, so a little goes a very long way.' },
                 { q: 'What happens if pons rotates its factory?', a: 'Existing campaigns are unaffected — each pins the pons factory address it was created with. New campaigns launch through whatever factory the UI currently targets; a health sensor watches for rotations.' },
+                { q: 'Can I get my fees paid in stock?', a: 'Yes. If the creator set a payout asset, the claim button shows your share quoted in that stock and swaps your ETH into it in the same transaction, straight from the Uniswap v4 pool to your wallet. You can always take ETH instead. The contract never holds shares.' },
+                { q: 'What does the lock do?', a: 'A lock is a date you choose when you take a seat. Your tokens stay in the campaign contract until then and the claim function refuses to release them earlier. It is visible on the roster before launch, can only be extended, and nobody — including us — can shorten it. Locked tokens still earn your full fee share. Ships with the v8 contracts.' },
+                { q: 'Do backers who sell keep earning fees?', a: 'On the current contracts, yes — the split is fixed at launch. On v8 (built and tested, not yet deployed) the fee stream follows the tokens: sell half, earn half; sell all and your share goes to platform-token stakers. The roster already shows every backer\u2019s live hold so you can see who sold.' },
+                { q: 'Is the roster self-reported?', a: 'No. The wallet list comes from the campaign contract\u2019s deposit events and every number — stake, hold, fees claimed, fees pending — is a live read from the contract. The chat is the only thing on the page that lives off-chain, and every message is wallet-signed.' },
                 { q: 'Is this the same platform as the Solana site?', a: 'Same platform, same model, same team — different enforcement. Solana promises are kept operationally; Robinhood Chain promises are kept by ownerless contracts. Use the SOL | RHC toggle in the navbar to switch worlds.' },
               ].map((faq, i) => (
                 <div key={i} className="bg-[var(--background)] border-2 border-[var(--border)] p-4 hover:border-[var(--accent)] transition-colors">
