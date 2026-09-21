@@ -307,3 +307,58 @@ Next: our own token, launched through these same contracts, on the
 same terms every creator gets.
 
 Soon.
+
+---
+
+## Thread G — where we are, and what's next (drafted 2026-09-21, post after Thread F)
+
+Voice: short sentences, no em dashes, no "first", no dates promised,
+never the m-word, no profit language. G6 is optional; it is the REKT-crew
+post and only works if it's true and plain.
+
+**G1**
+Quick update on ProofLaunch on Robinhood Chain. Everything below is live
+or on mainnet with a hash.
+
+**G2**
+Every launch page now shows the backer roster: every wallet, what it put
+in, and after launch whether it's still holding. Read from the contract,
+not self-reported. If a genesis wallet dumped, you can see it.
+
+**G3**
+Also live: a chat room per launch (one wallet signature to post), the
+creator's track record on every page, and banners. The page now looks
+like the one on the SOL side, because it does the same job.
+
+**G4**
+Built and tested, waiting on the next contract generation:
+
+Backers who sell stop earning. Sell half, earn half. Sell all, your
+share goes to platform token stakers.
+
+And a pre-launch lock. Pick it when you take a seat. Your tokens stay in
+the campaign contract until the date. Visible to everyone before launch.
+Nobody can shorten it, including us.
+
+**G5**
+Our own token is next, launched through these same contracts on the
+same terms as every creator.
+
+Zero dev allocation. One public seat from our known wallet, locked for a
+year. Holders earn the fee stream in SpaceX.
+
+Ticker and date when the contracts are verified. Not before.
+
+**G6 (optional, the receipts post)**
+We combed our public repo today before the token. Found a test wallet's
+key sitting in a script since July. Wallet held under a cent. Key
+removed, history scrubbed, tool now reads from the environment.
+
+Saying it because the roster does the same thing to backers. Rules
+apply to us first.
+
+**G7**
+Contracts, receipts, findings, and the test suite are all public:
+github.com/Based-LTD/prooflaunch
+
+prooflaunch.fun
