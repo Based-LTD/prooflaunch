@@ -10,6 +10,8 @@ Legs:
 - platform (7%): `0xD994AE0945c787A487c6dbd5188512E358986E29` (founder Phantom EVM)
 - holder-rewards (3%): `0x6ca08565CAf4f5CaAfB4BfeeCEcE6E0Ea3c65dcB` (dedicated account; future platform-token buyback feed)
 
+**Source verification (2026-09-21):** EquityRouter, LegDeployerV3, CampaignFactoryV5 (v7) + CampaignDeployerV3, CampaignV3 + FeeSplitterV3 (RWA TEST), CampaignFactoryV4 (v6), LegDeployerV2 — all `exact_match` on Sourcify (chain 4663), submitted with `verify.sh`. Blockscout's API is Cloudflare-walled; it imports Sourcify matches.
+
 Deployer: `0xC571bf9770c147c7643f87366B2e6D99f736c58A` — throwaway, no
 post-deploy authority (contracts are ownerless). Keystore at
 `~/.rhc-deployer/` may be discarded.

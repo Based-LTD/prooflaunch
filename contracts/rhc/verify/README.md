@@ -1,3 +1,8 @@
+# Verification status: ALL 8 exact_match on Sourcify (2026-09-21) via `bash ../verify.sh`
+
+Blockscout imports Sourcify matches; if an address still shows bytecode, use
+"Verify & publish → via Sourcify" or the standard-JSON path below.
+
 # Verifying the live contracts on Blockscout (browser path)
 
 The explorer's API is behind a Cloudflare browser challenge, so

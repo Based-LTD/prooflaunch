@@ -3,9 +3,9 @@
 # the source people read on the explorer is provably the deployed bytecode.
 #
 # 2026-09-21: Blockscout's /api is behind a Cloudflare browser challenge and
-# rejects forge. Until that changes, use the BROWSER path in verify/README.md
-# (one standard-input.json for every contract). This script stays for the day
-# the API answers again.
+# rejects forge, so this submits to SOURCIFY (not walled; Blockscout imports
+# Sourcify matches). All 8 below: exact_match on 2026-09-21. The browser path
+# in verify/README.md remains as a fallback.
 #
 # Run from contracts/rhc (foundry.toml settings — via_ir, optimizer runs 200 —
 # must match the deploy build):   bash verify.sh
@@ -16,7 +16,7 @@
 # automatically once the parent type is verified; if a specific instance still
 # shows unverified, verify it with explicit --constructor-args.
 set -euo pipefail
-V=(--verifier blockscout --verifier-url https://robinhoodchain.blockscout.com/api/ --chain-id 4663 --rpc-url https://rpc.mainnet.chain.robinhood.com --guess-constructor-args --watch)
+V=(--verifier sourcify --chain-id 4663 --rpc-url https://rpc.mainnet.chain.robinhood.com --guess-constructor-args --watch)
 
 verify() { echo; echo "── $2 @ $1"; forge verify-contract "${V[@]}" "$1" "$2" || echo "!! failed: $2"; }
 
