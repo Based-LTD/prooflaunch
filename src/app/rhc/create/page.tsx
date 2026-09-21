@@ -7,6 +7,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAccount, useReadContract, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, parseUnits, formatUnits, decodeEventLog, isAddress } from 'viem';
+import { useSignMessage } from 'wagmi';
+import { uploadBanner, attachBanner, BANNER_MAX_BYTES } from '../CampaignBanner';
 import { AlertCircle, Upload, X } from 'lucide-react';
 import {
   POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, V7_LIVE, QUOTE_ASSETS, clearBoardCache,
@@ -139,6 +141,22 @@ export default function CreateCampaignPage() {
   });
   const { data: receipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const [created, setCreated] = useState<string | null>(null);
+  // Optional 3:1 banner — off-chain (pons meta has no banner field). It is
+  // uploaded before the tx and bound to the new campaign by one signature
+  // right after the CampaignCreated event lands.
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const bannerUrlRef = useRef<string | null>(null);
+  const [bannerState, setBannerState] = useState<'none' | 'pending' | 'signing' | 'done' | 'failed'>('none');
+  const { signMessageAsync } = useSignMessage();
+  const bindBanner = async (campaign: string) => {
+    if (!bannerUrlRef.current || !address) return;
+    setBannerState('signing');
+    try { await attachBanner(campaign as `0x${string}`, address, bannerUrlRef.current, signMessageAsync); setBannerState('done'); }
+    catch { setBannerState('failed'); }
+  };
 
   const activeStack = botsEnabled ? stack : [];
   const botsPct = activeStack.reduce((s, b) => s + (Number(b.pct) || 0), 0);
@@ -174,8 +192,10 @@ export default function CreateCampaignPage() {
         try {
           const ev = decodeEventLog({ abi: factoryV4Abi, data: log.data, topics: log.topics });
           if (ev.eventName === 'CampaignCreated') {
-            setCreated((ev.args as { campaign: string }).campaign);
+            const campaignAddr = (ev.args as { campaign: string }).campaign;
+            setCreated(campaignAddr);
             clearBoardCache(); // the board must show this campaign on the very next visit
+            if (bannerUrlRef.current) void bindBanner(campaignAddr);
           }
         } catch { /* not ours */ }
       }
@@ -199,6 +219,11 @@ export default function CreateCampaignPage() {
         setUploading(false);
         return;
       }
+      setUploading(false);
+    }
+    if (bannerFile) {
+      try { setUploading(true); bannerUrlRef.current = await uploadBanner(bannerFile); setBannerState('pending'); }
+      catch (e) { setBannerError(e instanceof Error ? e.message : String(e)); setUploading(false); return; }
       setUploading(false);
     }
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(f.days) * 86400);
@@ -330,6 +355,17 @@ export default function CreateCampaignPage() {
             >
               prooflaunch.fun/rhc/campaign/{created}
             </a>
+            {bannerState !== 'none' && (
+              <p className="mt-3 text-[10px] font-mono uppercase tracking-widest">
+                {bannerState === 'signing' && <span className="text-[var(--accent)] animate-pulse">&gt; Sign once to attach your banner…</span>}
+                {bannerState === 'done' && <span className="text-[var(--success)]">✓ Banner attached</span>}
+                {(bannerState === 'failed' || bannerState === 'pending') && (
+                  <button type="button" onClick={() => void bindBanner(created)} className="text-[var(--accent)] underline underline-offset-4">
+                    Banner not attached yet — sign to attach it
+                  </button>
+                )}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -512,6 +548,37 @@ export default function CreateCampaignPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Banner — optional, like the SOL submit page. Off-chain; bound
+                    to the campaign by one signature after creation. */}
+                <div>
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-1.5 block">Banner <span className="text-[var(--muted-soft)]">(optional · 1500×500 · under 2 MB)</span></span>
+                  {bannerPreview ? (
+                    <div className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={bannerPreview} alt="Banner preview" className="w-full block border border-[var(--accent)]" style={{ aspectRatio: '3 / 1', objectFit: 'cover' }} />
+                      <button type="button" aria-label="Remove banner"
+                        onClick={() => { setBannerFile(null); setBannerPreview(null); if (bannerInputRef.current) bannerInputRef.current.value = ''; }}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-[var(--error)] flex items-center justify-center hover:opacity-90">
+                        <X className="w-3 h-3 text-[#0a0a0a]" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => bannerInputRef.current?.click()}
+                      className="w-full border border-dashed border-[var(--border)] hover:border-[var(--accent)] transition-colors flex items-center justify-center gap-2 text-[var(--muted)] hover:text-[var(--accent)] py-4">
+                      <Upload className="w-4 h-4" />
+                      <span className="text-[9px] font-mono uppercase tracking-widest">Upload banner · 3:1</span>
+                    </button>
+                  )}
+                  <input ref={bannerInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+                    onChange={(e) => {
+                      setBannerError(null);
+                      const file = e.target.files?.[0]; if (!file) return;
+                      if (file.size > BANNER_MAX_BYTES) { setBannerError(`Banner must be under 2 MB (you have ${(file.size / 1024 / 1024).toFixed(1)} MB)`); return; }
+                      setBannerFile(file); setBannerPreview(URL.createObjectURL(file));
+                    }} />
+                  {bannerError && <span className="block mt-1 text-[10px] font-mono text-[var(--error)]">{bannerError}</span>}
                 </div>
 
                 {/* Description — full width below */}

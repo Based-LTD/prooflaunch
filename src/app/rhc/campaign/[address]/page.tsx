@@ -18,9 +18,12 @@ import { WpPanel } from '../../walletproof';
 import { BackerRoster } from '../../BackerRoster';
 import { CampaignChat } from '../../CampaignChat';
 import { CreatorLaunches } from '../../CreatorLaunches';
+import { CampaignIdentityBar } from '../../CampaignIdentityBar';
+import { BannerManager, useCampaignBanner } from '../../CampaignBanner';
+import { DashboardCard } from '@/components/meme/DashboardCard';
 
 interface State {
-  meta: { name: string; symbol: string; description: string; logo: string };
+  meta: { name: string; symbol: string; description: string; logo: string; socials?: { twitter: string; telegram: string; discord: string; website: string; farcaster: string } };
   creator: `0x${string}`;
   goal: bigint; minDeposit: bigint; maxDeposit: bigint; maxBackers: bigint;
   deadline: bigint; totalRaised: bigint; backerCount: bigint;
@@ -100,6 +103,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const { writeContract, data: txHash, isPending, error: writeErr, reset } = useWriteContract();
   const { data: walletClient } = useWalletClient();
   const [watchState, setWatchState] = useState<'idle' | 'asking' | 'ok' | 'nope'>('idle');
+  const [bannerKey, setBannerKey] = useState('');
+  const banner = useCampaignBanner(addr, bannerKey);
   const { isSuccess: txConfirmed, data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
 
   // ── action receipts (punch list #5) ─────────────────────────────────
@@ -350,7 +355,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   };
 
   const shell = (children: React.ReactNode) => (
-    <div className="max-w-3xl mx-auto pb-8"><RhcHeader />{children}</div>
+    <div className="max-w-6xl mx-auto pb-8"><RhcHeader />{children}</div>
   );
 
   if (err) return shell(
@@ -392,37 +397,35 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
 
   return shell(
     <>
-      <div className="border border-[var(--border)] bg-[var(--card)]">
-        {/* Card header — MemeCard convention */}
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5 gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
-            {'// '}${s.meta.symbol} — {s.meta.name}
-          </span>
-          <StatusPill launched={s.launched} cancelled={s.cancelled} refundable={s.refundable}
-            deadline={s.deadline} totalRaised={s.totalRaised} goal={s.goal} />
-        </div>
+      {/* ── banner + identity — the SOL page's shape: wide hero if the
+          creator set one, then one slim strip so the dashboard sits high. */}
+      {banner && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={banner} alt="" className="w-full block border border-[var(--border)] mb-3" style={{ aspectRatio: '3 / 1', objectFit: 'cover' }} />
+      )}
+      <CampaignIdentityBar
+        logo={s.meta.logo} name={s.meta.name} symbol={s.meta.symbol} creator={s.creator}
+        token={s.launched ? s.token : undefined}
+        socials={s.meta.socials}
+        status={<StatusPill launched={s.launched} cancelled={s.cancelled} refundable={s.refundable}
+          deadline={s.deadline} totalRaised={s.totalRaised} goal={s.goal} />}
+        metrics={[
+          { k: 'Backers', v: s.backerCount.toString() + (s.maxBackers > 0n ? ` / ${s.maxBackers}` : '') },
+          { k: s.launched ? 'Raised' : 'Raised of ' + q(s.goal), v: `${q(s.launched ? s.totalRaisedAtLaunch : s.totalRaised)} ${qSym}` },
+          ...(s.launched ? [] : [{ k: 'Ends', v: new Date(Number(s.deadline) * 1000).toLocaleDateString(), accent: true }]),
+        ]}
+      />
 
-        <div className="p-4">
-          {/* Avatar + name — the board card's anatomy; the detail page had
-              no picture at all until the first prod test (punch list #1). */}
-          <div className="flex items-start gap-3 mb-4">
-            {s.meta.logo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={s.meta.logo} alt={s.meta.name} className="w-14 h-14 object-cover border border-[var(--border)] flex-shrink-0" />
-            ) : (
-              <div className="w-14 h-14 border border-[var(--accent)] bg-[var(--background)] flex items-center justify-center flex-shrink-0">
-                <span className="font-mono font-semibold text-[var(--accent)] text-sm">{s.meta.symbol.slice(0, 4)}</span>
-              </div>
-            )}
-            <div className="min-w-0">
-              <div className="font-mono font-semibold text-base truncate">{s.meta.name}</div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">${s.meta.symbol}</div>
-              {s.meta.description && (
-                <p className="text-sm font-mono text-[var(--muted)] mt-1">{s.meta.description}</p>
-              )}
-            </div>
-          </div>
+      {s.meta.description && (
+        <DashboardCard label="DESCRIPTION" className="mt-3">
+          <p className="text-sm font-mono text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap">{s.meta.description}</p>
+        </DashboardCard>
+      )}
 
+      {/* ── RAISE — the action panel, full width, only while there is
+          something to do (back, withdraw, launch, refund, cancel). */}
+      {!s.launched && (
+        <DashboardCard label={s.cancelled ? 'CANCELLED' : s.refundable ? 'REFUNDS OPEN' : 'RAISE'} meta={`${Math.min(100, pct)}% funded`} className="mt-3">
           {/* Slot grid — the SOL detail treatment: filled blocks for
               backers in, outlined for open slots. Open raises (maxBackers
               0) show the bar alone. */}
@@ -640,9 +643,50 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             </button>
           )}
 
-          {/* ── post-launch ─────────────────────────────────────── */}
+        </DashboardCard>
+      )}
+
+      {/* tx status — one strip, whatever card the action came from */}
+      {((isPending || txHash) && !txConfirmed) || writeErr || (lastReceipt && !isPending && !txHash) ? (
+        <div className="mt-3">
+          {(isPending || txHash) && !txConfirmed && (
+            <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] animate-pulse">
+              {isPending ? '> Confirm in wallet…' : '> Tx pending…'}
+            </p>
+          )}
+          {writeErr && (
+            <p className="mt-4 text-xs font-mono text-[var(--error)]">
+              {(writeErr as Error).message.split('\n')[0].slice(0, 160)}
+            </p>
+          )}
+          {lastReceipt && !isPending && !txHash && (
+            <p className="mt-4 text-xs font-mono text-[var(--success)] border border-[var(--success)]/40 bg-[var(--success)]/5 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>✓ {lastReceipt.text}</span>
+              <a href={`https://robinhoodchain.blockscout.com/tx/${lastReceipt.hash}`} target="_blank" rel="noopener noreferrer"
+                className="text-[10px] uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]">
+                tx ↗
+              </a>
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {/* ── DASHBOARD GRID — the SOL layout: wide column for the roster,
+          narrow rail for trade / rewards / chat. */}
+      <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
+        <div className="lg:col-span-2 space-y-3">
+          <BackerRoster
+            address={addr} launched={s.launched} me={me} symbol={s.meta.symbol}
+            quoteSymbol={qSym} quoteDecimals={qDec} isErc20Quote={isErc20Quote}
+            refreshKey={lastReceipt?.hash ?? ''}
+          />
+          <CreatorLaunches creator={s.creator} exclude={addr} />
+        </div>
+        <div className="space-y-3">
           {s.launched && (
-            <div className="mt-5 border-t border-[var(--border)] pt-4 space-y-3">
+            <DashboardCard label="TRADE" meta={s.curveGraduated ? 'GRADUATED' : 'LIVE'}>
+              <div className="space-y-3">
+
               <div>
                 <span className={label}>Token</span>
                 <a href={explorerUrl(s.token)} target="_blank" rel="noopener noreferrer"
@@ -650,12 +694,6 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   {s.token}
                 </a>
               </div>
-              <WpPanel token={s.token} />
-              {s.myContribution > 0n && !s.myTokensClaimed && (
-                <button onClick={() => act('claimTokens')} disabled={isPending} className="btn-primary">
-                  Claim {(Number(myTokenShare) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol}
-                </button>
-              )}
               {s.myTokensClaimed && (
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
@@ -696,25 +734,13 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   </a>
                 </div>
               )}
-              {isConnected && s.myEth < 300_000n * s.gasPrice && (
-                <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--warning,#c9a227)] border border-[var(--warning,#c9a227)]/40 bg-[var(--warning,#c9a227)]/5 px-3 py-2">
-                  {'> '}This wallet holds {fmtEth(s.myEth, 7)} ETH — not enough for gas. Add about 0.0005 ETH before trading or claiming, or the wallet will refuse with a simulation error.
-                </p>
-              )}
               {/* ── TRADE — direct curve access on OUR page. Token access
                   must never depend on an external UI or a wallet's display:
                   buy/sell are public curve functions, so we call them. ── */}
               {s.launched && s.curve && !s.curveGraduated && (
-                <div className="mt-5 border border-[var(--border)] bg-[var(--background)]">
-                  <div className="border-b border-[var(--border)] px-3 py-2 flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                      {'// '}TRADE — pons bonding curve, direct
-                    </span>
-                    <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                      your wallet signs, no middleman
-                    </span>
-                  </div>
-                  <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">pons bonding curve, direct · your wallet signs, no middleman</p>
+                  <div className="grid grid-cols-1 gap-3">
                     <div className="space-y-2">
                       <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">Buy with ETH</span>
                       <div className="flex gap-2">
@@ -772,18 +798,35 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                       </div>
                     </div>
                   </div>
-                  <p className="px-3 pb-2.5 text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
+                  <p className="pt-2 text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
                     Trades hit the pons curve directly and pay its 1% fee + this token&apos;s {'creator tax'} —
                     which flows back to this campaign&apos;s backers. ETH from sells lands in your wallet instantly.
                   </p>
                 </div>
               )}
               {s.launched && s.curve && s.curveGraduated && (
-                <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                   {'> '}Graduated — trades on the locked Uniswap v4 pool via pons.
                 </p>
               )}
 
+                <WpPanel token={s.token} />
+              </div>
+            </DashboardCard>
+          )}
+          {s.launched && (
+            <DashboardCard label={s.myContribution > 0n ? 'YOUR REWARDS' : 'FEES'}>
+              <div className="space-y-3">
+              {s.myContribution > 0n && !s.myTokensClaimed && (
+                <button onClick={() => act('claimTokens')} disabled={isPending} className="btn-primary">
+                  Claim {(Number(myTokenShare) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol}
+                </button>
+              )}
+              {isConnected && s.myEth < 300_000n * s.gasPrice && (
+                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning,#c9a227)] border border-[var(--warning,#c9a227)]/40 bg-[var(--warning,#c9a227)]/5 px-3 py-2">
+                  {'> '}This wallet holds {fmtEth(s.myEth, 7)} ETH — not enough for gas. Add about 0.0005 ETH before trading or claiming, or the wallet will refuse with a simulation error.
+                </p>
+              )}
               {/* ── FEES. A backer needs ONE sentence — what they've earned —
                   and ONE button. Collecting from pons is plumbing and happens
                   inside that button. The total waiting and "anyone may
@@ -809,13 +852,9 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   </p>
                 );
                 return (
-                  <div className="mt-5 border border-[var(--border)] bg-[var(--background)]">
-                    <div className="border-b border-[var(--border)] px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                        {'// '}{iBack ? 'YOUR FEES' : 'FEES'} — {(s.backerBps / 100).toFixed(0)}% of every trade&apos;s creator tax goes to backers
-                      </span>
-                    </div>
-                    <div className="p-3 space-y-3">
+                  <div>
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">{(s.backerBps / 100).toFixed(0)}% of every trade&apos;s creator tax goes to backers</p>
+                    <div className="space-y-3">
                       {iBack ? (
                         earned > 0n ? (
                           <>
@@ -886,42 +925,20 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   </div>
                 );
               })()}
-            </div>
+              </div>
+            </DashboardCard>
           )}
-
-          {(isPending || txHash) && !txConfirmed && (
-            <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] animate-pulse">
-              {isPending ? '> Confirm in wallet…' : '> Tx pending…'}
-            </p>
-          )}
-          {writeErr && (
-            <p className="mt-4 text-xs font-mono text-[var(--error)]">
-              {(writeErr as Error).message.split('\n')[0].slice(0, 160)}
-            </p>
-          )}
-          {lastReceipt && !isPending && !txHash && (
-            <p className="mt-4 text-xs font-mono text-[var(--success)] border border-[var(--success)]/40 bg-[var(--success)]/5 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>✓ {lastReceipt.text}</span>
-              <a href={`https://robinhoodchain.blockscout.com/tx/${lastReceipt.hash}`} target="_blank" rel="noopener noreferrer"
-                className="text-[10px] uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]">
-                tx ↗
-              </a>
-            </p>
-          )}
+          <CampaignChat campaign={addr} />
         </div>
       </div>
 
-      {/* ── the community layer — what makes a launch page ProofLaunch on
-          the SOL side: who is in, who is still in, and a room to talk. */}
-      <div className="mt-4 space-y-4">
-        <BackerRoster
-          address={addr} launched={s.launched} me={me} symbol={s.meta.symbol}
-          quoteSymbol={qSym} quoteDecimals={qDec} isErc20Quote={isErc20Quote}
-          refreshKey={lastReceipt?.hash ?? ''}
-        />
-        <CampaignChat campaign={addr} />
-        <CreatorLaunches creator={s.creator} exclude={addr} />
-      </div>
+      {/* Creator controls — full-width row below the grid, like the SOL
+          page post-launch. Today: the banner. */}
+      {isConnected && iAmCreator && (
+        <DashboardCard label="CREATOR CONTROLS" className="mt-3">
+          <BannerManager campaign={addr} current={banner} onChanged={() => setBannerKey(String(Date.now()))} />
+        </DashboardCard>
+      )}
 
       <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] break-all">
         Campaign{' '}
