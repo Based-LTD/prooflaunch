@@ -31,6 +31,7 @@ interface State {
   curve: `0x${string}` | null;
   curveGraduated: boolean;
   myCurveAllowance: bigint;
+  ponsOwed: bigint; // creator fees sitting in pons' escrow, owed to this splitter, not yet collected
   v7: V7 | null; // null for v1–v6 campaigns; this page serves every generation
 }
 
@@ -58,6 +59,9 @@ interface V7 {
 }
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000' as `0x${string}`;
+// pons V2 FeeEscrow — creator tax accrues here (curve → escrow via pons'
+// sweeper) until someone cranks it into the campaign's splitter.
+const PONS_FEE_ESCROW = '0xd3AFEB2a57f70eF218Aa82451c51B2fb0416Ac9e' as `0x${string}`;
 
 /// Quote amounts are NOT always 18 decimals — USDG is 6, and treating it
 /// as ETH would misprice every input by a factor of a trillion.
@@ -153,6 +157,16 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         isV4 = true;
       } catch { /* pre-v4 campaign */ }
       const feeAsset = (isV4 ? zero : RHC_WETH) as `0x${string}`;
+      // What pons already owes this campaign but nobody has pulled down yet.
+      // Without this the page shows a zero fee share while real fees sit one
+      // hop upstream, and the user has no idea Collect is the next step.
+      const ponsOwed = isV4 && launched
+        ? await rhcPublicClient.readContract({
+            address: PONS_FEE_ESCROW,
+            abi: [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }] as const,
+            functionName: 'balanceOf', args: [feeSplitter],
+          }).catch(() => 0n) as bigint
+        : 0n;
 
       let myFeeEntitlement = 0n, myFeesClaimed = 0n, myTokenBalance = 0n;
       let curveGraduated = false, myCurveAllowance = 0n;
@@ -246,7 +260,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
         totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4,
-        curve, curveGraduated, myCurveAllowance, v7 });
+        curve, curveGraduated, myCurveAllowance, ponsOwed, v7 });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -724,6 +738,11 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
 
               {s.myContribution > 0n && (
                 <div className="flex flex-wrap items-center gap-3">
+                  {s.ponsOwed > 0n && (
+                    <span className="w-full text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                      {'> '}{fmtEth(s.ponsOwed, 6)} ETH of creator fees are waiting at pons — hit Collect From pons, then Claim
+                    </span>
+                  )}
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                     Your fee share ({s.isV4 ? 'ETH' : 'WETH'}): <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)}</span>
                   </span>
@@ -755,9 +774,11 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     onClick={() => act(s.isV4 ? 'pokeHarvest' : 'pokeCollect')}
                     disabled={isPending}
                     title="Permissionless: pull accrued creator fees from pons into the splitter"
-                    className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+                    className={s.ponsOwed > 0n
+                      ? 'btn-primary !px-3 !py-1.5 !text-[10px]'
+                      : 'px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors'}
                   >
-                    Collect From pons
+                    Collect From pons{s.ponsOwed > 0n ? ` — ${fmtEth(s.ponsOwed, 5)} ETH waiting` : ''}
                   </button>
                 </div>
               )}

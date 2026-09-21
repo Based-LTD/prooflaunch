@@ -937,6 +937,13 @@ export default function CreateCampaignPage() {
                     <span className="text-sm font-mono text-[var(--muted)]">%</span>
                   </label>
                 </div>
+                {/* pons charges its own 1% protocol fee on every trade on top
+                    of the creator tax; a creator should learn that here, not
+                    on Axiom after launch (punch list #6). */}
+                <p className="text-[11px] font-mono text-[var(--foreground)] leading-relaxed">
+                  Traders pay <span className="text-[var(--accent)] font-semibold">{((Number(taxPct) || 0) + 1).toFixed(2).replace(/\.?0+$/, '')}%</span> on every buy and sell:
+                  your {taxPct || 0}% + pons&apos; 1% protocol fee. The 1% is pons revenue — it funds $PONS buybacks, the flywheel every launch here feeds.
+                </p>
                 <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
                   The pons trading tax on every buy and sell — same dial as launching on pons
                   directly, with one difference: here the tax flows to your campaign&apos;s
@@ -1322,6 +1329,7 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
             </>
           )}
           <PreviewStat label="Creator tax" value={`${taxPct}%`} tone="accent" />
+          <PreviewStat label="Trader pays" value={`${taxPct + 1}%`} />
           <PreviewStat label="pons buyback" value={buyback ? 'ON' : 'OFF'} tone={buyback ? 'gold' : 'default'} />
         </div>
 
