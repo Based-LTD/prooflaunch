@@ -13,17 +13,6 @@ import {IPonsV2Factory, IPonsV2LaunchAndBuy} from "../src/interfaces/IPonsV2.sol
 import {IPoolManagerMin, IV4StateView} from "../src/interfaces/IUniV4.sol";
 import {MockERC20, MockPonsFactory, MockLaunchAndBuy} from "./CampaignV3.t.sol";
 
-/// Stand-in for RewardsVault as the holder-rewards leg: only stakeToken()
-/// and stakedOf() matter to the splitter. Set after launch (a real vault
-/// is deployed after the platform token exists).
-contract MockVault {
-    address public stakeToken;
-    mapping(address => uint256) public stakedOf;
-    function setStakeToken(address t) external { stakeToken = t; }
-    function stake(address who, uint256 amt) external { MockERC20(stakeToken).transferFrom(who, address(this), amt); stakedOf[who] += amt; }
-    receive() external payable {}
-}
-
 /// "Backers who sell stop receiving fee share" — the founder's question,
 /// 2026-09-21. Every test is one sentence of the rule in FeeSplitterV4.
 contract HoldWeightedTest is Test {
@@ -225,60 +214,6 @@ contract HoldWeightedTest is Test {
         vm.expectRevert(FeeSplitterV4.NothingToClaim.selector);
         vm.prank(carol); sp.claimBacker(ETH);
     }
-
-    // ── staking is holding (the platform token's own raise) ──────────
-
-    function _campaignWithVault() internal returns (CampaignV4 c2, FeeSplitterV4 sp2, MockVault vault) {
-        vault = new MockVault();
-        CampaignFactoryV6 cf2 = new CampaignFactoryV6(
-            PLATFORM, address(vault), 700, 300,
-            IPonsV2Factory(address(ponsF)), IPonsV2LaunchAndBuy(address(lab)), address(0xE5C60),
-            IPoolManagerMin(address(0xB0)), address(0xB1), IV4StateView(address(0xB2)),
-            new LegDeployerV3(), FEE, IERC20(address(0)), 0, address(0), address(new SplitterDeployerV4())
-        );
-        CampaignParams memory p;
-        p.goal = 1 ether; p.minDeposit = 0.1 ether; p.deadline = block.timestamp + 1 days;
-        p.meta = PonsTokenMeta("PLT", "PLT", "", "t", PonsSocials("", "", "", "", ""), address(0));
-        p.allowlist = new address[](0);
-        vm.prank(creator);
-        c2 = cf2.createCampaign{value: FEE}(p, 0, 0, new address[](0), new uint16[](0), bytes32(uint256(3)));
-        vm.prank(alice); c2.deposit{value: 0.6 ether}();
-        vm.prank(bob); c2.deposit{value: 0.4 ether}();
-        vm.prank(creator); c2.launch();
-        sp2 = c2.feeSplitter();
-        assertEq(sp2.forfeitTo(), address(vault));
-    }
-
-    function test_stakedInVault_countsAsHeld_whenTokenIsTheStakeToken() public {
-        (CampaignV4 c2, FeeSplitterV4 sp2, MockVault vault) = _campaignWithVault();
-        MockERC20 t2 = MockERC20(c2.token());
-        vault.setStakeToken(address(t2));
-        vm.prank(alice); c2.claimTokens();
-        vm.prank(alice); t2.approve(address(vault), type(uint256).max);
-        vault.stake(alice, 600_000 ether);          // wallet 0, vault 600k
-        assertEq(t2.balanceOf(alice), 0);
-        assertEq(sp2.heldBps(alice), 10_000, "staked is held");
-        (bool ok, ) = address(sp2).call{value: 1 ether}(""); require(ok);
-        vm.prank(alice); uint256 paid = sp2.claimBacker(ETH);
-        assertEq(paid, 0.54 ether);
-    }
-
-    function test_stakedInVault_ignored_whenVaultStakesADifferentToken() public {
-        (CampaignV4 c2, FeeSplitterV4 sp2, MockVault vault) = _campaignWithVault();
-        MockERC20 other = new MockERC20("OTHER");
-        vault.setStakeToken(address(other));
-        vm.prank(alice); c2.claimTokens();
-        _dumpTo(alice, MockERC20(c2.token()), 600_000 ether); // sells everything
-        assertEq(sp2.heldBps(alice), 0, "a vault for another token proves nothing");
-    }
-
-    function test_eoaRewardsRecipient_isNotAVault_andDoesNotBreakHeld() public {
-        // the default fixture's REWARDS is a plain address: heldBps still works
-        _claimTokens(alice);
-        assertEq(sp.heldBps(alice), 10_000);
-    }
-
-    function _dumpTo(address who, MockERC20 t, uint256 amt) internal { vm.prank(who); t.transfer(address(0xDEAD), amt); }
 
     function test_preLaunch_settleAndClaim_revert() public {
         // a fresh campaign that has not launched

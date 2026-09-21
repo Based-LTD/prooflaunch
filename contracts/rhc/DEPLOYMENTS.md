@@ -56,18 +56,34 @@ Prod built with `NEXT_PUBLIC_V7_LIVE=1` / `NEXT_PUBLIC_EQUITY_ROUTER_LIVE=1` (bu
 Deploy gotchas learned: Foundry loads `.env` from the SHELL cwd, not `--root` — run from `contracts/rhc/`. Forge resolves the script path against cwd too. Deployer `0xC571bf97…` funded 0.002768 → spent ≈0.00093 across both.
 
 
-## v8 — hold-weighted fees (built 2026-09-21, NOT DEPLOYED)
+## v8 — the rev flywheel (rebuilt 2026-09-22, NOT DEPLOYED)
 
-Founder decision 2026-09-21: "backers who sell stop receiving fee share",
-like the SOL side, with the forfeited share going to platform-token stakers.
+Founder decisions 2026-09-21/22: pivot to "rev meta". Two fixed legs on every
+campaign's creator tax, immutable in the factory and every splitter:
+**proofBurnBps → ProofBurner** (buys the platform token, burns it) and
+**platformBps → platform** (~10%). Backers get the remainder after the
+creator's optional coin-burn / pool-feeder / vault legs. Sellers' forfeited
+shares (hold rule) and every creation fee go to the burner too. The
+RewardsVault / staking plan is retired — burns and yield compete for the
+same ETH and burns are the meta.
 
 | Contract | Status | Notes |
 |---|---|---|
-| `FeeSplitterV4` | built, 14/14 tests | Standalone (V3 claim paths are non-virtual). `heldBps` = min(balance, allocation)/allocation; unclaimed = held. Fresh entitlement judged once (`backerSettled`); kept is paid or banked, lost → `legOwed[forfeitTo]`. `settle(backer, asset)` is a permissionless crank that locks a seller's forfeiture. `backerOwed(backer, asset)` is the UI number — NOT entitlement − claimed. |
-| `SplitterDeployerV4` | built | Carries the splitter's creation code out of the campaign (with it inlined, CampaignDeployerV4 hit 26.7KB > EIP-170). `msg.sender` becomes the splitter's campaign. |
-| `CampaignV4` | built | CampaignV3 + FeeSplitterV4 via the satellite; constructor gains `splitterDeployer_` after `equityRouter_`. `forfeitTo = legs[0]` = holder-rewards (the factory's leg order is load-bearing). **Pre-launch lock** (2026-09-21): `depositLocked(until)` / `depositTokenLocked(amount, until)` / `extendLock(until)`; `lockUntil(addr)` public; `claimTokens()` reverts `StillLocked` before the date; only ever longer, capped at `MAX_LOCK` = 4y; cleared by pre-launch withdraw; `claimExcess()` so a lock never traps the oversized-raise refund. Locked = held for fees (unclaimed). 6 tests in `PreLaunchLock.t.sol`. The UI (lock picker on the seat button, 🔒 tags on the roster) is live and probe-gated on `MAX_LOCK()`. |
-| `CampaignFactoryV6` (v8) | built | v7 + `splitterDeployer` immutable; `previewInitCodeHash` encodes it after the router (the browser grinder reads the hash on-chain, so no frontend encoding change). |
-| `script/DeployV6.s.sol` | ready | env: `PLATFORM_RECIPIENT`, `REWARDS_RECIPIENT` (**the RewardsVault** — deploy the platform token via v7, then the vault, then this), `EQUITY_ROUTER`, `LEG_DEPLOYER` (existing `0x518B6b80…`). |
+| `ProofBurner` | built, 9 unit + 3 live-fork tests | `BurnLegV3` with a fixed target: reads the platform token's own (launched) campaign at construction; `initializer = address(0)` so `init()` is unreachable. `pull(splitter)` / `pullMany` collect the ETH leg from any splitter (raw call, result ignored, only arriving ETH counts); `pullCampaignToken` burns foreign token-side fees; `crank()` burns held PROOF and buys+burns up to 0.2 ETH per block via the pons curve or the v4 pool. No withdraw, no owner, no retarget. Fork-proven on live pons V2: curve phase, v4 phase, and pulling a 30% leg from another campaign's splitter. |
+| `FeeSplitterV4` | built, 14 tests | Hold-weighted claims (sellers forfeit to `forfeitTo` = the burner); `settle()` crank; `backerOwed()` for the UI. Vault-stake path removed. |
+| `SplitterDeployerV4` / `CampaignV4` | built, 6 lock tests | Pre-launch lock; `forfeitTo = legs[0]` = the burner. |
+| `CampaignFactoryV6` (v8) | built | ctor: `platformFeeRecipient, proofBurner, platformBps, proofBurnBps, …`; creation fee → burner; legs order: burner FIRST, coin burn?, lp?, vaults…, platform LAST. |
+| `script/DeployProofBurner.s.sol` | ready | env `PROOF_CAMPAIGN` (the launched platform-token campaign). |
+| `script/DeployV6.s.sol` | ready | env `PROOF_BURNER`, `PLATFORM_BPS` (e.g. 1000), `PROOF_BURN_BPS` (e.g. 3000), `EQUITY_ROUTER`, `LEG_DEPLOYER`. |
+
+**Deploy order (forced by immutables):** platform token launches on v7 with a
+heavy coin-burn leg (`BurnLegV3` buys the campaign's own token = a PROOF
+burn from day one) → `DeployProofBurner` → `DeployV6` → UI flips.
+
+**Owed before deploy:** the split numbers (founder), the fee-card / audit
+page reading `proofBurner()` + a live "fees → burned" ticker from the
+burner's counters, explorer verification day-of, external review of
+`ProofBurner` (the review brief has the questions).
 
 Frontend (done 2026-09-21): the campaign page probes `forfeitTo()`; on a
 v8 splitter it reads `backerOwed` + `heldBps`, scales the projected

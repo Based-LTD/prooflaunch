@@ -69,20 +69,23 @@ contract CampaignDeployerV4 {
     }
 }
 
-/// v8 factory — v7 (CampaignFactoryV5) with one change: campaigns get a
-/// FeeSplitterV4, so a backer who sells stops earning and the forfeited
-/// share flows to the holder-rewards leg (the RewardsVault, once it is the
-/// recipient). Everything below this line is the v7 option surface:
-///   raises quoted in ETH, USDG, or tokenized stocks (any pons-approved
-///   pair) · team rounds with contract-enforced reserved seats · token-
-///   gated entry · CREATE2 signature addresses · creator tax · trustless
-///   bot legs (native-quoted raises) · creation fee with on-chain holder
-///   waiver. Policy lives here and only here; campaigns are untouchable.
+/// v8 factory — the rev flywheel. Two fixed legs come off every
+/// campaign's creator-tax stream, immutable here and in every splitter:
+///
+///   proofBurnBps → ProofBurner: buys the platform token and burns it
+///   platformBps  → the platform
+///
+/// The creator divides the rest between backers (always the remainder),
+/// the coin's own burn bot, the pool feeder and named vaults. Campaigns
+/// get a FeeSplitterV4, so a backer who sells stops earning and the share
+/// they forfeit goes to the burner too. Creation fees go to the burner.
+/// The burner can only exist once the platform token does, so this deploys
+/// after it. Everything else is the v7 option surface:
 contract CampaignFactoryV6 {
     address public immutable platformFeeRecipient;
-    address public immutable holderRewardsRecipient;
+    address public immutable proofBurner;
     uint16 public immutable platformBps;
-    uint16 public immutable holderRewardsBps;
+    uint16 public immutable proofBurnBps;
 
     IPonsV2Factory public immutable ponsFactory;
     IPonsV2LaunchAndBuy public immutable ponsLaunchAndBuy;
@@ -133,9 +136,9 @@ contract CampaignFactoryV6 {
 
     constructor(
         address platformFeeRecipient_,
-        address holderRewardsRecipient_,
+        address proofBurner_,
         uint16 platformBps_,
-        uint16 holderRewardsBps_,
+        uint16 proofBurnBps_,
         IPonsV2Factory ponsFactory_,
         IPonsV2LaunchAndBuy ponsLaunchAndBuy_,
         address ponsFeeEscrow_,
@@ -150,9 +153,9 @@ contract CampaignFactoryV6 {
         address splitterDeployer_
     ) {
         platformFeeRecipient = platformFeeRecipient_;
-        holderRewardsRecipient = holderRewardsRecipient_;
+        proofBurner = proofBurner_;
         platformBps = platformBps_;
-        holderRewardsBps = holderRewardsBps_;
+        proofBurnBps = proofBurnBps_;
         ponsFactory = ponsFactory_;
         ponsLaunchAndBuy = ponsLaunchAndBuy_;
         ponsFeeEscrow = ponsFeeEscrow_;
@@ -203,7 +206,9 @@ contract CampaignFactoryV6 {
         uint256 launchFeeEscrow = p.quoteToken == address(0) ? 0 : ponsFactory.launchFee();
         if (msg.value != fee + launchFeeEscrow) revert BadFee();
         if (fee > 0) {
-            (bool ok, ) = platformFeeRecipient.call{value: fee}("");
+            // every launch burns the platform token: the creation fee goes
+            // to the burner, not to us
+            (bool ok, ) = proofBurner.call{value: fee}("");
             if (!ok) revert BadFee();
         }
 
@@ -242,7 +247,8 @@ contract CampaignFactoryV6 {
 
     /// Leg table construction — the ONE implementation, shared by
     /// createCampaign and the vanity preview so they can never drift.
-    /// Order is load-bearing: rewards, burn?, lp?, vaults…, platform LAST
+    /// Order is load-bearing: PROOF burner FIRST (CampaignV4 reads legs[0]
+    /// as the forfeit recipient), coin burn?, lp?, vaults…, platform LAST
     /// (the splitter's dust absorber).
     function previewLegs(
         uint16 burnBps,
@@ -252,7 +258,7 @@ contract CampaignFactoryV6 {
         address burnLeg,
         address lpLeg
     ) public view returns (uint16 backerBps, address[] memory legs, uint16[] memory legBps) {
-        uint256 reserved = uint256(platformBps) + holderRewardsBps + burnBps + lpBps;
+        uint256 reserved = uint256(platformBps) + proofBurnBps + burnBps + lpBps;
         for (uint256 i = 0; i < vaultBps.length; i++) reserved += vaultBps[i];
         if (reserved > 10_000) revert LegOverflow();
         backerBps = uint16(10_000 - reserved);
@@ -261,7 +267,7 @@ contract CampaignFactoryV6 {
         legs = new address[](legCount);
         legBps = new uint16[](legCount);
         uint256 n = 0;
-        legs[n] = holderRewardsRecipient; legBps[n++] = holderRewardsBps;
+        legs[n] = proofBurner; legBps[n++] = proofBurnBps;
         if (burnBps > 0) { legs[n] = burnLeg; legBps[n++] = burnBps; }
         if (lpBps > 0) { legs[n] = lpLeg; legBps[n++] = lpBps; }
         for (uint256 i = 0; i < vaultRecipients.length; i++) {

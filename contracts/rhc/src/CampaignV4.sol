@@ -148,8 +148,8 @@ contract CampaignV4 {
         // to the creator if the raise never launches.
         launchFeeEscrowed = msg.value;
         for (uint256 i = 0; i < p.allowlist.length; i++) allowlisted[p.allowlist[i]] = true;
-        // Forfeited backer shares go to the holder-rewards leg. The factory's
-        // leg table is load-bearing here: rewards is ALWAYS legs[0]
+        // Forfeited backer shares go to the ProofBurner. The factory's leg
+        // table is load-bearing here: the burner is ALWAYS legs[0]
         // (CampaignFactoryV6.previewLegs), platform always last.
         if (legRecipients_.length == 0) revert BadAmount();
         // Deployed through a satellite so the splitter's creation code does

@@ -222,6 +222,21 @@ cost per asset: `contracts/rhc/RWA_POOLS.md`.
 
 ## v8 addendum (BUILT 2026-09-21, tested, NOT deployed — please review before it is)
 
+**Revised 2026-09-22 — the flywheel.** The RewardsVault/staking plan is
+retired. In its place: `ProofBurner.sol`, an ownerless sink that collects a
+fixed per-campaign leg (`proofBurnBps`, factory policy), every seller's
+forfeited share (`FeeSplitterV4.forfeitTo`) and every creation fee, and
+can only ever buy the platform token and send it to `0x…dEaD` (pons curve
+pre-graduation, Uniswap v4 PoolManager after; 0.2 ETH per crank, one crank
+per block). Target token fixed at construction from the platform token's
+own launched campaign; `initializer = address(0)` makes the inherited
+`init()` unreachable. `pull(address)` is a raw call to a caller-supplied
+address with the result ignored — confirm a hostile target can do nothing
+but waste the caller's gas, and that the reentrancy guard keeps
+`totalEthPulled` honest. `pullCampaignToken` burns foreign token-side legs
+(is that the right disposal?). Deploy order: token (v7) → burner → v8.
+Tests: `ProofBurner.t.sol` (9), `ForkProofBurner.t.sol` (3, live pons V2).
+
 Files: `FeeSplitterV4.sol`, `SplitterDeployerV4.sol`, `CampaignV4.sol`,
 `CampaignFactoryV6.sol`, `script/DeployV6.s.sol`; tests
 `HoldWeighted.t.sol` (17) and `PreLaunchLock.t.sol` (6). Deploy order is
