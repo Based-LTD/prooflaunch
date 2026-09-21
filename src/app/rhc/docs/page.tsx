@@ -520,6 +520,31 @@ export default function RhcDocsPage() {
                 </p>
               </div>
               <div className="bg-[var(--background)] border-2 border-[var(--warning)]/40 p-4 space-y-2">
+                <h3 className="font-bold flex items-center gap-2 uppercase tracking-wide text-[var(--accent)]">
+                  <Shield className="w-5 h-5" />
+                  For reviewers
+                </h3>
+                <p className="text-sm text-[var(--muted)] leading-relaxed">
+                  Everything a security review needs is in the public repo, written for that reader:
+                </p>
+                <ul className="text-sm space-y-1">
+                  {[
+                    ['Review scope', 'docs/rhc-review-scope.md', 'live v7 addresses, trust surface (pons), focus areas in priority order, the built-not-deployed v8, known accepted risks, and the questions we want answered'],
+                    ['Our own findings', 'docs/rhc-review-findings.md', 'the adversarial self-review — one test per finding in test/Review.t.sol'],
+                    ['Receipts', 'docs/rhc-receipts.md', 'a mainnet transaction hash for every claim made here'],
+                    ['Contracts + tests', 'contracts/rhc', 'Foundry; forge test --threads 1; every live contract is an exact source match on Sourcify'],
+                  ].map(([name, path, desc]) => (
+                    <li key={path} className="flex flex-col sm:flex-row sm:items-baseline gap-x-2">
+                      <a href={`https://github.com/Based-LTD/prooflaunch/blob/main/${path}`} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline font-bold shrink-0">{name} ↗</a>
+                      <span className="text-[var(--muted)]">{desc}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-[var(--muted)] leading-relaxed">
+                  Findings: open an issue on the repo or DM. There is no bounty program yet; there is no admin key
+                  to hand anyone either.
+                </p>
+
                 <h3 className="font-bold flex items-center gap-2 uppercase tracking-wide text-[var(--warning)]">
                   <AlertTriangle className="w-5 h-5" />
                   Beta status
