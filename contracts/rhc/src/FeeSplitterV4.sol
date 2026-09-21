@@ -39,8 +39,9 @@ interface ICampaignHoldView {
 /// stay theirs even if they sell afterwards: you earned those while in.
 ///
 /// Known edges, stated up front: transferring the allocation to another
-/// wallet reads as selling; there is no locked-token concept on this
-/// chain. Buying more than the allocation caps at 100% — it never pays
+/// wallet reads as selling. Held = wallet balance + unclaimed (still in
+/// the campaign, including a pre-launch lock) + staked in the rewards
+/// vault when this token is the vault's stake token. Buying more than the allocation caps at 100% — it never pays
 /// more than the launch-time share.
 ///
 /// Everything else is FeeSplitterV3 verbatim in behaviour — per-asset
@@ -124,9 +125,23 @@ contract FeeSplitterV4 {
         if (total == 0) return 10_000;
         uint256 alloc = (campaign.tokensAtLaunch() * campaign.contributionOf(backer)) / total;
         if (alloc == 0) return 10_000;
-        uint256 bal = IERC20(campaign.token()).balanceOf(backer);
+        address t = campaign.token();
+        uint256 bal = IERC20(t).balanceOf(backer) + _stakedInVault(backer, t);
         if (bal >= alloc) return 10_000;
         return uint16((bal * 10_000) / alloc);
+    }
+
+    /// Tokens staked in the rewards vault are held, not sold — but only
+    /// when THIS campaign's token is the vault's stake token (the platform
+    /// token's own raise). The vault is the forfeit recipient; on older
+    /// factories that address is an EOA, so this is a raw staticcall that
+    /// answers zero for anything that isn't a vault. Views only.
+    function _stakedInVault(address backer, address t) internal view returns (uint256) {
+        (bool ok, bytes memory d) = forfeitTo.staticcall(abi.encodeWithSignature("stakeToken()"));
+        if (!ok || d.length < 32 || abi.decode(d, (address)) != t) return 0;
+        (ok, d) = forfeitTo.staticcall(abi.encodeWithSignature("stakedOf(address)", backer));
+        if (!ok || d.length < 32) return 0;
+        return abi.decode(d, (uint256));
     }
 
     /// A backer's lifetime entitlement from the backer pool for `asset` —

@@ -67,11 +67,14 @@ like the SOL side, with the forfeited share going to platform-token stakers.
 | `CampaignFactoryV6` (v8) | built | v7 + `splitterDeployer` immutable; `previewInitCodeHash` encodes it after the router (the browser grinder reads the hash on-chain, so no frontend encoding change). |
 | `script/DeployV6.s.sol` | ready | env: `PLATFORM_RECIPIENT`, `REWARDS_RECIPIENT` (**the RewardsVault** — deploy the platform token via v7, then the vault, then this), `EQUITY_ROUTER`, `LEG_DEPLOYER` (existing `0x518B6b80…`). |
 
-Frontend work owed at deploy time: probe `forfeitTo()` on the splitter; if
-present use `backerOwed` for the fee card (entitlement − claimed overstates
-a seller), show hold % beside the claim, and word the zero-paid claim as
-"your share went to stakers". Fork test against the live router
-(`ForkClaimBackerAs` is V3-only) before deploy.
+Frontend (done 2026-09-21): the campaign page probes `forfeitTo()`; on a
+v8 splitter it reads `backerOwed` + `heldBps`, scales the projected
+collect by hold, shows a hold line on the fee card and words a zero-paid
+claim as "went to the holder-rewards leg". Held = wallet + unclaimed
+(incl. pre-launch lock) + staked in the rewards vault when the campaign's
+token is the vault's stake token (raw staticcall; an EOA recipient answers
+zero). Still owed before deploy: fork test against the live router
+(`ForkClaimBackerAs` is V3-only) and explorer verification on deploy day.
 
 Known edge, stated in the contract header: without a `settle` crank a
 seller can buy back just before claiming. The crank is permissionless and

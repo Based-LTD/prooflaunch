@@ -45,6 +45,8 @@ interface State {
   gasPrice: bigint;
   v7: V7 | null; // null for v1–v6 campaigns; this page serves every generation
   v8: { myLockUntil: number; maxLock: number } | null; // pre-launch lock (CampaignV4)
+  splitterV4: boolean; // FeeSplitterV4: hold-weighted fees
+  myHeldBps: number;   // 10000 = fully held (only meaningful when splitterV4)
 }
 
 /// v7 adds an ERC20-quoted raise (USDG and friends), contract-enforced
@@ -107,6 +109,9 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const [bannerKey, setBannerKey] = useState('');
   // Pre-launch lock choice (v8 campaigns): days, 0 = no lock.
   const [lockDays, setLockDays] = useState(0);
+  // A lock is irreversible: the deposit waits behind one explicit confirm
+  // that repeats the date in words (punch list: fat-finger 2-year lock).
+  const [lockConfirm, setLockConfirm] = useState<bigint | null>(null); // units awaiting confirm
   const banner = useCampaignBanner(addr, bannerKey);
   const { isSuccess: txConfirmed, data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
 
@@ -185,7 +190,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         : 0n;
       const [myEth, gasPrice] = await Promise.all([me ? rhcPublicClient.getBalance({ address: me }).catch(() => 0n) : Promise.resolve(0n), rhcPublicClient.getGasPrice().catch(() => 100_000_000n)]);
       const backerBps = Number(await rhcPublicClient.readContract({ address: feeSplitter, abi: splitterAbi, functionName: 'backerBps' }).catch(() => 9000));
-      const projectedShare = ponsOwed > 0n && totalRaisedAtLaunch > 0n
+      let projectedShare = ponsOwed > 0n && totalRaisedAtLaunch > 0n
         ? (ponsOwed * BigInt(backerBps) * myContribution) / (10_000n * totalRaisedAtLaunch)
         : 0n;
 
@@ -212,6 +217,27 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           allowFailure: false,
         }) as [bigint, bigint];
       }
+      // v8 splitter probe: the fee stream follows the tokens. backerOwed is
+      // what a claim pays NOW (banked + unjudged × hold); entitlement − claimed
+      // would show a seller money they cannot claim. Fold it into the same
+      // two fields so every "feesOwed" below stays correct.
+      let splitterV4 = false, myHeldBps = 10_000;
+      try {
+        await rhcPublicClient.readContract({ address: feeSplitter, abi: splitterAbi, functionName: 'forfeitTo' });
+        splitterV4 = true;
+        if (launched && me) {
+          const [owed, held] = await rhcPublicClient.multicall({
+            contracts: [
+              { address: feeSplitter, abi: splitterAbi, functionName: 'backerOwed', args: [me, feeAsset] },
+              { address: feeSplitter, abi: splitterAbi, functionName: 'heldBps', args: [me] },
+            ],
+            allowFailure: false,
+          }) as unknown as [bigint, number];
+          myFeeEntitlement = myFeesClaimed + owed;
+          myHeldBps = Number(held);
+        }
+      } catch { /* v1–v7 splitter */ }
+      if (splitterV4) projectedShare = (projectedShare * BigInt(myHeldBps)) / 10_000n; // what a collect would actually yield you at your hold
       // v7 probe: quoteToken() only exists from CampaignV3 on. Everything
       // it gates is additive, so older campaigns simply render as before.
       let v7: V7 | null = null;
@@ -291,7 +317,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
         totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4,
-        curve, curveGraduated, myCurveAllowance, ponsOwed, backerBps, projectedShare, projectedShares: null, myEth, gasPrice, v7, v8 });
+        curve, curveGraduated, myCurveAllowance, ponsOwed, backerBps, projectedShare, projectedShares: null, myEth, gasPrice, v7, v8, splitterV4, myHeldBps });
       // Quote the projection in the creator's pick, off the critical path.
       if (v7 && me && projectedShare > 0n && v7.payoutAsset !== zero && EQUITY_ROUTER_LIVE) {
         const asset = EQUITY_ASSETS.find((a) => a.address.toLowerCase() === v7!.payoutAsset.toLowerCase());
@@ -323,7 +349,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         else if (a.kind === 'sell') text = `Sold ${fmtTok(a.amount ?? -tokDelta)} $${sym} for ${fmtEth(ethNet, 6)} ETH`;
         else if (a.kind === 'approve') text = `Approved the curve to take $${sym} you sell — now hit Sell`;
         else if (a.kind === 'claimTokens') text = `Claimed ${fmtTok(tokDelta)} $${sym} into your wallet`;
-        else if (a.kind === 'claimFees') text = `Claimed ${fmtEth(ethNet, 6)} ETH of fees`;
+        else if (a.kind === 'claimFees') text = s.splitterV4 && ethNet <= 0n ? 'Nothing paid — you sold your allocation, so that share went to the holder-rewards leg' : `Claimed ${fmtEth(ethNet, 6)} ETH of fees`;
         else if (a.kind === 'claimFeesAs' && a.asset) text = `Claimed fees as ${a.asset.symbol}: ${fmtShares((assetAfter ?? 0n) - (a.assetBefore ?? 0n), a.asset.decimals)} ${a.asset.symbol} landed in your wallet`;
         else if (a.kind === 'collect') text = 'Collected accrued fees from pons into the splitter — your share is updated below';
         else if (a.label) text = a.label;
@@ -335,11 +361,15 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       // page has reloaded, quote the claimer's now-real share and prompt
       // the second signature. If they reject it, step ② stays on screen.
       if (a?.kind === 'collect' && a.then && me && s) {
-        const [ent, claimed] = await Promise.all([
-          rhcPublicClient.readContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'backerEntitlement', args: [me, ZERO_ADDR] }).catch(() => 0n) as Promise<bigint>,
-          rhcPublicClient.readContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'backerClaimed', args: [me, ZERO_ADDR] }).catch(() => 0n) as Promise<bigint>,
-        ]);
-        const owed = ent > claimed ? ent - claimed : 0n;
+        const owed = s.splitterV4
+          ? await (rhcPublicClient.readContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'backerOwed', args: [me, ZERO_ADDR] }).catch(() => 0n) as Promise<bigint>)
+          : await (async () => {
+              const [ent, claimed] = await Promise.all([
+                rhcPublicClient.readContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'backerEntitlement', args: [me, ZERO_ADDR] }).catch(() => 0n) as Promise<bigint>,
+                rhcPublicClient.readContract({ address: s.feeSplitter, abi: splitterAbi, functionName: 'backerClaimed', args: [me, ZERO_ADDR] }).catch(() => 0n) as Promise<bigint>,
+              ]);
+              return ent > claimed ? ent - claimed : 0n;
+            })();
         if (owed > 0n && a.then.claimEth) {
           setTimeout(() => {
             void startAction('claimFees');
@@ -414,7 +444,9 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const myLockDate = v8 ? new Date(v8.myLockUntil * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   /// One deposit call for every generation: locked v8 deposits go through
   /// depositLocked / depositTokenLocked, everything else is unchanged.
-  const depositCall = (units: bigint) => {
+  const depositCall = (units: bigint, confirmed = false) => {
+    if (v8 && lockUntilTs > 0n && !confirmed) { setLockConfirm(units); return; }
+    setLockConfirm(null);
     if (v8 && lockUntilTs > 0n) {
       return isErc20Quote
         ? writeContract({ address: addr, abi: campaignV4Abi, functionName: 'depositTokenLocked', args: [units, lockUntilTs], chainId: robinhoodChain.id })
@@ -620,6 +652,24 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                 </>
               )}
               {lockPicker}
+              </div>
+              {lockConfirm !== null && v8 && (
+                <div className="border border-[var(--accent-gold)]/60 bg-[var(--accent-gold)]/5 px-3 py-3 space-y-2">
+                  <p className="text-xs font-mono text-[var(--foreground)]">
+                    🔒 You are locking your ${s.meta.symbol} until <span className="text-[var(--accent-gold)]">{new Date(Number(lockUntilTs) * 1000).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</span>.
+                    The tokens stay in this contract until then. This cannot be shortened or undone by anyone, including us. Your fee share is unaffected, and you can still withdraw before launch.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => depositCall(lockConfirm, true)} disabled={isPending} className="btn-primary !px-3 !py-1.5 !text-[10px]">
+                      Lock until {new Date(Number(lockUntilTs) * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} and back {q(lockConfirm)} {qSym}
+                    </button>
+                    <button onClick={() => setLockConfirm(null)} className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-3">
               {s.myContribution > 0n && (
                 <button
                   onClick={() => act('withdraw')}
@@ -899,7 +949,12 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                 );
                 return (
                   <div>
-                    <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">{(s.backerBps / 100).toFixed(0)}% of every trade&apos;s creator tax goes to backers</p>
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">{(s.backerBps / 100).toFixed(0)}% of every trade&apos;s creator tax goes to backers{s.splitterV4 ? ' · the fee stream follows the tokens' : ''}</p>
+                    {s.splitterV4 && iBack && (
+                      <p className={`text-[10px] font-mono uppercase tracking-widest mb-2 ${s.myHeldBps >= 9_000 ? 'text-[var(--success)]' : s.myHeldBps > 0 ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--error)]'}`}>
+                        {'> '}You hold {(s.myHeldBps / 100).toFixed(0)}% of your allocation{s.myHeldBps < 10_000 ? ` — you earn ${(s.myHeldBps / 100).toFixed(0)}% of your share; the rest goes to the holder-rewards leg` : ' — full share'}
+                      </p>
+                    )}
                     <div className="space-y-3">
                       {iBack ? (
                         earned > 0n ? (

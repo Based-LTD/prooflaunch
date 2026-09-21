@@ -262,6 +262,13 @@ export const splitterAbi = parseAbi([
   'function claimBackerAs(PoolKey key, uint256 minOut) returns (uint256 assetOut)',
   'function claimLegAs(PoolKey key, uint256 minOut) returns (uint256 assetOut)',
   'function claimLeg(address asset)',
+  // v8 splitters only (FeeSplitterV4) — the fee stream follows the tokens.
+  // forfeitTo() doubles as the generation probe. backerOwed is THE number
+  // to show: entitlement − claimed overstates a seller.
+  'function forfeitTo() view returns (address)',
+  'function backerOwed(address backer, address asset) view returns (uint256)',
+  'function heldBps(address backer) view returns (uint16)',
+  'function settle(address backer, address asset)',
 ]);
 
 // WETH on Robinhood Chain (pons pair token, from TokenLaunched events)
