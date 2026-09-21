@@ -8,7 +8,7 @@ import { use, useEffect, useState, useCallback } from 'react';
 import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, isAddress } from 'viem';
 import {
-  rhcPublicClient, campaignAbi, campaignV3Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl,
+  rhcPublicClient, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl,
   RHC_WETH, robinhoodChain, QUOTE_ASSETS,
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
@@ -44,6 +44,7 @@ interface State {
   myEth: bigint; // signer's ETH — an empty wallet must be told BEFORE the wallet prompt, not by a red banner inside it
   gasPrice: bigint;
   v7: V7 | null; // null for v1–v6 campaigns; this page serves every generation
+  v8: { myLockUntil: number; maxLock: number } | null; // pre-launch lock (CampaignV4)
 }
 
 /// v7 adds an ERC20-quoted raise (USDG and friends), contract-enforced
@@ -104,6 +105,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const { data: walletClient } = useWalletClient();
   const [watchState, setWatchState] = useState<'idle' | 'asking' | 'ok' | 'nope'>('idle');
   const [bannerKey, setBannerKey] = useState('');
+  // Pre-launch lock choice (v8 campaigns): days, 0 = no lock.
+  const [lockDays, setLockDays] = useState(0);
   const banner = useCampaignBanner(addr, bannerKey);
   const { isSuccess: txConfirmed, data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
 
@@ -274,11 +277,21 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           quoteDecimals: known?.decimals ?? 18,
         };
       } catch { /* v1–v6 campaign */ }
+      // v8 probe: MAX_LOCK() only exists on CampaignV4.
+      let v8: State['v8'] = null;
+      try {
+        const c4 = { address: addr, abi: campaignV4Abi } as const;
+        const [maxLock, myLockUntil] = await rhcPublicClient.multicall({
+          contracts: [{ ...c4, functionName: 'MAX_LOCK' }, { ...c4, functionName: 'lockUntil', args: [who] }],
+          allowFailure: false,
+        }) as unknown as [bigint, bigint];
+        v8 = { maxLock: Number(maxLock), myLockUntil: Number(myLockUntil) };
+      } catch { /* v1–v7 campaign */ }
 
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
         totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4,
-        curve, curveGraduated, myCurveAllowance, ponsOwed, backerBps, projectedShare, projectedShares: null, myEth, gasPrice, v7 });
+        curve, curveGraduated, myCurveAllowance, ponsOwed, backerBps, projectedShare, projectedShares: null, myEth, gasPrice, v7, v8 });
       // Quote the projection in the creator's pick, off the critical path.
       if (v7 && me && projectedShare > 0n && v7.payoutAsset !== zero && EQUITY_ROUTER_LIVE) {
         const asset = EQUITY_ASSETS.find((a) => a.address.toLowerCase() === v7!.payoutAsset.toLowerCase());
@@ -394,6 +407,36 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const publicSeatsLeft = publicSeats - Number(v7?.publicSeatsUsed ?? 0n);
   const takesReserved = !!v7 && v7.iAmAllowlisted && Number(v7.reservedSeatsUsed) < v7.reservedSeats;
   const publicFull = !!v7 && s.maxBackers > 0n && !takesReserved && publicSeatsLeft <= 0;
+  // ── v8 lock ─────────────────────────────────────────────────────────
+  const v8 = s.v8;
+  const lockUntilTs = lockDays > 0 ? BigInt(Math.floor(Date.now() / 1000) + lockDays * 86400) : 0n;
+  const iAmLocked = !!v8 && v8.myLockUntil > Math.floor(Date.now() / 1000);
+  const myLockDate = v8 ? new Date(v8.myLockUntil * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  /// One deposit call for every generation: locked v8 deposits go through
+  /// depositLocked / depositTokenLocked, everything else is unchanged.
+  const depositCall = (units: bigint) => {
+    if (v8 && lockUntilTs > 0n) {
+      return isErc20Quote
+        ? writeContract({ address: addr, abi: campaignV4Abi, functionName: 'depositTokenLocked', args: [units, lockUntilTs], chainId: robinhoodChain.id })
+        : writeContract({ address: addr, abi: campaignV4Abi, functionName: 'depositLocked', args: [lockUntilTs], value: units, chainId: robinhoodChain.id });
+    }
+    return isErc20Quote
+      ? writeContract({ address: addr, abi: campaignV3Abi, functionName: 'depositToken', args: [units], chainId: robinhoodChain.id })
+      : writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: units, chainId: robinhoodChain.id });
+  };
+  const lockPicker = v8 && s.myContribution === 0n ? (
+    <label className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+      <span title="Your tokens stay in this campaign contract until the date. Visible to every backer before launch. Nobody can shorten it — there is no admin. Your fee share is unaffected.">🔒 lock my tokens</span>
+      <select value={lockDays} onChange={(e) => setLockDays(Number(e.target.value))}
+        className="bg-[var(--background)] border border-[var(--border)] px-2 py-1.5 text-[10px] font-mono uppercase tracking-widest focus:border-[var(--accent)] focus:outline-none">
+        <option value={0}>no lock</option>
+        <option value={90}>3 months</option>
+        <option value={180}>6 months</option>
+        <option value={365}>1 year</option>
+        <option value={730}>2 years</option>
+      </select>
+    </label>
+  ) : null;
 
   return shell(
     <>
@@ -533,15 +576,13 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   </button>
                 ) : (
                   <button
-                    onClick={() => isErc20Quote
-                      ? writeContract({ address: addr, abi: campaignV3Abi, functionName: 'depositToken', args: [s.minDeposit], chainId: robinhoodChain.id })
-                      : writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: s.minDeposit, chainId: robinhoodChain.id })}
+                    onClick={() => depositCall(s.minDeposit)}
                     disabled={isPending || s.myContribution > 0n || gateBlocked || publicFull}
                     className="btn-primary"
                   >
                     {s.myContribution > 0n
-                      ? `Seat Taken ✓${v7?.mySeatBucket === 2 ? ' (reserved)' : ''}`
-                      : `Take a${takesReserved ? ' Reserved' : ''} Seat — ${q(s.minDeposit)} ${qSym}`}
+                      ? `Seat Taken ✓${v7?.mySeatBucket === 2 ? ' (reserved)' : ''}${iAmLocked ? ` · locked → ${myLockDate}` : ''}`
+                      : `Take a${takesReserved ? ' Reserved' : ''} Seat — ${q(s.minDeposit)} ${qSym}${lockDays > 0 ? ' · locked' : ''}`}
                   </button>
                 )
               ) : (
@@ -564,13 +605,11 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     </button>
                   ) : (
                     <button
-                      onClick={() => isErc20Quote
-                        ? writeContract({ address: addr, abi: campaignV3Abi, functionName: 'depositToken', args: [wantAmount], chainId: robinhoodChain.id })
-                        : writeContract({ address: addr, abi: campaignAbi, functionName: 'deposit', value: wantAmount, chainId: robinhoodChain.id })}
+                      onClick={() => depositCall(wantAmount)}
                       disabled={isPending || gateBlocked || publicFull}
                       className="btn-primary"
                     >
-                      Back This Launch
+                      Back This Launch{lockDays > 0 ? ' · locked' : ''}
                     </button>
                   )}
                   {isErc20Quote && v7 && (
@@ -580,6 +619,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   )}
                 </>
               )}
+              {lockPicker}
               {s.myContribution > 0n && (
                 <button
                   onClick={() => act('withdraw')}
@@ -818,9 +858,15 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             <DashboardCard label={s.myContribution > 0n ? 'YOUR REWARDS' : 'FEES'}>
               <div className="space-y-3">
               {s.myContribution > 0n && !s.myTokensClaimed && (
-                <button onClick={() => act('claimTokens')} disabled={isPending} className="btn-primary">
-                  Claim {(Number(myTokenShare) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol}
-                </button>
+                iAmLocked ? (
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 px-3 py-2">
+                    🔒 Your {(Number(myTokenShare) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol} are locked in this contract until {myLockDate}. They earn your full fee share meanwhile.
+                  </p>
+                ) : (
+                  <button onClick={() => act('claimTokens')} disabled={isPending} className="btn-primary">
+                    Claim {(Number(myTokenShare) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol}
+                  </button>
+                )
               )}
               {isConnected && s.myEth < 300_000n * s.gasPrice && (
                 <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning,#c9a227)] border border-[var(--warning,#c9a227)]/40 bg-[var(--warning,#c9a227)]/5 px-3 py-2">

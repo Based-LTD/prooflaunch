@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient, http, isAddress, parseAbiItem } from 'viem';
 import {
-  rhcPublicClient, robinhoodChain, campaignAbi, campaignV3Abi, splitterAbi, erc20Abi, RHC_WETH,
+  rhcPublicClient, robinhoodChain, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, erc20Abi, RHC_WETH,
 } from '@/lib/rhc';
 
 // The backer roster — the SOL page's BackersList + GenesisBackerRoster,
@@ -41,6 +41,7 @@ export interface RosterBacker {
   deposits: number;
   firstBlock: string;
   firstTs: number | null; // unix seconds
+  lockUntil: number;      // unix seconds; 0 = no lock (v8 campaigns only)
   // post-launch only
   allocation: string;     // tokens the raise allotted this wallet (18 dp)
   tokensClaimed: boolean;
@@ -101,7 +102,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ address: s
 
     // Live reads per wallet. allowFailure because seatBucket() only exists
     // on v3 campaigns and the splitter views differ across generations.
-    const per = 6;
+    const per = 7;
     const calls = wallets.flatMap((w) => [
       { ...c, functionName: 'contributionOf', args: [w.wallet] },
       { ...c, functionName: 'tokensClaimed', args: [w.wallet] },
@@ -109,6 +110,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ address: s
       { address: token, abi: erc20Abi, functionName: 'balanceOf', args: [w.wallet] },
       { address: feeSplitter, abi: splitterAbi, functionName: 'backerEntitlement', args: [w.wallet, feeAsset] },
       { address: feeSplitter, abi: splitterAbi, functionName: 'backerClaimed', args: [w.wallet, feeAsset] },
+      { address: addr, abi: campaignV4Abi, functionName: 'lockUntil', args: [w.wallet] },
     ]);
     const res = wallets.length
       ? await rhcPublicClient.multicall({ contracts: calls as never, allowFailure: true })
@@ -138,6 +140,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ address: s
       const balance = launched && token !== ZERO ? pick<bigint>(o + 3, 0n) : 0n;
       const ent = launched ? pick<bigint>(o + 4, 0n) : 0n;
       const fc = launched ? pick<bigint>(o + 5, 0n) : 0n;
+      const lockUntil = Number(pick<bigint>(o + 6, 0n));
       const allocation = launched && totalRaisedAtLaunch > 0n ? (tokensAtLaunch * contribution) / totalRaisedAtLaunch : 0n;
       backers.push({
         wallet: w.wallet,
@@ -146,6 +149,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ address: s
         deposits: w.deposits,
         firstBlock: w.firstBlock.toString(),
         firstTs: tsByBlock.get(w.firstBlock) ?? null,
+        lockUntil,
         allocation: allocation.toString(),
         tokensClaimed: claimed,
         tokenBalance: balance.toString(),

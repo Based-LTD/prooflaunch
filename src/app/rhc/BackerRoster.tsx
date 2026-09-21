@@ -26,6 +26,19 @@ interface Props {
 }
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const nowS = () => Math.floor(Date.now() / 1000);
+const lockedNow = (b: RosterBacker) => b.lockUntil > nowS();
+const lockDate = (b: RosterBacker) => new Date(b.lockUntil * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+/// The lock tag — the thing a speculator reads. It is a contract fact:
+/// claimTokens() reverts before this date, and there is nobody who could
+/// change that. Link goes to the campaign contract, not to us.
+const LockTag = ({ b, address }: { b: RosterBacker; address: string }) => lockedNow(b) ? (
+  <a href={explorerUrl(address) + '#readContract'} target="_blank" rel="noopener noreferrer"
+    title={`lockUntil(${b.wallet}) on the campaign contract — claimTokens() reverts before this date; no one can shorten it`}
+    className="ml-2 text-[9px] uppercase tracking-widest text-[var(--accent-gold)] border border-[var(--accent-gold)]/50 px-1 py-0.5 hover:bg-[var(--accent-gold)]/10">
+    🔒 locked → {lockDate(b)}
+  </a>
+) : null;
 const th = 'py-2 px-2 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] whitespace-nowrap';
 
 function fmtUnits(v: bigint, decimals: number, digits = 3): string {
@@ -70,6 +83,7 @@ export function BackerRoster({ address, launched, me, symbol, quoteSymbol, quote
   const pctOf = (v: bigint) => (total > 0n ? (Number((v * 1000n) / total) / 10).toFixed(1) : '0.0');
   const backers = data?.backers ?? [];
   const stillIn = backers.filter((b) => !b.tokensClaimed || BigInt(b.tokenBalance) > 0n).length;
+  const lockedCount = backers.filter(lockedNow).length;
   const holds = backers.map(holdPct).filter((h): h is number => h !== null);
   const avgHold = holds.length ? holds.reduce((a, b) => a + Math.min(b, 100), 0) / holds.length : null;
 
@@ -91,8 +105,20 @@ export function BackerRoster({ address, launched, me, symbol, quoteSymbol, quote
             : 'Every wallet in this raise, read from the contract. A backer can withdraw any time before launch; the seat frees and the deposit goes back.'}
         </p>
 
+        {data && backers.length > 0 && lockedCount > 0 && !launched && (
+          <div className="flex flex-wrap gap-2">
+            <span className="border border-[var(--accent-gold)]/50 bg-[var(--background)] px-2 py-1 text-[10px] font-mono uppercase tracking-widest">
+              <span className="text-[var(--accent-gold)]">{lockedCount}</span> of {backers.length} locked their tokens pre-launch
+            </span>
+          </div>
+        )}
         {launched && data && backers.length > 0 && (
           <div className="flex flex-wrap gap-2">
+            {lockedCount > 0 && (
+              <span className="border border-[var(--accent-gold)]/50 bg-[var(--background)] px-2 py-1 text-[10px] font-mono uppercase tracking-widest">
+                <span className="text-[var(--accent-gold)]">{lockedCount}</span> locked
+              </span>
+            )}
             <span className="border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-[10px] font-mono uppercase tracking-widest">
               <span className="text-[var(--accent)]">{stillIn}</span> of {backers.length} still in
             </span>
@@ -148,6 +174,7 @@ export function BackerRoster({ address, launched, me, symbol, quoteSymbol, quote
                           <a href={explorerUrl(b.wallet)} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent)]">{short(b.wallet)}</a>
                           {isMe && <span className="ml-2 text-[9px] uppercase tracking-widest text-[var(--accent)]">you</span>}
                           {data?.hasBuckets && b.bucket === 2 && <span className="ml-2 text-[9px] uppercase tracking-widest text-[var(--muted)]">team</span>}
+                          <LockTag b={b} address={address} />
                         </td>
                         <td className="py-2 px-2 text-right">{q(BigInt(b.contribution))} {quoteSymbol}</td>
                         <td className="py-2 px-2 text-right text-[var(--muted)]">{pctOf(BigInt(b.contribution))}%</td>
@@ -155,7 +182,7 @@ export function BackerRoster({ address, launched, me, symbol, quoteSymbol, quote
                           <>
                             <td className="py-2 px-2 text-right text-[var(--muted)]">{fmtTok(BigInt(b.allocation))}</td>
                             <td className={`py-2 px-2 text-right ${h === null ? 'text-[var(--muted)]' : h >= 90 ? 'text-[var(--success)]' : h > 0 ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--error)]'}`}>
-                              {!b.tokensClaimed ? 'unclaimed' : h === null ? '—' : `${h >= 999 ? '>999' : h.toFixed(0)}%`}
+                              {!b.tokensClaimed ? (lockedNow(b) ? 'locked' : 'unclaimed') : h === null ? '—' : `${h >= 999 ? '>999' : h.toFixed(0)}%`}
                             </td>
                             <td className="py-2 px-2 text-right">{fmtEth(BigInt(b.feesClaimed), 6)} ETH</td>
                             <td className="py-2 px-2 text-right text-[var(--success)]">{BigInt(b.feesPending) > 0n ? `${fmtEth(BigInt(b.feesPending), 6)} ETH` : '—'}</td>
@@ -185,12 +212,13 @@ export function BackerRoster({ address, launched, me, symbol, quoteSymbol, quote
                         <a href={explorerUrl(b.wallet)} target="_blank" rel="noopener noreferrer">{short(b.wallet)}</a>
                         {isMe && <span className="ml-2 text-[9px] uppercase tracking-widest text-[var(--accent)]">you</span>}
                         {data?.hasBuckets && b.bucket === 2 && <span className="ml-2 text-[9px] uppercase tracking-widest text-[var(--muted)]">team</span>}
+                        <LockTag b={b} address={address} />
                       </span>
                       <span>{q(BigInt(b.contribution))} {quoteSymbol} · {pctOf(BigInt(b.contribution))}%</span>
                     </div>
                     {launched && (
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] uppercase tracking-widest text-[var(--muted)]">
-                        <span>hold <span className={h === null ? '' : h >= 90 ? 'text-[var(--success)]' : h > 0 ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--error)]'}>{!b.tokensClaimed ? 'unclaimed' : h === null ? '—' : `${h >= 999 ? '>999' : h.toFixed(0)}%`}</span></span>
+                        <span>hold <span className={h === null ? '' : h >= 90 ? 'text-[var(--success)]' : h > 0 ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--error)]'}>{!b.tokensClaimed ? (lockedNow(b) ? 'locked' : 'unclaimed') : h === null ? '—' : `${h >= 999 ? '>999' : h.toFixed(0)}%`}</span></span>
                         <span>earned {fmtEth(BigInt(b.feesClaimed), 6)} ETH</span>
                         {BigInt(b.feesPending) > 0n && <span className="text-[var(--success)]">pending {fmtEth(BigInt(b.feesPending), 6)} ETH</span>}
                       </div>

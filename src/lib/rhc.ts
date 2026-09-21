@@ -229,6 +229,18 @@ export const curveAbi = parseAbi([
   'function sell(uint256 tokensIn, uint256 minQuoteOut, address recipient) returns (uint256)',
 ]);
 
+// v8 campaigns (CampaignV4) only — the pre-launch lock. MAX_LOCK() doubles
+// as the generation probe; older campaigns have none of this.
+export const campaignV4Abi = parseAbi([
+  'function lockUntil(address) view returns (uint64)',
+  'function MAX_LOCK() view returns (uint64)',
+  'function excessClaimed(address) view returns (bool)',
+  'function depositLocked(uint64 until) payable',
+  'function depositTokenLocked(uint256 amount, uint64 until)',
+  'function extendLock(uint64 until)',
+  'function claimExcess()',
+]);
+
 export const erc20Abi = parseAbi([
   'function balanceOf(address) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',

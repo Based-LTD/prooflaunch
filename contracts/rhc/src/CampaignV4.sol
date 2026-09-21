@@ -62,6 +62,19 @@ contract CampaignV4 {
     uint256 public excessAtLaunch;      // curve refund (quote units) on oversized raises
     uint256 public totalRaisedAtLaunch;
     mapping(address => bool) public tokensClaimed;
+    /// Pre-launch lock, chosen by the backer when they take their seat and
+    /// visible on the roster before anyone else commits. The tokens never
+    /// leave THIS contract until the date: no second contract, no locker
+    /// brand to trust, nothing an admin could shorten (there is no admin).
+    /// Only ever extendable. Cleared by a pre-launch withdraw (they left).
+    /// A locked seat still earns its full fee share — FeeSplitterV4 counts
+    /// unclaimed tokens as held.
+    mapping(address => uint64) public lockUntil;
+    /// Fat-finger guard: a typo must not become a permanent lock.
+    uint64 public constant MAX_LOCK = 4 * 365 days;
+    /// Excess quote (oversized raise refund) is paid on claimTokens; a
+    /// locked backer can take it early instead of waiting for their tokens.
+    mapping(address => bool) public excessClaimed;
 
     event Deposited(address indexed backer, uint256 amount, uint256 totalRaised, uint8 bucket);
     event Withdrawn(address indexed backer, uint256 amount, uint256 totalRaised);
@@ -70,6 +83,7 @@ contract CampaignV4 {
     event Refunded(address indexed backer, uint256 amount);
     event LaunchFeeRefunded(address indexed creator, uint256 amount);
     event Cancelled();
+    event Locked(address indexed backer, uint64 until);
 
     error BadState();
     error BadAmount();
@@ -82,6 +96,9 @@ contract CampaignV4 {
     error Reentrancy();
     error WrongAsset();
     error GateFailed();
+    error StillLocked();
+    error LockNotLonger();
+    error LockTooLong();
 
     uint256 private _lock = 1;
     modifier nonReentrant() {
@@ -155,6 +172,35 @@ contract CampaignV4 {
     }
 
     /// ERC20-quoted deposits (approve first).
+    /// deposit(), plus a promise: my tokens stay in this contract until
+    /// `until`. Set at seat time so every later backer can see it.
+    function depositLocked(uint64 until) external payable nonReentrant {
+        if (quoteToken != address(0)) revert WrongAsset();
+        _setLock(until);
+        _deposit(msg.value);
+    }
+
+    /// depositToken(), locked. See depositLocked.
+    function depositTokenLocked(uint256 amount, uint64 until) external nonReentrant {
+        if (quoteToken == address(0)) revert WrongAsset();
+        _setLock(until);
+        if (!IERC20Quote(quoteToken).transferFrom(msg.sender, address(this), amount)) revert PayFailed();
+        _deposit(amount);
+    }
+
+    /// Longer, never shorter. Any time before the tokens are claimed.
+    function extendLock(uint64 until) external {
+        if (contributionOf[msg.sender] == 0 || tokensClaimed[msg.sender]) revert BadState();
+        _setLock(until);
+    }
+
+    function _setLock(uint64 until) internal {
+        if (until <= block.timestamp || until <= lockUntil[msg.sender]) revert LockNotLonger();
+        if (until > block.timestamp + MAX_LOCK) revert LockTooLong();
+        lockUntil[msg.sender] = until;
+        emit Locked(msg.sender, until);
+    }
+
     function depositToken(uint256 amount) external nonReentrant {
         if (quoteToken == address(0)) revert WrongAsset();
         if (!IERC20Quote(quoteToken).transferFrom(msg.sender, address(this), amount)) revert PayFailed();
@@ -207,6 +253,7 @@ contract CampaignV4 {
         if (seatBucket[msg.sender] == 2) reservedSeatsUsed -= 1;
         else if (seatBucket[msg.sender] == 1 && maxBackers != 0) publicSeatsUsed -= 1;
         seatBucket[msg.sender] = 0;
+        lockUntil[msg.sender] = 0; // the promise went with the seat
         emit Withdrawn(msg.sender, amount, totalRaised);
         _payQuote(msg.sender, amount);
     }
@@ -275,14 +322,29 @@ contract CampaignV4 {
     function claimTokens() external nonReentrant {
         if (!launched) revert BadState();
         if (tokensClaimed[msg.sender]) revert BadAmount();
+        if (block.timestamp < lockUntil[msg.sender]) revert StillLocked();
         uint256 contribution = contributionOf[msg.sender];
         if (contribution == 0) revert BadAmount();
         tokensClaimed[msg.sender] = true;
         uint256 share = (tokensAtLaunch * contribution) / totalRaisedAtLaunch;
-        uint256 excess = (excessAtLaunch * contribution) / totalRaisedAtLaunch;
+        uint256 excess = excessClaimed[msg.sender] ? 0 : (excessAtLaunch * contribution) / totalRaisedAtLaunch;
+        excessClaimed[msg.sender] = true;
         emit TokensClaimed(msg.sender, share, excess);
         if (!IERC20(token).transfer(msg.sender, share)) revert PayFailed();
         if (excess > 0) _payQuote(msg.sender, excess);
+    }
+
+    /// The oversized-raise refund, on its own — so a lock never traps
+    /// quote that was always going back to the backer.
+    function claimExcess() external nonReentrant {
+        if (!launched) revert BadState();
+        if (excessClaimed[msg.sender]) revert BadAmount();
+        uint256 contribution = contributionOf[msg.sender];
+        if (contribution == 0) revert BadAmount();
+        excessClaimed[msg.sender] = true;
+        uint256 excess = (excessAtLaunch * contribution) / totalRaisedAtLaunch;
+        if (excess == 0) revert BadAmount();
+        _payQuote(msg.sender, excess);
     }
 
     /// Permissionless fee crank (sweep is pons-operator-gated; harvest
