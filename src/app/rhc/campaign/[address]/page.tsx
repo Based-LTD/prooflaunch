@@ -738,11 +738,6 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
 
               {s.myContribution > 0n && (
                 <div className="flex flex-wrap items-center gap-3">
-                  {s.ponsOwed > 0n && (
-                    <span className="w-full text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                      {'> '}{fmtEth(s.ponsOwed, 6)} ETH of creator fees are waiting at pons — hit Collect From pons, then Claim
-                    </span>
-                  )}
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                     Your fee share ({s.isV4 ? 'ETH' : 'WETH'}): <span className="text-[var(--foreground)]">{fmtEth(feesOwed, 6)}</span>
                   </span>
@@ -770,6 +765,19 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     Claim Fees
                   </button>
                   )}
+                </div>
+              )}
+
+              {/* Collect is a PERMISSIONLESS crank and the amount waiting at
+                  pons is public — neither belongs behind "you backed this"
+                  (punch list #8). Any connected wallet may pull it down. */}
+              {isConnected && (
+                <div className="flex flex-wrap items-center gap-3 mt-3">
+                  {s.ponsOwed > 0n && (
+                    <span className="w-full text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                      {'> '}{fmtEth(s.ponsOwed, 6)} ETH of creator fees are waiting at pons — Collect, then backers Claim
+                    </span>
+                  )}
                   <button
                     onClick={() => act(s.isV4 ? 'pokeHarvest' : 'pokeCollect')}
                     disabled={isPending}
@@ -781,6 +789,11 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     Collect From pons{s.ponsOwed > 0n ? ` — ${fmtEth(s.ponsOwed, 5)} ETH waiting` : ''}
                   </button>
                 </div>
+              )}
+              {!isConnected && s.ponsOwed > 0n && (
+                <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                  {'> '}{fmtEth(s.ponsOwed, 6)} ETH of creator fees are waiting at pons — connect to collect (anyone may)
+                </p>
               )}
             </div>
           )}
