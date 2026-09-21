@@ -40,28 +40,77 @@ function timeLeft(deadline: bigint): string {
 
 export function ConnectButton() {
   const { address, isConnected, chainId } = useAccount();
-  const { connect, connectors, isPending } = useConnect();
+  const { connect, connectors, isPending, error, reset } = useConnect();
+  const [pick, setPick] = useState(false);
   const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
 
   if (!isConnected) {
+    // EIP-6963: every installed wallet announces itself as its own
+    // connector with its own provider. The generic injected() connector
+    // only talks to window.ethereum — whichever extension won that global
+    // — so with two wallets in one browser, "connect" silently went to the
+    // wrong one and looked like a dead button (founder, 2026-09-20, mid
+    // test). Offer the discovered wallets by name; fall back to injected
+    // only when nothing announced itself. And always SHOW the error.
+    const named = connectors.filter((c) => c.id !== 'injected');
+    const choices = named.length > 0 ? named : connectors;
+    const go = (c: (typeof connectors)[number]) => {
+      reset();
+      setPick(false);
+      // Connecting requests Robinhood Chain in the same step — users
+      // should never meet a separate "switch network" ceremony.
+      connect({ connector: c, chainId: robinhoodChain.id });
+    };
+    const label = isPending ? 'Connecting…' : choices.length === 0 ? 'No wallet found' : null;
     return (
-      <button
-        // Connecting requests Robinhood Chain in the same step — users
-        // should never meet a separate "switch network" ceremony.
-        onClick={() => connect({ connector: connectors[0], chainId: robinhoodChain.id })}
-        disabled={isPending}
-        // Compact on phones: at 390px the full-width button pushed the
-        // hamburger off-screen and stretched the document sideways.
-        className="btn-primary !px-2.5 !text-[10px] sm:!px-4 sm:!text-xs whitespace-nowrap"
-      >
-        {isPending ? 'Connecting…' : (
-          <>
-            <span className="sm:hidden">Connect</span>
-            <span className="hidden sm:inline">Connect Wallet</span>
-          </>
+      <div className="relative">
+        <button
+          onClick={() => (choices.length > 1 ? setPick((v) => !v) : choices[0] ? go(choices[0]) : undefined)}
+          disabled={isPending || choices.length === 0}
+          aria-haspopup={choices.length > 1 ? 'menu' : undefined}
+          aria-expanded={choices.length > 1 ? pick : undefined}
+          title={choices.length === 0 ? 'No wallet extension detected in this browser' : undefined}
+          // Compact on phones: at 390px the full-width button pushed the
+          // hamburger off-screen and stretched the document sideways.
+          className="btn-primary !px-2.5 !text-[10px] sm:!px-4 sm:!text-xs whitespace-nowrap"
+        >
+          {label ?? (
+            <>
+              <span className="sm:hidden">Connect</span>
+              <span className="hidden sm:inline">Connect Wallet{choices.length > 1 ? ' ▾' : ''}</span>
+            </>
+          )}
+        </button>
+
+        {pick && choices.length > 1 && (
+          <div role="menu" className="absolute right-0 top-full mt-1 min-w-[12rem] border border-[var(--border)] bg-[var(--background)] shadow-lg z-50">
+            {choices.map((c) => (
+              <button
+                key={c.uid}
+                role="menuitem"
+                onClick={() => go(c)}
+                className="flex items-center gap-2 w-full px-3 py-2 text-left text-xs font-mono text-[var(--foreground)] hover:bg-[var(--card)] transition-colors"
+              >
+                {c.icon && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.icon} alt="" className="w-4 h-4" />
+                )}
+                {c.name}
+              </button>
+            ))}
+          </div>
         )}
-      </button>
+
+        {error && !pick && (
+          <p
+            role="alert"
+            className="absolute right-0 top-full mt-1 max-w-[18rem] px-2 py-1 text-[10px] font-mono leading-snug text-[var(--error)] border border-[var(--error)]/40 bg-[var(--background)] z-50"
+          >
+            {error.message.split('\n')[0].slice(0, 140)}
+          </p>
+        )}
+      </div>
     );
   }
   if (chainId !== robinhoodChain.id) {
