@@ -15,6 +15,9 @@ import { RhcHeader, StatusPill } from '../../components';
 import { ClaimAsPicker } from '../../ClaimAsPicker';
 import { EQUITY_ROUTER_LIVE, EQUITY_ASSETS, poolKeyFor, fmtShares, quoteEquityOut, minOutFrom, type EquityAsset } from '@/lib/rhcEquity';
 import { WpPanel } from '../../walletproof';
+import { BackerRoster } from '../../BackerRoster';
+import { CampaignChat } from '../../CampaignChat';
+import { CreatorLaunches } from '../../CreatorLaunches';
 
 interface State {
   meta: { name: string; symbol: string; description: string; logo: string };
@@ -906,6 +909,18 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             </p>
           )}
         </div>
+      </div>
+
+      {/* ── the community layer — what makes a launch page ProofLaunch on
+          the SOL side: who is in, who is still in, and a room to talk. */}
+      <div className="mt-4 space-y-4">
+        <BackerRoster
+          address={addr} launched={s.launched} me={me} symbol={s.meta.symbol}
+          quoteSymbol={qSym} quoteDecimals={qDec} isErc20Quote={isErc20Quote}
+          refreshKey={lastReceipt?.hash ?? ''}
+        />
+        <CampaignChat campaign={addr} />
+        <CreatorLaunches creator={s.creator} exclude={addr} />
       </div>
 
       <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] break-all">
