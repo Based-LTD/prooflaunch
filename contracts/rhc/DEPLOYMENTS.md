@@ -71,7 +71,7 @@ same ETH and burns are the meta.
 |---|---|---|
 | `ProofBurner` | built, 9 unit + 3 live-fork tests | `BurnLegV3` with a fixed target: reads the platform token's own (launched) campaign at construction; `initializer = address(0)` so `init()` is unreachable. `pull(splitter)` / `pullMany` collect the ETH leg from any splitter (raw call, result ignored, only arriving ETH counts); `pullCampaignToken` burns foreign token-side fees; `crank()` burns held PROOF and buys+burns up to 0.2 ETH per block via the pons curve or the v4 pool. No withdraw, no owner, no retarget. Fork-proven on live pons V2: curve phase, v4 phase, and pulling a 30% leg from another campaign's splitter. |
 | `FeeSplitterV4` | built, 14 tests | Hold-weighted claims (sellers forfeit to `forfeitTo` = the burner); `settle()` crank; `backerOwed()` for the UI. Vault-stake path removed. |
-| `SplitterDeployerV4` / `CampaignV4` | built, 6 lock tests | Pre-launch lock; `forfeitTo = legs[0]` = the burner. |
+| `SplitterDeployerV4` / `CampaignV4` | built, 9 lock tests | Pre-launch lock in **days from launch** (`lockDays`, `lockUntil()` = 0 until launch, `launchedAt`); **locking pays**: `lockMultiplierBps` 180d+ ×1.25, 365d+ ×1.5, weight = contribution × multiplier, `weightedRaised` kept live and frozen at launch (`weightedRaisedAtLaunch`); the splitter's `backerEntitlement` uses `backerWeight / weightedRaisedAtLaunch`. Token allocation is NOT weighted. Extend only pre-launch. `forfeitTo = legs[0]` = the burner. |
 | `CampaignFactoryV6` (v8) | built | ctor: `platformFeeRecipient, proofBurner, platformBps, proofBurnBps, …`; creation fee → burner; legs order: burner FIRST, coin burn?, lp?, vaults…, platform LAST. |
 | `script/DeployProofBurner.s.sol` | ready | env `PROOF_CAMPAIGN` (the launched platform-token campaign). |
 | `script/DeployV6.s.sol` | ready | env `PROOF_BURNER`, `PLATFORM_BPS` (e.g. 1000), `PROOF_BURN_BPS` (e.g. 3000), `EQUITY_ROUTER`, `LEG_DEPLOYER`. |
@@ -80,7 +80,9 @@ same ETH and burns are the meta.
 heavy coin-burn leg (`BurnLegV3` buys the campaign's own token = a PROOF
 burn from day one) → `DeployProofBurner` → `DeployV6` → UI flips.
 
-**Owed before deploy:** the split numbers (founder), the fee-card / audit
+**Decided 2026-09-22:** `PROOF_BURN_BPS=3000`, `PLATFORM_BPS=1000`, backers = remainder (create page presets: Flywheel = coin burn 10 → backers 50 · Backer Max → 60 · Burn Heavy = coin burn 30 → 30).
+
+**Owed before deploy:** the fee-card / audit
 page reading `proofBurner()` + a live "fees → burned" ticker from the
 burner's counters, explorer verification day-of, external review of
 `ProofBurner` (the review brief has the questions).

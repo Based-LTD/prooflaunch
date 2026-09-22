@@ -12,6 +12,8 @@ interface ICampaignHoldView {
     function tokensAtLaunch() external view returns (uint256);
     function tokensClaimed(address backer) external view returns (bool);
     function launched() external view returns (bool);
+    function backerWeight(address backer) external view returns (uint256);
+    function weightedRaisedAtLaunch() external view returns (uint256);
     function token() external view returns (address);
     function quoteToken() external view returns (address);
 }
@@ -130,11 +132,14 @@ contract FeeSplitterV4 {
     }
 
     /// A backer's lifetime entitlement from the backer pool for `asset` —
-    /// the launch-time share, before the hold rule. Same as V1–V3.
+    /// the launch-time share, before the hold rule. V4: weighted by the
+    /// pre-launch lock (CampaignV4.lockMultiplierBps), both sides frozen at
+    /// launch, so a locked seat earns more of the same pool. Tokens are
+    /// still allocated by plain contribution (heldBps).
     function backerEntitlement(address backer, address asset) public view returns (uint256) {
-        uint256 total = campaign.totalRaisedAtLaunch();
+        uint256 total = campaign.weightedRaisedAtLaunch();
         if (total == 0) return 0;
-        return (backerPool[asset] * campaign.contributionOf(backer)) / total;
+        return (backerPool[asset] * campaign.backerWeight(backer)) / total;
     }
 
     /// What a claim would pay right now: banked + the unjudged remainder at

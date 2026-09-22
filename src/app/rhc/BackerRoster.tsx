@@ -9,7 +9,7 @@
 // current token balance against the allocation the raise gave it, so a
 // visitor can see at a glance who kept their position and who sold.
 import { useEffect, useState } from 'react';
-import { fmtEth, explorerUrl } from '@/lib/rhc';
+import { fmtEth, explorerUrl, lockMultiplier } from '@/lib/rhc';
 import type { RosterResponse, RosterBacker } from '../api/rhc/campaign/[address]/backers/route';
 
 interface Props {
@@ -27,16 +27,20 @@ interface Props {
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const nowS = () => Math.floor(Date.now() / 1000);
-const lockedNow = (b: RosterBacker) => b.lockUntil > nowS();
-const lockDate = (b: RosterBacker) => new Date(b.lockUntil * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+/// Pre-launch a lock is a promise in days; post-launch it is a date.
+const lockedNow = (b: RosterBacker) => b.lockDays > 0 && (b.lockUntil === 0 || b.lockUntil > nowS());
+const lockLabel = (b: RosterBacker) => b.lockUntil > 0
+  ? new Date(b.lockUntil * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+  : b.lockDays >= 365 ? `${(b.lockDays / 365).toFixed(b.lockDays % 365 ? 1 : 0)}y after launch` : `${b.lockDays}d after launch`;
+const lockMult = (b: RosterBacker) => lockMultiplier(b.lockDays);
 /// The lock tag — the thing a speculator reads. It is a contract fact:
 /// claimTokens() reverts before this date, and there is nobody who could
 /// change that. Link goes to the campaign contract, not to us.
 const LockTag = ({ b, address }: { b: RosterBacker; address: string }) => lockedNow(b) ? (
   <a href={explorerUrl(address) + '#readContract'} target="_blank" rel="noopener noreferrer"
-    title={`lockUntil(${b.wallet}) on the campaign contract — claimTokens() reverts before this date; no one can shorten it`}
+    title={`lockDays(${b.wallet}) on the campaign contract — claimTokens() reverts before launch + ${b.lockDays} days; no one can shorten it. Fee weight ×${lockMult(b)}.`}
     className="ml-2 text-[9px] uppercase tracking-widest text-[var(--accent-gold)] border border-[var(--accent-gold)]/50 px-1 py-0.5 hover:bg-[var(--accent-gold)]/10">
-    🔒 locked → {lockDate(b)}
+    🔒 {lockLabel(b)}{lockMult(b) > 1 ? ` · ×${lockMult(b)} fees` : ''}
   </a>
 ) : null;
 const th = 'py-2 px-2 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] whitespace-nowrap';

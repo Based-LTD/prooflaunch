@@ -63,15 +63,26 @@ contract CampaignV4 {
     uint256 public totalRaisedAtLaunch;
     mapping(address => bool) public tokensClaimed;
     /// Pre-launch lock, chosen by the backer when they take their seat and
-    /// visible on the roster before anyone else commits. The tokens never
+    /// visible on the roster before anyone else commits. Measured in days
+    /// FROM LAUNCH, so "one year" means one year of the token existing,
+    /// not one year minus however long the raise took. The tokens never
     /// leave THIS contract until the date: no second contract, no locker
     /// brand to trust, nothing an admin could shorten (there is no admin).
-    /// Only ever extendable. Cleared by a pre-launch withdraw (they left).
-    /// A locked seat still earns its full fee share — FeeSplitterV4 counts
-    /// unclaimed tokens as held.
-    mapping(address => uint64) public lockUntil;
+    /// Only ever extendable, and only before launch: the lock and its fee
+    /// weight are both frozen the moment the token exists. Cleared by a
+    /// pre-launch withdraw (they left).
+    ///
+    /// Locking PAYS: a locked seat's fee share is weighted (see
+    /// lockMultiplierBps) — the extra comes out of the same pool the
+    /// sellers forfeit. Token allocation is NOT weighted; only fees are.
+    mapping(address => uint32) public lockDays;
     /// Fat-finger guard: a typo must not become a permanent lock.
-    uint64 public constant MAX_LOCK = 4 * 365 days;
+    uint32 public constant MAX_LOCK_DAYS = 4 * 365;
+    uint64 public launchedAt;
+    /// Σ contribution × lockMultiplierBps / 10_000, kept live pre-launch and
+    /// frozen at launch — the denominator of every fee claim.
+    uint256 public weightedRaised;
+    uint256 public weightedRaisedAtLaunch;
     /// Excess quote (oversized raise refund) is paid on claimTokens; a
     /// locked backer can take it early instead of waiting for their tokens.
     mapping(address => bool) public excessClaimed;
@@ -83,7 +94,7 @@ contract CampaignV4 {
     event Refunded(address indexed backer, uint256 amount);
     event LaunchFeeRefunded(address indexed creator, uint256 amount);
     event Cancelled();
-    event Locked(address indexed backer, uint64 until);
+    event Locked(address indexed backer, uint32 lockDays, uint16 multiplierBps);
 
     error BadState();
     error BadAmount();
@@ -172,33 +183,64 @@ contract CampaignV4 {
     }
 
     /// ERC20-quoted deposits (approve first).
-    /// deposit(), plus a promise: my tokens stay in this contract until
-    /// `until`. Set at seat time so every later backer can see it.
-    function depositLocked(uint64 until) external payable nonReentrant {
+    /// The fee-weight tiers. Three thresholds, no admin, no curve to argue
+    /// about: 0–179 days ×1.0 · 180–364 days ×1.25 · 365 days+ ×1.5.
+    function lockMultiplierBps(uint32 days_) public pure returns (uint16) {
+        if (days_ >= 365) return 15_000;
+        if (days_ >= 180) return 12_500;
+        return 10_000;
+    }
+
+    /// A backer's fee weight: contribution × multiplier. Read live by the
+    /// splitter; both inputs are frozen from launch on.
+    function backerWeight(address backer) external view returns (uint256) {
+        return (contributionOf[backer] * lockMultiplierBps(lockDays[backer])) / 10_000;
+    }
+
+    /// When this backer's tokens become claimable. 0 = no lock or not
+    /// launched yet (the roster shows lockDays before launch).
+    function lockUntil(address backer) external view returns (uint64) {
+        if (launchedAt == 0 || lockDays[backer] == 0) return 0;
+        return launchedAt + uint64(lockDays[backer]) * 1 days;
+    }
+
+    /// deposit(), plus a promise: my tokens stay in this contract for
+    /// `days_` days after launch. Set at seat time so every later backer
+    /// can see it — and it pays (lockMultiplierBps).
+    function depositLocked(uint32 days_) external payable nonReentrant {
         if (quoteToken != address(0)) revert WrongAsset();
-        _setLock(until);
+        _setLock(days_);
         _deposit(msg.value);
     }
 
     /// depositToken(), locked. See depositLocked.
-    function depositTokenLocked(uint256 amount, uint64 until) external nonReentrant {
+    function depositTokenLocked(uint256 amount, uint32 days_) external nonReentrant {
         if (quoteToken == address(0)) revert WrongAsset();
-        _setLock(until);
+        _setLock(days_);
         if (!IERC20Quote(quoteToken).transferFrom(msg.sender, address(this), amount)) revert PayFailed();
         _deposit(amount);
     }
 
-    /// Longer, never shorter. Any time before the tokens are claimed.
-    function extendLock(uint64 until) external {
-        if (contributionOf[msg.sender] == 0 || tokensClaimed[msg.sender]) revert BadState();
-        _setLock(until);
+    /// Longer, never shorter — and only before launch, because the fee
+    /// weight is frozen with the lock the moment the token exists.
+    function extendLock(uint32 days_) external {
+        if (contributionOf[msg.sender] == 0 || launched) revert BadState();
+        _setLock(days_);
     }
 
-    function _setLock(uint64 until) internal {
-        if (until <= block.timestamp || until <= lockUntil[msg.sender]) revert LockNotLonger();
-        if (until > block.timestamp + MAX_LOCK) revert LockTooLong();
-        lockUntil[msg.sender] = until;
-        emit Locked(msg.sender, until);
+    function _setLock(uint32 days_) internal {
+        if (launched) revert BadState();
+        uint32 cur = lockDays[msg.sender];
+        if (days_ == 0 || days_ <= cur) revert LockNotLonger();
+        if (days_ > MAX_LOCK_DAYS) revert LockTooLong();
+        // re-weight the seat's existing contribution (a top-up follows in
+        // _deposit at the new multiplier)
+        uint256 c = contributionOf[msg.sender];
+        if (c > 0) {
+            weightedRaised = weightedRaised - (c * lockMultiplierBps(cur)) / 10_000 + (c * lockMultiplierBps(days_)) / 10_000;
+        }
+        lockDays[msg.sender] = days_;
+        emit Locked(msg.sender, days_, lockMultiplierBps(days_));
     }
 
     function depositToken(uint256 amount) external nonReentrant {
@@ -238,6 +280,7 @@ contract CampaignV4 {
         }
         contributionOf[msg.sender] = newContribution;
         totalRaised += amount;
+        weightedRaised += (amount * lockMultiplierBps(lockDays[msg.sender])) / 10_000;
         emit Deposited(msg.sender, amount, totalRaised, seatBucket[msg.sender]);
     }
 
@@ -249,11 +292,12 @@ contract CampaignV4 {
         if (amount == 0) revert BadAmount();
         contributionOf[msg.sender] = 0;
         totalRaised -= amount;
+        weightedRaised -= (amount * lockMultiplierBps(lockDays[msg.sender])) / 10_000;
         backerCount -= 1;
         if (seatBucket[msg.sender] == 2) reservedSeatsUsed -= 1;
         else if (seatBucket[msg.sender] == 1 && maxBackers != 0) publicSeatsUsed -= 1;
         seatBucket[msg.sender] = 0;
-        lockUntil[msg.sender] = 0; // the promise went with the seat
+        lockDays[msg.sender] = 0; // the promise went with the seat
         emit Withdrawn(msg.sender, amount, totalRaised);
         _payQuote(msg.sender, amount);
     }
@@ -268,6 +312,8 @@ contract CampaignV4 {
 
         launched = true;
         totalRaisedAtLaunch = totalRaised;
+        weightedRaisedAtLaunch = weightedRaised;
+        launchedAt = uint64(block.timestamp);
 
         uint256 fee = ponsFactory.launchFee();
         bytes32 econ = ponsFactory.previewLaunchEconomics(launchConfigId, quoteToken);
@@ -322,7 +368,7 @@ contract CampaignV4 {
     function claimTokens() external nonReentrant {
         if (!launched) revert BadState();
         if (tokensClaimed[msg.sender]) revert BadAmount();
-        if (block.timestamp < lockUntil[msg.sender]) revert StillLocked();
+        if (lockDays[msg.sender] != 0 && block.timestamp < launchedAt + uint64(lockDays[msg.sender]) * 1 days) revert StillLocked();
         uint256 contribution = contributionOf[msg.sender];
         if (contribution == 0) revert BadAmount();
         tokensClaimed[msg.sender] = true;

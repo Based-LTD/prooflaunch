@@ -49,72 +49,126 @@ contract PreLaunchLockTest is Test {
 
     function test_lockedSeat_tokensStayUntilDate_thenClaim() public {
         CampaignV4 c = _create(1 ether);
-        uint64 until = uint64(block.timestamp + 365 days);
-        vm.prank(alice); c.depositLocked{value: 0.6 ether}(until);
+        vm.prank(alice); c.depositLocked{value: 0.6 ether}(365);
         vm.prank(bob); c.deposit{value: 0.4 ether}();
-        assertEq(c.lockUntil(alice), until, "readable by anyone, before launch");
-        assertEq(c.lockUntil(bob), 0);
+        assertEq(c.lockDays(alice), 365, "readable by anyone, before launch");
+        assertEq(c.lockUntil(alice), 0, "no date until launch - measured from launch");
+        assertEq(c.lockDays(bob), 0);
+        vm.warp(block.timestamp + 12 hours); // the raise takes a while
         vm.prank(creator); c.launch();
+        uint64 until = uint64(block.timestamp + 365 days);
+        assertEq(c.lockUntil(alice), until, "a full year from LAUNCH");
         // bob is free; alice is not
         vm.prank(bob); c.claimTokens();
         vm.expectRevert(CampaignV4.StillLocked.selector);
         vm.prank(alice); c.claimTokens();
-        // the day comes
+        vm.warp(until - 1);
+        vm.expectRevert(CampaignV4.StillLocked.selector);
+        vm.prank(alice); c.claimTokens();
         vm.warp(until);
         vm.prank(alice); c.claimTokens();
-        assertEq(MockERC20(c.token()).balanceOf(alice), 600_000 ether);
+        assertEq(MockERC20(c.token()).balanceOf(alice), 600_000 ether, "tokens are NOT weighted - same allocation as an unlocked 0.6");
+    }
+
+    // ── locking pays ─────────────────────────────────────────────────
+
+    function test_lockWeights_aYearEarnsOneAndAHalf() public {
+        CampaignV4 c = _create(1 ether);
+        vm.prank(alice); c.depositLocked{value: 0.5 ether}(365); // weight 0.75
+        vm.prank(bob); c.deposit{value: 0.5 ether}();             // weight 0.5
+        assertEq(c.weightedRaised(), 1.25 ether);
+        vm.prank(creator); c.launch();
+        assertEq(c.weightedRaisedAtLaunch(), 1.25 ether);
+        FeeSplitterV4 sp = c.feeSplitter();
+        (bool ok, ) = address(sp).call{value: 1 ether}(""); require(ok); // 0.9 to backers
+        sp.distribute(address(0));
+        assertEq(sp.backerEntitlement(alice, address(0)), (uint256(0.9 ether) * 3) / 5, "0.75 / 1.25 of the pool");
+        assertEq(sp.backerEntitlement(bob, address(0)), (uint256(0.9 ether) * 2) / 5);
+        vm.prank(alice); assertEq(sp.claimBacker(address(0)), 0.54 ether);
+        vm.prank(bob); assertEq(sp.claimBacker(address(0)), 0.36 ether);
+        assertEq(address(sp).balance, 0.1 ether, "legs 10% untouched - the bonus came from the pool");
+    }
+
+    function test_lockWeights_tiers_andExtendReweights() public {
+        CampaignV4 c = _create(1 ether);
+        assertEq(c.lockMultiplierBps(0), 10_000);
+        assertEq(c.lockMultiplierBps(179), 10_000);
+        assertEq(c.lockMultiplierBps(180), 12_500);
+        assertEq(c.lockMultiplierBps(364), 12_500);
+        assertEq(c.lockMultiplierBps(365), 15_000);
+        assertEq(c.lockMultiplierBps(1460), 15_000, "no tier above 1.5x");
+        vm.prank(alice); c.deposit{value: 0.4 ether}();
+        assertEq(c.weightedRaised(), 0.4 ether);
+        vm.prank(alice); c.extendLock(180);
+        assertEq(c.weightedRaised(), 0.5 ether, "existing stake re-weighted at 1.25");
+        vm.prank(alice); c.deposit{value: 0.2 ether}(); // top-up at the seat's multiplier
+        assertEq(c.weightedRaised(), 0.75 ether);
+        vm.prank(alice); c.extendLock(365);
+        assertEq(c.weightedRaised(), 0.9 ether);
+        vm.prank(alice); c.withdraw();
+        assertEq(c.weightedRaised(), 0);
+        assertEq(c.lockDays(alice), 0);
+    }
+
+    function test_lockWeights_frozenAtLaunch_noPostLaunchExtend() public {
+        CampaignV4 c = _create(1 ether);
+        vm.prank(alice); c.deposit{value: 0.6 ether}();
+        vm.prank(bob); c.deposit{value: 0.4 ether}();
+        vm.prank(creator); c.launch();
+        vm.expectRevert(CampaignV4.BadState.selector);
+        vm.prank(alice); c.extendLock(365);
+        assertEq(c.weightedRaisedAtLaunch(), 1 ether);
     }
 
     function test_lockedSeat_stillEarnsFullFees() public {
         CampaignV4 c = _create(1 ether);
-        vm.prank(alice); c.depositLocked{value: 0.6 ether}(uint64(block.timestamp + 365 days));
+        vm.prank(alice); c.depositLocked{value: 0.6 ether}(365); // weight 0.9 vs bob 0.4
         vm.prank(bob); c.deposit{value: 0.4 ether}();
         vm.prank(creator); c.launch();
         FeeSplitterV4 sp = c.feeSplitter();
         (bool ok, ) = address(sp).call{value: 1 ether}(""); require(ok);
         assertEq(sp.heldBps(alice), 10_000, "locked = held");
         vm.prank(alice); uint256 paid = sp.claimBacker(address(0));
-        assertEq(paid, 0.54 ether);
+        assertEq(paid, (uint256(0.9 ether) * 9) / 13, "her weighted share: 0.9 / 1.3 of the 0.9 pool");
     }
 
     function test_lock_onlyEverLonger_andCapped() public {
         CampaignV4 c = _create(1 ether);
-        uint64 until = uint64(block.timestamp + 180 days);
-        vm.prank(alice); c.depositLocked{value: 0.6 ether}(until);
+        vm.prank(alice); c.depositLocked{value: 0.6 ether}(180);
         // shorter: no
         vm.expectRevert(CampaignV4.LockNotLonger.selector);
-        vm.prank(alice); c.extendLock(uint64(block.timestamp + 90 days));
+        vm.prank(alice); c.extendLock(90);
         // same: no
         vm.expectRevert(CampaignV4.LockNotLonger.selector);
-        vm.prank(alice); c.extendLock(until);
-        // past: no
+        vm.prank(alice); c.extendLock(180);
+        // zero: no
         vm.expectRevert(CampaignV4.LockNotLonger.selector);
-        vm.prank(bob); c.depositLocked{value: 0.4 ether}(uint64(block.timestamp - 1));
+        vm.prank(bob); c.depositLocked{value: 0.4 ether}(0);
         // too long: no (fat-finger guard)
         vm.expectRevert(CampaignV4.LockTooLong.selector);
-        vm.prank(alice); c.extendLock(uint64(block.timestamp + 5 * 365 days));
+        vm.prank(alice); c.extendLock(5 * 365);
         // longer: yes
-        vm.prank(alice); c.extendLock(uint64(block.timestamp + 365 days));
-        assertEq(c.lockUntil(alice), block.timestamp + 365 days);
+        vm.prank(alice); c.extendLock(365);
+        assertEq(c.lockDays(alice), 365);
         // a plain top-up deposit keeps the lock
         vm.prank(alice); c.deposit{value: 0.1 ether}();
-        assertEq(c.lockUntil(alice), block.timestamp + 365 days);
+        assertEq(c.lockDays(alice), 365);
     }
 
     function test_withdrawBeforeLaunch_clearsTheLock() public {
         CampaignV4 c = _create(1 ether);
-        vm.prank(alice); c.depositLocked{value: 0.6 ether}(uint64(block.timestamp + 365 days));
+        vm.prank(alice); c.depositLocked{value: 0.6 ether}(365);
         vm.prank(alice); c.withdraw();
-        assertEq(c.lockUntil(alice), 0, "no seat, no promise");
+        assertEq(c.lockDays(alice), 0, "no seat, no promise");
         // and re-entering unlocked is fine — the lock was never a trap
         vm.prank(alice); c.deposit{value: 0.6 ether}();
-        assertEq(c.lockUntil(alice), 0);
+        assertEq(c.lockDays(alice), 0);
     }
 
     function test_lockNeverTrapsTheExcessRefund() public {
         // 6 ETH raise against the mock's 4.2 ETH curve cap → 1.8 excess
         CampaignV4 c = _create(6 ether);
-        vm.prank(alice); c.depositLocked{value: 3 ether}(uint64(block.timestamp + 365 days));
+        vm.prank(alice); c.depositLocked{value: 3 ether}(365);
         vm.prank(bob); c.deposit{value: 3 ether}();
         vm.prank(creator); c.launch();
         // pons' launch fee comes off the pooled buy first: 6 − 0.0005 − 4.2
@@ -126,7 +180,7 @@ contract PreLaunchLockTest is Test {
         vm.expectRevert(CampaignV4.BadAmount.selector);
         vm.prank(alice); c.claimExcess(); // once
         // tokens still locked; after the date, claimTokens pays tokens only
-        vm.warp(block.timestamp + 365 days);
+        vm.warp(c.lockUntil(alice));
         before = alice.balance;
         vm.prank(alice); c.claimTokens();
         assertEq(alice.balance, before, "no double excess");
@@ -137,20 +191,13 @@ contract PreLaunchLockTest is Test {
         assertEq(bob.balance - before, excess / 2);
     }
 
-    function test_extendLock_needsASeat_andNotAfterClaim() public {
+    function test_extendLock_needsASeat() public {
         CampaignV4 c = _create(1 ether);
         vm.expectRevert(CampaignV4.BadState.selector);
-        vm.prank(alice); c.extendLock(uint64(block.timestamp + 30 days));
+        vm.prank(alice); c.extendLock(30);
         vm.prank(alice); c.deposit{value: 0.6 ether}();
-        vm.prank(bob); c.deposit{value: 0.4 ether}();
-        vm.prank(creator); c.launch();
-        // can still lock AFTER launch, before claiming — a public commitment any time
-        vm.prank(alice); c.extendLock(uint64(block.timestamp + 30 days));
-        vm.expectRevert(CampaignV4.StillLocked.selector);
-        vm.prank(alice); c.claimTokens();
-        vm.warp(block.timestamp + 30 days);
-        vm.prank(alice); c.claimTokens();
-        vm.expectRevert(CampaignV4.BadState.selector);
-        vm.prank(alice); c.extendLock(uint64(block.timestamp + 30 days));
+        vm.prank(alice); c.extendLock(30);
+        assertEq(c.lockDays(alice), 30);
+        assertEq(c.lockMultiplierBps(30), 10_000, "short locks are a signal, not a bonus");
     }
 }

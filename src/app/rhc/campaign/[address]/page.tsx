@@ -8,7 +8,7 @@ import { use, useEffect, useState, useCallback } from 'react';
 import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, isAddress } from 'viem';
 import {
-  rhcPublicClient, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl,
+  rhcPublicClient, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl, lockMultiplier,
   RHC_WETH, robinhoodChain, QUOTE_ASSETS,
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill } from '../../components';
@@ -44,7 +44,7 @@ interface State {
   myEth: bigint; // signer's ETH — an empty wallet must be told BEFORE the wallet prompt, not by a red banner inside it
   gasPrice: bigint;
   v7: V7 | null; // null for v1–v6 campaigns; this page serves every generation
-  v8: { myLockUntil: number; maxLock: number } | null; // pre-launch lock (CampaignV4)
+  v8: { myLockUntil: number; myLockDays: number; maxLockDays: number } | null; // pre-launch lock (CampaignV4)
   splitterV4: boolean; // FeeSplitterV4: hold-weighted fees
   myHeldBps: number;   // 10000 = fully held (only meaningful when splitterV4)
 }
@@ -303,15 +303,15 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           quoteDecimals: known?.decimals ?? 18,
         };
       } catch { /* v1–v6 campaign */ }
-      // v8 probe: MAX_LOCK() only exists on CampaignV4.
+      // v8 probe: MAX_LOCK_DAYS() only exists on CampaignV4.
       let v8: State['v8'] = null;
       try {
         const c4 = { address: addr, abi: campaignV4Abi } as const;
-        const [maxLock, myLockUntil] = await rhcPublicClient.multicall({
-          contracts: [{ ...c4, functionName: 'MAX_LOCK' }, { ...c4, functionName: 'lockUntil', args: [who] }],
+        const [maxLockDays, myLockUntil, myLockDays] = await rhcPublicClient.multicall({
+          contracts: [{ ...c4, functionName: 'MAX_LOCK_DAYS' }, { ...c4, functionName: 'lockUntil', args: [who] }, { ...c4, functionName: 'lockDays', args: [who] }],
           allowFailure: false,
-        }) as unknown as [bigint, bigint];
-        v8 = { maxLock: Number(maxLock), myLockUntil: Number(myLockUntil) };
+        }) as unknown as [number, bigint, number];
+        v8 = { maxLockDays: Number(maxLockDays), myLockUntil: Number(myLockUntil), myLockDays: Number(myLockDays) };
       } catch { /* v1–v7 campaign */ }
 
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
@@ -439,18 +439,21 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const publicFull = !!v7 && s.maxBackers > 0n && !takesReserved && publicSeatsLeft <= 0;
   // ── v8 lock ─────────────────────────────────────────────────────────
   const v8 = s.v8;
-  const lockUntilTs = lockDays > 0 ? BigInt(Math.floor(Date.now() / 1000) + lockDays * 86400) : 0n;
-  const iAmLocked = !!v8 && v8.myLockUntil > Math.floor(Date.now() / 1000);
-  const myLockDate = v8 ? new Date(v8.myLockUntil * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  // Locks are DAYS FROM LAUNCH (a year means a year of the token existing).
+  const iAmLocked = !!v8 && v8.myLockDays > 0 && (v8.myLockUntil === 0 || v8.myLockUntil > Math.floor(Date.now() / 1000));
+  const myLockDate = v8 && v8.myLockUntil > 0
+    ? new Date(v8.myLockUntil * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+    : v8 ? `${v8.myLockDays} days after launch` : '';
+  const lockMult = lockMultiplier(lockDays);
   /// One deposit call for every generation: locked v8 deposits go through
   /// depositLocked / depositTokenLocked, everything else is unchanged.
   const depositCall = (units: bigint, confirmed = false) => {
-    if (v8 && lockUntilTs > 0n && !confirmed) { setLockConfirm(units); return; }
+    if (v8 && lockDays > 0 && !confirmed) { setLockConfirm(units); return; }
     setLockConfirm(null);
-    if (v8 && lockUntilTs > 0n) {
+    if (v8 && lockDays > 0) {
       return isErc20Quote
-        ? writeContract({ address: addr, abi: campaignV4Abi, functionName: 'depositTokenLocked', args: [units, lockUntilTs], chainId: robinhoodChain.id })
-        : writeContract({ address: addr, abi: campaignV4Abi, functionName: 'depositLocked', args: [lockUntilTs], value: units, chainId: robinhoodChain.id });
+        ? writeContract({ address: addr, abi: campaignV4Abi, functionName: 'depositTokenLocked', args: [units, lockDays], chainId: robinhoodChain.id })
+        : writeContract({ address: addr, abi: campaignV4Abi, functionName: 'depositLocked', args: [lockDays], value: units, chainId: robinhoodChain.id });
     }
     return isErc20Quote
       ? writeContract({ address: addr, abi: campaignV3Abi, functionName: 'depositToken', args: [units], chainId: robinhoodChain.id })
@@ -458,14 +461,14 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   };
   const lockPicker = v8 && s.myContribution === 0n ? (
     <label className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-      <span title="Your tokens stay in this campaign contract until the date. Visible to every backer before launch. Nobody can shorten it — there is no admin. Your fee share is unaffected.">🔒 lock my tokens</span>
+      <span title="Your tokens stay in this campaign contract for this long AFTER launch. Visible to every backer before launch. Nobody can shorten it — there is no admin. Locking pays: 6 months earns fees at ×1.25, a year or more at ×1.5, out of the same pool sellers forfeit.">🔒 lock my tokens</span>
       <select value={lockDays} onChange={(e) => setLockDays(Number(e.target.value))}
         className="bg-[var(--background)] border border-[var(--border)] px-2 py-1.5 text-[10px] font-mono uppercase tracking-widest focus:border-[var(--accent)] focus:outline-none">
-        <option value={0}>no lock</option>
-        <option value={90}>3 months</option>
-        <option value={180}>6 months</option>
-        <option value={365}>1 year</option>
-        <option value={730}>2 years</option>
+        <option value={0}>no lock · ×1 fees</option>
+        <option value={90}>3 months · ×1 fees</option>
+        <option value={180}>6 months · ×1.25 fees</option>
+        <option value={365}>1 year · ×1.5 fees</option>
+        <option value={730}>2 years · ×1.5 fees</option>
       </select>
     </label>
   ) : null;
@@ -656,12 +659,12 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               {lockConfirm !== null && v8 && (
                 <div className="border border-[var(--accent-gold)]/60 bg-[var(--accent-gold)]/5 px-3 py-3 space-y-2">
                   <p className="text-xs font-mono text-[var(--foreground)]">
-                    🔒 You are locking your ${s.meta.symbol} until <span className="text-[var(--accent-gold)]">{new Date(Number(lockUntilTs) * 1000).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</span>.
-                    The tokens stay in this contract until then. This cannot be shortened or undone by anyone, including us. Your fee share is unaffected, and you can still withdraw before launch.
+                    🔒 You are locking your ${s.meta.symbol} for <span className="text-[var(--accent-gold)]">{lockDays >= 365 ? `${lockDays / 365} year${lockDays > 365 ? 's' : ''}` : `${lockDays} days`} after launch</span>{lockMult > 1 ? <> and your fee share is weighted <span className="text-[var(--accent-gold)]">×{lockMult}</span></> : null}.
+                    The tokens stay in this contract until then. This cannot be shortened or undone by anyone, including us. You can still withdraw before launch, which clears the lock.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button onClick={() => depositCall(lockConfirm, true)} disabled={isPending} className="btn-primary !px-3 !py-1.5 !text-[10px]">
-                      Lock until {new Date(Number(lockUntilTs) * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} and back {q(lockConfirm)} {qSym}
+                      Lock {lockDays >= 365 ? `${lockDays / 365}y` : `${lockDays}d`} after launch and back {q(lockConfirm)} {qSym}
                     </button>
                     <button onClick={() => setLockConfirm(null)} className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]">
                       Cancel
@@ -910,7 +913,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               {s.myContribution > 0n && !s.myTokensClaimed && (
                 iAmLocked ? (
                   <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] border border-[var(--accent-gold)]/40 bg-[var(--accent-gold)]/5 px-3 py-2">
-                    🔒 Your {(Number(myTokenShare) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol} are locked in this contract until {myLockDate}. They earn your full fee share meanwhile.
+                    🔒 Your {(Number(myTokenShare) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${s.meta.symbol} are locked in this contract until {myLockDate}. They earn your fee share meanwhile{v8 && lockMultiplier(v8.myLockDays) > 1 ? `, weighted ×${lockMultiplier(v8.myLockDays)}` : ''}.
                   </p>
                 ) : (
                   <button onClick={() => act('claimTokens')} disabled={isPending} className="btn-primary">

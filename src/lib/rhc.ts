@@ -232,14 +232,24 @@ export const curveAbi = parseAbi([
 // v8 campaigns (CampaignV4) only — the pre-launch lock. MAX_LOCK() doubles
 // as the generation probe; older campaigns have none of this.
 export const campaignV4Abi = parseAbi([
+  // lock is measured in DAYS FROM LAUNCH; lockUntil() is 0 until launch
+  'function lockDays(address) view returns (uint32)',
   'function lockUntil(address) view returns (uint64)',
-  'function MAX_LOCK() view returns (uint64)',
+  'function lockMultiplierBps(uint32 days_) pure returns (uint16)',
+  'function MAX_LOCK_DAYS() view returns (uint32)',
+  'function launchedAt() view returns (uint64)',
   'function excessClaimed(address) view returns (bool)',
-  'function depositLocked(uint64 until) payable',
-  'function depositTokenLocked(uint256 amount, uint64 until)',
-  'function extendLock(uint64 until)',
+  'function depositLocked(uint32 days_) payable',
+  'function depositTokenLocked(uint256 amount, uint32 days_)',
+  'function extendLock(uint32 days_)',
   'function claimExcess()',
 ]);
+
+/// The lock tiers, mirrored from CampaignV4.lockMultiplierBps so the UI can
+/// say "×1.5" before the wallet opens. Contract is the source of truth.
+export function lockMultiplier(days: number): number {
+  return days >= 365 ? 1.5 : days >= 180 ? 1.25 : 1;
+}
 
 export const erc20Abi = parseAbi([
   'function balanceOf(address) view returns (uint256)',

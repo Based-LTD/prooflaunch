@@ -62,6 +62,16 @@ const BOT_SHORT: Record<BotKind, string> = { burn: 'BURN', feed_lp: 'POOL FEED',
 // One-tap fee presets on each bot card — most creators think in these.
 const PCT_PRESETS = ['5', '10', '20', '30'];
 
+// Whole-stack presets. Defaults set the meta: Flywheel is what the board
+// should mostly look like; the other two are for creators who already know
+// what they want. Only the coin's own burn moves — the platform legs are
+// factory policy and the backers get whatever is left.
+const STACK_PRESETS: { id: string; label: string; burn: string; blurb: string }[] = [
+  { id: 'flywheel', label: 'Flywheel', burn: '10', blurb: '10% buys and burns your own token. Backers keep the rest.' },
+  { id: 'backers', label: 'Backer Max', burn: '', blurb: 'No coin burn. Every point not fixed by the factory goes to backers.' },
+  { id: 'burn', label: 'Burn Heavy', burn: '30', blurb: '30% buys and burns your own token. Tightest float, smallest backer share.' },
+];
+
 export default function CreateCampaignPage() {
   const { address, isConnected, chainId } = useAccount();
   const { switchChain, isPending: switching } = useSwitchChain();
@@ -1141,6 +1151,27 @@ export default function CreateCampaignPage() {
                       <div className="bg-[var(--accent)]/60" style={{ width: `${Math.min(botsPct, 90)}%` }} />
                       <div className="bg-[var(--foreground)]/20" style={{ width: `${backerPct}%` }} />
                       <div className="bg-[var(--muted)]/40" style={{ width: '10%' }} />
+                    </div>
+                  </div>
+
+                  {/* Whole-stack presets — one tap, then tune if you care. */}
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                      PRESETS
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {STACK_PRESETS.map((ps) => {
+                        const burnNow = stack.find((b) => b.kind === 'burn')?.pct ?? '';
+                        const active = burnNow === ps.burn && stack.every((b) => b.kind === 'burn' || !Number(b.pct));
+                        return (
+                          <button key={ps.id} type="button"
+                            onClick={() => setStack(ps.burn ? [{ kind: 'burn', pct: ps.burn, addr: '' }, ...stack.filter((b) => b.kind !== 'burn')] : stack.filter((b) => b.kind !== 'burn'))}
+                            className={`text-left p-3 border transition-colors ${active ? 'border-[var(--accent)] bg-[var(--accent)]/5' : 'border-[var(--border)] hover:border-[var(--accent)]'}`}>
+                            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--foreground)]">{ps.label}{ps.id === 'flywheel' ? <span className="ml-2 text-[var(--accent)]">default</span> : null}</div>
+                            <div className="text-[10px] font-mono text-[var(--muted)] mt-1 leading-relaxed">{ps.blurb}</div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 

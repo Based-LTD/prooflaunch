@@ -41,7 +41,8 @@ export interface RosterBacker {
   deposits: number;
   firstBlock: string;
   firstTs: number | null; // unix seconds
-  lockUntil: number;      // unix seconds; 0 = no lock (v8 campaigns only)
+  lockUntil: number;      // unix seconds; 0 = no lock or not launched (v8 campaigns only)
+  lockDays: number;       // days from launch; 0 = no lock (v8 campaigns only)
   // post-launch only
   allocation: string;     // tokens the raise allotted this wallet (18 dp)
   tokensClaimed: boolean;
@@ -102,7 +103,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ address: s
 
     // Live reads per wallet. allowFailure because seatBucket() only exists
     // on v3 campaigns and the splitter views differ across generations.
-    const per = 7;
+    const per = 8;
     const calls = wallets.flatMap((w) => [
       { ...c, functionName: 'contributionOf', args: [w.wallet] },
       { ...c, functionName: 'tokensClaimed', args: [w.wallet] },
@@ -111,6 +112,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ address: s
       { address: feeSplitter, abi: splitterAbi, functionName: 'backerEntitlement', args: [w.wallet, feeAsset] },
       { address: feeSplitter, abi: splitterAbi, functionName: 'backerClaimed', args: [w.wallet, feeAsset] },
       { address: addr, abi: campaignV4Abi, functionName: 'lockUntil', args: [w.wallet] },
+      { address: addr, abi: campaignV4Abi, functionName: 'lockDays', args: [w.wallet] },
     ]);
     const res = wallets.length
       ? await rhcPublicClient.multicall({ contracts: calls as never, allowFailure: true })
@@ -141,6 +143,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ address: s
       const ent = launched ? pick<bigint>(o + 4, 0n) : 0n;
       const fc = launched ? pick<bigint>(o + 5, 0n) : 0n;
       const lockUntil = Number(pick<bigint>(o + 6, 0n));
+      const lockDays = Number(pick<number>(o + 7, 0));
       const allocation = launched && totalRaisedAtLaunch > 0n ? (tokensAtLaunch * contribution) / totalRaisedAtLaunch : 0n;
       backers.push({
         wallet: w.wallet,
@@ -150,6 +153,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ address: s
         firstBlock: w.firstBlock.toString(),
         firstTs: tsByBlock.get(w.firstBlock) ?? null,
         lockUntil,
+        lockDays,
         allocation: allocation.toString(),
         tokensClaimed: claimed,
         tokenBalance: balance.toString(),
