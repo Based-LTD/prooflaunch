@@ -1142,8 +1142,8 @@ export default function CreateCampaignPage() {
                         <span className="text-[var(--muted)]">/</span>
                         <span className="text-[var(--muted)]">Platform {FIXED_LEGS_PCT.platform}%</span>
                       </div>
-                      <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : botsPct >= budget ? 'text-[var(--muted)]' : 'text-[var(--accent)]'}`}>
-                        {overBudget ? 'over budget' : botsPct >= budget ? 'budget full' : `${budget - botsPct}% left`}
+                      <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : botsPct >= budget ? 'text-red-400' : 'text-[var(--success)]'}`}>
+                        {overBudget ? `over by ${botsPct - budget}% — bots can take at most ${budget}%` : botsPct >= budget ? 'backers get nothing — lower a bot' : `backers keep ${backerPct}%`}
                       </div>
                     </div>
                     <div className="flex h-1.5 mt-1.5 border border-[var(--border)] overflow-hidden">
