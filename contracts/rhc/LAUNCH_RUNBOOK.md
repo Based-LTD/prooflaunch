@@ -10,6 +10,24 @@ platform, fixed; backers get the rest; locking pays (×1.25 at 180d, ×1.5
 at 365d); zero dev allocation; founder takes ONE public seat; payout asset
 SpaceX. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 
+## Rehearsed 2026-09-22
+
+- `test/ForkV8Lifecycle.t.sol`: the whole day against live pons on a mainnet
+  fork — $PROOF on the live v7, burner, v8 factory, a v8 campaign with a
+  locked seat, real trades, sweep, harvest at 30/10, a seller's forfeit,
+  the 1.5× lock weight, claim-as-SPCX through the live router, pull, crank,
+  $PROOF at 0x…dEaD, lock released on schedule. PASS.
+- `deploy-v8.sh` executed for real against an anvil fork (RWA TEST as the
+  stand-in campaign, impersonated deployer): both scripts ran, the burner
+  address fed forward, the factory read the token from the burner,
+  v8.addresses.json written. `tools/flip-v8.mjs --check` against that fork:
+  6/6 green. To repeat:
+  `anvil --fork-url https://rpc.mainnet.chain.robinhood.com` then
+  `bash deploy-v8.sh "--unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" <env file> http://127.0.0.1:8545`
+  and `RHC_RPC_URL=http://127.0.0.1:8545 node tools/flip-v8.mjs --check`.
+- Not yet rehearsed: the UI pointed at a v8 fork (create → lock → launch →
+  claim → crank in a browser). Founder + test wallet needed.
+
 ## 0. Before the day
 
 - [ ] Ticker, name, logo (square), banner (3:1), description, socials.
@@ -43,7 +61,7 @@ SpaceX. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 ## 2 + 3. Deploy the burner, then v8 — one command
 
 ```bash
-cd contracts/rhc && bash deploy-v8.sh ~/.rhc-deployer/<keystore file>
+cd contracts/rhc && bash deploy-v8.sh "--keystore ~/.rhc-deployer/<keystore file>"
 ```
 Deploys ProofBurner against `PROOF_CAMPAIGN`, feeds its address into the
 factory deploy (the factory also reads the $PROOF token from the burner

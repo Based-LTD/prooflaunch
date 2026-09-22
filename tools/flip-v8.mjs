@@ -11,7 +11,7 @@ import { execSync } from 'child_process';
 import { createPublicClient, http, parseAbi } from 'viem';
 
 const a = JSON.parse(readFileSync('contracts/rhc/v8.addresses.json', 'utf8'));
-const c = createPublicClient({ transport: http('https://rpc.mainnet.chain.robinhood.com') });
+const c = createPublicClient({ transport: http(process.env.RHC_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com') });
 const fAbi = parseAbi(['function proofBurner() view returns (address)', 'function proofBurnBps() view returns (uint16)', 'function platformBps() view returns (uint16)', 'function campaignDeployer() view returns (address)']);
 const bAbi = parseAbi(['function proofToken() view returns (address)', 'function initializer() view returns (address)']);
 
