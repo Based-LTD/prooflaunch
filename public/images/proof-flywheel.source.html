@@ -1,0 +1,67 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{--bg:#0a0a0a;--card:#0e0e0e;--fg:#e8e6df;--muted:#8a8a82;--soft:#5a5a52;--border:#2a2a2a;--amber:#ff9d00;--gold:#ffd400;--green:#00d97e;--red:#ff3b56}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{width:1200px;height:1260px;background:var(--bg);color:var(--fg);font-family:"IBM Plex Mono","SF Mono",ui-monospace,Menlo,monospace;position:relative;overflow:hidden}
+  .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,157,0,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,157,0,.045) 1px,transparent 1px);background-size:40px 40px}
+  .wrap{position:relative;padding:56px 72px}
+  .chip{display:inline-flex;gap:14px;align-items:center;font-size:13px;letter-spacing:.3em;text-transform:uppercase;color:var(--muted)}
+  .chip .dot{width:8px;height:8px;background:var(--green);display:inline-block;box-shadow:0 0 10px var(--green)}
+  .chip b{color:var(--gold);font-weight:600}
+  h1{margin-top:22px;font-size:54px;font-weight:700;text-transform:uppercase;letter-spacing:-.01em;line-height:1.05;text-shadow:0 0 18px rgba(255,157,0,.55),0 0 40px rgba(255,157,0,.3)}
+  h1 span{color:var(--amber)}
+  .sub{margin-top:10px;font-size:15px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+  .flow{margin-top:44px;display:flex;flex-direction:column;align-items:stretch}
+  .step{border:1px solid var(--border);background:var(--card);padding:22px 26px;display:grid;grid-template-columns:52px 1fr auto;gap:18px;align-items:center}
+  .step.hot{border-color:rgba(255,212,0,.55);box-shadow:inset 0 0 0 1px rgba(255,212,0,.15)}
+  .n{font-size:13px;letter-spacing:.2em;color:var(--amber)}
+  .t{font-size:26px;font-weight:600;text-transform:uppercase;letter-spacing:-.005em}
+  .t em{font-style:normal;color:var(--gold)}
+  .d{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5;text-transform:uppercase;letter-spacing:.08em}
+  .tag{font-size:11px;letter-spacing:.2em;text-transform:uppercase;padding:6px 10px;border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+  .tag.gold{border-color:rgba(255,212,0,.5);color:var(--gold)}
+  .tag.green{border-color:rgba(0,217,126,.5);color:var(--green)}
+  .arrow{height:44px;display:flex;align-items:center;justify-content:center;color:var(--soft);font-size:26px;position:relative}
+  .arrow::before{content:"";position:absolute;top:0;bottom:0;left:50%;width:1px;background:linear-gradient(var(--border),rgba(255,157,0,.6))}
+  .arrow span{position:relative;background:var(--bg);padding:0 8px;color:var(--amber)}
+  .plus{margin:0 0 0 52px;display:flex;gap:10px;flex-wrap:wrap;padding:12px 0 2px}
+  .plus .tag{border-style:dashed}
+  .split{margin-top:40px;border:1px solid var(--border);background:var(--card);padding:20px 26px}
+  .split h2{font-size:12px;letter-spacing:.25em;text-transform:uppercase;color:var(--muted)}
+  .bar{margin-top:14px;display:flex;height:22px;gap:2px}
+  .bar div{display:flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#0a0a0a;font-weight:700;white-space:nowrap;overflow:hidden}
+  .bar div.s{font-size:0}
+  .legend{margin-top:12px;display:flex;gap:26px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .legend i{display:inline-block;width:10px;height:10px;margin-right:8px;vertical-align:-1px}
+  .foot{position:absolute;left:72px;right:72px;bottom:40px;display:flex;justify-content:space-between;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  .foot b{color:var(--amber);font-weight:600}
+</style></head><body><div class="grid"></div><div class="wrap">
+  <div class="chip"><span class="dot"></span>MAINNET · <b>ROBINHOOD CHAIN</b> · THE $PROOF FLYWHEEL</div>
+  <h1>Every trade <span>burns $PROOF.</span></h1>
+  <div class="sub">Pooled token launches · ownerless contracts · nobody can stop it</div>
+
+  <div class="flow">
+    <div class="step"><div class="n">01</div><div><div class="t">A trade on any ProofLaunch token</div><div class="d">buy or sell, bonding curve or Uniswap v4 — pons keeps its own 1% protocol fee</div></div><div class="tag">volume</div></div>
+    <div class="arrow"><span>↓</span></div>
+    <div class="step"><div class="n">02</div><div><div class="t">Creator tax <em>0–10%</em></div><div class="d">set by the creator at launch · immutable forever · the campaign contract is the creator</div></div><div class="tag">the stream</div></div>
+    <div class="arrow"><span>↓</span></div>
+    <div class="step hot"><div class="n">03</div><div><div class="t"><em>30%</em> of that tax → the ProofBurner</div><div class="d">fixed in the factory · carried by every campaign it creates · cannot be changed, paused, or retargeted</div></div><div class="tag gold">fixed leg</div></div>
+    <div class="plus"><span class="tag">+ every creation fee</span><span class="tag">+ every seller’s forfeited fee share</span></div>
+    <div class="arrow"><span>↓</span></div>
+    <div class="step"><div class="n">04</div><div><div class="t">$PROOF bought on-chain</div><div class="d">pons curve before graduation · Uniswap v4 after · 0.2 ETH per crank · one crank per block · anyone can crank</div></div><div class="tag green">permissionless</div></div>
+    <div class="arrow"><span>↓</span></div>
+    <div class="step hot"><div class="n">05</div><div><div class="t">Sent to <em>0x000…dEaD</em></div><div class="d">burned · supply shrinks · every burn is a transaction anyone can verify</div></div><div class="tag gold">burned</div></div>
+  </div>
+
+  <div class="split">
+    <h2>// where the creator tax goes, per launch (flywheel preset)</h2>
+    <div class="bar">
+      <div style="width:50%;background:#00d97e">backers 50%</div>
+      <div style="width:30%;background:#ffd400">$PROOF burn 30%</div>
+      <div class="s" style="width:10%;background:#ff9d00">coin burn 10%</div>
+      <div class="s" style="width:10%;background:#8a8a82">platform 10%</div>
+    </div>
+    <div class="legend"><span><i style="background:#00d97e"></i>backers 50% · sellers forfeit</span><span><i style="background:#ffd400"></i>$PROOF burn 30% · fixed</span><span><i style="background:#ff9d00"></i>coin burn 10% · creator dial</span><span><i style="background:#8a8a82"></i>platform 10% · fixed</span></div>
+  </div>
+
+  <div class="foot"><span><b>prooflaunch.fun</b>/rhc/flywheel</span><span>contracts verified · repo public</span></div>
+</div></body></html>
