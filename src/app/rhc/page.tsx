@@ -1,15 +1,15 @@
 'use client';
 
-// RHC home — the SOL Home page structure verbatim: hero, search row,
-// mobile column switcher, 3-column board with per-column sorts, and the
-// How It Works terminal block. Same site, different chain.
+// RHC home. The page is the tokens: one kicker line, the flywheel strip,
+// search, the board. No hero, no stat rows, no explainer — those live on
+// /rhc/flywheel and /rhc/docs (founder, 2026-09-22).
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { fetchAllCampaigns, parseRows, readBoardCache, writeBoardCache, takeBoardDirty, CampaignRow } from '@/lib/rhc';
 import { CampaignCard } from './components';
-import { RhcHero } from './RhcHero';
+import Link from 'next/link';
+import { RhcHeader } from './components';
 import { FlywheelPanel } from './FlywheelPanel';
-import { WpStatsBar } from './walletproof';
 
 type BackingSort = 'ending_soon' | 'newest' | 'progress';
 type SimpleSort = 'newest' | 'oldest';
@@ -88,9 +88,8 @@ export default function RhcBoardPage() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <RhcHero rows={rows} />
-      <div className="mt-6"><FlywheelPanel /></div>
-      <div className="mt-4"><WpStatsBar /></div>
+      <RhcHeader />
+      <FlywheelPanel strip />
 
       {/* Search — single row (sort is per-column, in column headers) */}
       <div className="border border-[var(--border)] bg-[var(--card)] flex items-center gap-2 px-3 py-2">
@@ -212,32 +211,9 @@ export default function RhcBoardPage() {
       )}
 
       {/* How It Works — small terminal block at the bottom, doesn't compete with the board */}
-      <div className="border border-[var(--border)] bg-[var(--card)] mt-6">
-        <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {'// SEQUENCE.HOW_IT_WORKS'}
-          </span>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-            4 STEPS
-          </span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[var(--border)]">
-          {[
-            { step: '01', title: 'SUBMIT', desc: 'Creator submits a token and sets the raise terms — immutable once deployed' },
-            { step: '02', title: 'BACK', desc: 'Community backs with ETH — withdraw any time before launch, full refunds if it expires' },
-            { step: '03', title: 'LAUNCH', desc: 'Goal met = token launches on pons in one transaction; backers claim tokens pro-rata' },
-            { step: '04', title: 'EARN', desc: 'The backer share of creator fees streams to backers forever, and 30% of every launch\u2019s tax burns $PROOF — enforced by ownerless contracts, not promises' },
-          ].map((item) => (
-            <div key={item.step} className="p-4">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">
-                STEP {item.step}
-              </div>
-              <h3 className="font-mono font-semibold uppercase text-sm mb-1">{item.title}</h3>
-              <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] pt-2">
+        New here? <Link href="/rhc/docs" className="underline hover:text-[var(--muted)]">How it works</Link> · <Link href="/rhc/check" className="underline hover:text-[var(--muted)]">WalletProof</Link> · <Link href="/rhc/audit" className="underline hover:text-[var(--muted)]">Audit</Link>
+      </p>
     </div>
   );
 }

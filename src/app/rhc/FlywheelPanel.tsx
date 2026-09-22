@@ -59,6 +59,13 @@ function Wheel({ speed, live }: { speed: number; live: boolean }) {
       <div className="absolute inset-0 flex items-center justify-center">
         <span className={`text-2xl ${live ? 'fw-flame' : 'opacity-60'}`}>🔥</span>
       </div>
+      <style jsx>{`
+        .fw-spin { animation: fw-rot linear infinite; transform-origin: 50% 50%; }
+        @keyframes fw-rot { to { transform: rotate(360deg); } }
+        .fw-flame { animation: fw-flick 0.9s ease-in-out infinite; display: inline-block; }
+        @keyframes fw-flick { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(255,157,0,.6)); } 50% { transform: scale(1.18); filter: drop-shadow(0 0 12px rgba(255,157,0,.95)); } }
+        @media (prefers-reduced-motion: reduce) { .fw-spin, .fw-flame { animation: none !important; } }
+      `}</style>
     </div>
   );
 }
@@ -67,7 +74,7 @@ function Wheel({ speed, live }: { speed: number; live: boolean }) {
 // a five-step flow strip before launch, the last three burns after.
 const FLOW = ['a trade', 'creator tax', '30% → burner', '$PROOF bought', 'burned'];
 
-export function FlywheelPanel({ compact = false }: { compact?: boolean }) {
+export function FlywheelPanel({ compact = false, strip = false }: { compact?: boolean; strip?: boolean }) {
   const [f, setF] = useState<FlywheelFeed | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const prev = useRef<FlywheelFeed | null>(null);
@@ -103,6 +110,50 @@ export function FlywheelPanel({ compact = false }: { compact?: boolean }) {
   const speed = !PROOF_BURNER_LIVE ? 30 : pending > 0 ? Math.max(4, 24 - Math.min(20, pending * 200)) : 24;
 
   const recent = (f?.burns ?? []).slice(0, 3);
+
+  // The board's strip: the wheel, the number, the meter, three figures,
+  // the crank, two links. No sentences — the page is the tokens.
+  if (strip) {
+    return (
+      <div className={`border border-[var(--accent-gold)]/60 bg-[var(--card)] ${flash ? 'fw-flash' : ''}`}>
+        <div className="p-3 sm:p-4 flex flex-col md:flex-row md:items-center gap-4">
+          <Wheel speed={speed} live={PROOF_BURNER_LIVE && pending > 0} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="font-mono text-3xl sm:text-4xl text-[var(--accent-gold)] leading-none tabular-nums">{PROOF_BURNER_LIVE ? (f ? tok(deadA) : '…') : '0'}</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">$PROOF burned · {PROOF_BURNER_LIVE && f ? pctA.toFixed(3) : '0.000'}% of supply</span>
+            </div>
+            <div className="mt-2 h-1.5 border border-[var(--accent-gold)]/40 bg-[var(--background)] overflow-hidden">
+              <div className="h-full bg-[var(--accent-gold)] fw-bar" style={{ width: `${Math.min(100, pctA)}%` }} />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+              <span><span className="text-[var(--foreground)] tabular-nums">{PROOF_BURNER_LIVE && f ? eth(spentA) : '0'}</span> ETH burned</span>
+              <span><span className="text-[var(--success)] tabular-nums">{PROOF_BURNER_LIVE && f ? eth(pendingA) : '0'}</span> ETH waiting</span>
+              <span><span className="text-[var(--foreground)] tabular-nums">{PROOF_BURNER_LIVE && f ? (f.burns?.length ?? 0) : 0}</span> burns</span>
+              <span><span className="text-[var(--accent-gold)]">30%</span> of every launch&apos;s tax</span>
+            </div>
+          </div>
+          <div className="flex md:flex-col items-center md:items-end gap-2 shrink-0">
+            {PROOF_BURNER_LIVE && isConnected && pendingWei > 0n && (
+              <button onClick={() => writeContract({ address: PROOF_BURNER, abi: proofBurnerAbi, functionName: 'crank', chainId: robinhoodChain.id })} disabled={isPending}
+                className="fw-glow px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--accent-gold)] text-[var(--accent-gold)] hover:bg-[var(--accent-gold)]/10 disabled:opacity-40">
+                🔥 Burn {fmtEth(pendingWei > CAP ? CAP : pendingWei, 4)} ETH
+              </button>
+            )}
+            <Link href="/rhc/flywheel" className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] hover:text-[var(--accent-hover)]">full flywheel →</Link>
+          </div>
+        </div>
+        <style jsx>{`
+          .fw-bar { transition: width 0.9s cubic-bezier(.2,.8,.2,1); box-shadow: 0 0 10px rgba(255,157,0,.6); }
+          .fw-glow { animation: fw-pulse 1.6s ease-in-out infinite; }
+          @keyframes fw-pulse { 0%,100% { box-shadow: 0 0 0 rgba(255,157,0,0); } 50% { box-shadow: 0 0 16px rgba(255,157,0,.55); } }
+          .fw-flash { animation: fw-hit 1.6s ease-out; }
+          @keyframes fw-hit { 0% { box-shadow: inset 0 0 0 2px rgba(255,157,0,.9), 0 0 24px rgba(255,157,0,.5); } 100% { box-shadow: none; } }
+          @media (prefers-reduced-motion: reduce) { .fw-glow, .fw-flash { animation: none !important; } }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div className={`border border-[var(--accent-gold)]/60 bg-[var(--card)] overflow-hidden ${flash ? 'fw-flash' : ''}`}>
@@ -181,17 +232,13 @@ export function FlywheelPanel({ compact = false }: { compact?: boolean }) {
       </div>
 
       <style jsx>{`
-        .fw-spin { animation: fw-rot linear infinite; transform-origin: 50% 50%; }
-        @keyframes fw-rot { to { transform: rotate(360deg); } }
-        .fw-flame { animation: fw-flick 0.9s ease-in-out infinite; display: inline-block; }
-        @keyframes fw-flick { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(255,157,0,.6)); } 50% { transform: scale(1.18); filter: drop-shadow(0 0 12px rgba(255,157,0,.95)); } }
         .fw-bar { transition: width 0.9s cubic-bezier(.2,.8,.2,1); box-shadow: 0 0 10px rgba(255,157,0,.6); }
         .fw-glow { animation: fw-pulse 1.6s ease-in-out infinite; }
         @keyframes fw-pulse { 0%,100% { box-shadow: 0 0 0 rgba(255,157,0,0); } 50% { box-shadow: 0 0 16px rgba(255,157,0,.55); } }
         .fw-flash { animation: fw-hit 1.6s ease-out; }
         @keyframes fw-hit { 0% { box-shadow: inset 0 0 0 2px rgba(255,157,0,.9), 0 0 24px rgba(255,157,0,.5); } 100% { box-shadow: none; } }
         @media (prefers-reduced-motion: reduce) {
-          .fw-spin, .fw-flame, .fw-glow, .fw-flash { animation: none !important; }
+          .fw-glow, .fw-flash { animation: none !important; }
         }
       `}</style>
     </div>
