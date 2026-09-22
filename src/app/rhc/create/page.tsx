@@ -11,7 +11,7 @@ import { useSignMessage } from 'wagmi';
 import { uploadBanner, attachBanner, BANNER_MAX_BYTES } from '../CampaignBanner';
 import { AlertCircle, Upload, X } from 'lucide-react';
 import {
-  POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, V7_LIVE, QUOTE_ASSETS, clearBoardCache,
+  POOLLAUNCH_FACTORY_V6, V7_LIVE, ACTIVE_FACTORY, FIXED_LEGS_PCT, QUOTE_ASSETS, clearBoardCache,
   AIRDROP_OPERATOR, factoryV4Abi, factoryV5Abi, robinhoodChain, rhcPublicClient,
 } from '@/lib/rhc';
 import { EQUITY_ASSETS, PRICEY_FEE_BPS } from '@/lib/rhcEquity';
@@ -170,8 +170,10 @@ export default function CreateCampaignPage() {
 
   const activeStack = botsEnabled ? stack : [];
   const botsPct = activeStack.reduce((s, b) => s + (Number(b.pct) || 0), 0);
-  const backerPct = Math.max(0, 90 - botsPct);
-  const overBudget = botsPct > 90;
+  // Backers get whatever the fixed legs and the creator's bots leave.
+  const budget = 100 - FIXED_LEGS_PCT.total;
+  const backerPct = Math.max(0, budget - botsPct);
+  const overBudget = botsPct > budget;
   const vaultCount = activeStack.filter((b) => b.kind === 'vault' || b.kind === 'airdrop').length;
   const stackValid = activeStack.every((b) => {
     const p = Number(b.pct) || 0;
@@ -287,13 +289,13 @@ export default function CreateCampaignPage() {
       try {
         setGrinding(true);
         const [deployerAddr, legDeployerAddr] = await Promise.all([
-          rhcPublicClient.readContract({ address: POOLLAUNCH_FACTORY_V7, abi: factoryV5Abi, functionName: 'campaignDeployer' }),
-          rhcPublicClient.readContract({ address: POOLLAUNCH_FACTORY_V7, abi: factoryV5Abi, functionName: 'legDeployer' }),
+          rhcPublicClient.readContract({ address: ACTIVE_FACTORY, abi: factoryV5Abi, functionName: 'campaignDeployer' }),
+          rhcPublicClient.readContract({ address: ACTIVE_FACTORY, abi: factoryV5Abi, functionName: 'legDeployer' }),
         ]);
         const legNonce = await rhcPublicClient.getTransactionCount({ address: legDeployerAddr });
         const { burnLeg, lpLeg } = predictLegAddresses(legDeployerAddr, BigInt(legNonce), burnBps > 0, lpBps > 0);
         const initCodeHash = await rhcPublicClient.readContract({
-          address: POOLLAUNCH_FACTORY_V7,
+          address: ACTIVE_FACTORY,
           abi: factoryV5Abi,
           functionName: 'previewInitCodeHash',
           args: [address as `0x${string}`, params, burnBps, lpBps, vaultAddrs, vaultBpsArr, burnLeg, lpLeg],
@@ -307,8 +309,9 @@ export default function CreateCampaignPage() {
       // ERC20-quoted raises escrow the pons launch fee (native ETH) at
       // creation; it comes back via refundLaunchFee if the raise dies.
       const launchFeeEscrow = isNativeQuote ? 0n : PONS_LAUNCH_FEE_WEI;
+      // v8's createCampaign has the v7 signature exactly, so one ABI serves both.
       writeContract({
-        address: POOLLAUNCH_FACTORY_V7,
+        address: ACTIVE_FACTORY,
         abi: factoryV5Abi,
         functionName: 'createCampaign',
         chainId: robinhoodChain.id,
@@ -1141,16 +1144,17 @@ export default function CreateCampaignPage() {
                         <span className="text-[var(--muted)]">/</span>
                         <span className="text-[var(--foreground)]">Backers {backerPct}%</span>
                         <span className="text-[var(--muted)]">/</span>
-                        <span className="text-[var(--muted)]">Platform 10%</span>
+                        <span className="text-[var(--muted)]">{FIXED_LEGS_PCT.burn > 0 ? `PROOF burn ${FIXED_LEGS_PCT.burn}% / ` : ''}Platform {FIXED_LEGS_PCT.platform}%</span>
                       </div>
-                      <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : botsPct >= 90 ? 'text-[var(--muted)]' : 'text-[var(--accent)]'}`}>
-                        {overBudget ? 'over budget' : botsPct >= 90 ? 'budget full' : `${90 - botsPct}% left`}
+                      <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : botsPct >= budget ? 'text-[var(--muted)]' : 'text-[var(--accent)]'}`}>
+                        {overBudget ? 'over budget' : botsPct >= budget ? 'budget full' : `${budget - botsPct}% left`}
                       </div>
                     </div>
                     <div className="flex h-1.5 mt-1.5 border border-[var(--border)] overflow-hidden">
-                      <div className="bg-[var(--accent)]/60" style={{ width: `${Math.min(botsPct, 90)}%` }} />
+                      <div className="bg-[var(--accent)]/60" style={{ width: `${Math.min(botsPct, budget)}%` }} />
                       <div className="bg-[var(--foreground)]/20" style={{ width: `${backerPct}%` }} />
-                      <div className="bg-[var(--muted)]/40" style={{ width: '10%' }} />
+                      {FIXED_LEGS_PCT.burn > 0 && <div className="bg-[var(--accent-gold)]/50" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} />}
+                      <div className="bg-[var(--muted)]/40" style={{ width: `${FIXED_LEGS_PCT.platform}%` }} />
                     </div>
                   </div>
 
@@ -1184,7 +1188,7 @@ export default function CreateCampaignPage() {
                       {BOT_ACTIONS.map((opt) => {
                         const alreadyUsed = SINGLE_KINDS.has(opt.kind) && stack.some((b) => b.kind === opt.kind);
                         const vaultsFull = (opt.kind === 'vault' || opt.kind === 'airdrop') && vaultCount >= 3;
-                        const disabled = !!opt.disabled || alreadyUsed || vaultsFull || botsPct >= 90;
+                        const disabled = !!opt.disabled || alreadyUsed || vaultsFull || botsPct >= budget;
                         return (
                           <button
                             key={opt.kind}
@@ -1449,16 +1453,17 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
           </div>
         )}
 
-        {/* Fee distribution bar — 90/7/3 with bots carved from the 90 */}
+        {/* Fee distribution bar — fixed legs + bots carved from the backer share */}
         <div className="space-y-1.5 border-t border-[var(--border)] pt-3">
           <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest">
             <span className="text-[var(--muted)]">Fee split</span>
             <span className="text-[var(--accent)]">{botTotal}% bots</span>
           </div>
           <div className="flex h-2 border border-[var(--border)] overflow-hidden">
-            <div className="bg-[var(--accent)]/60" style={{ width: `${Math.min(botTotal, 90)}%` }} />
+            <div className="bg-[var(--accent)]/60" style={{ width: `${Math.min(botTotal, 100 - FIXED_LEGS_PCT.total)}%` }} />
             <div className="bg-[var(--foreground)]/30" style={{ width: `${backerPct}%` }} />
-            <div className="bg-[var(--muted)]/50" style={{ width: '10%' }} />
+            {FIXED_LEGS_PCT.burn > 0 && <div className="bg-[var(--accent-gold)]/50" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} />}
+            <div className="bg-[var(--muted)]/50" style={{ width: `${FIXED_LEGS_PCT.platform}%` }} />
           </div>
           <div className="grid grid-cols-3 gap-1 text-[9px] font-mono uppercase tracking-widest text-center">
             <div>
@@ -1470,8 +1475,8 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
               <div className="text-[var(--foreground)]">{backerPct}%</div>
             </div>
             <div>
-              <div className="text-[var(--muted)]">Platform + Rewards</div>
-              <div className="text-[var(--foreground)]">10%</div>
+              <div className="text-[var(--muted)]">{FIXED_LEGS_PCT.burn > 0 ? 'PROOF burn + Platform' : 'Platform + Rewards'}</div>
+              <div className="text-[var(--foreground)]">{FIXED_LEGS_PCT.total}%</div>
             </div>
           </div>
         </div>

@@ -82,6 +82,8 @@ burn from day one) → `DeployProofBurner` → `DeployV6` → UI flips.
 
 **Decided 2026-09-22:** `PROOF_BURN_BPS=3000`, `PLATFORM_BPS=1000`, backers = remainder (create page presets: Flywheel = coin burn 10 → backers 50 · Backer Max → 60 · Burn Heavy = coin burn 30 → 30).
 
+**Runbook:** `LAUNCH_RUNBOOK.md` (env template: `env.example`). UI is on prod and dark behind `NEXT_PUBLIC_V8_LIVE` / `NEXT_PUBLIC_POOLLAUNCH_FACTORY_V8` / `NEXT_PUBLIC_PROOF_BURNER` (2026-09-22).
+
 **Owed before deploy:** the fee-card / audit
 page reading `proofBurner()` + a live "fees → burned" ticker from the
 burner's counters, explorer verification day-of, external review of

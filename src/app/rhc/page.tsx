@@ -8,6 +8,7 @@ import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { fetchAllCampaigns, parseRows, readBoardCache, writeBoardCache, takeBoardDirty, CampaignRow } from '@/lib/rhc';
 import { CampaignCard } from './components';
 import { RhcHero } from './RhcHero';
+import { FlywheelPanel } from './FlywheelPanel';
 import { WpStatsBar } from './walletproof';
 
 type BackingSort = 'ending_soon' | 'newest' | 'progress';
@@ -88,6 +89,7 @@ export default function RhcBoardPage() {
   return (
     <div className="space-y-4 sm:space-y-5">
       <RhcHero rows={rows} />
+      <div className="mt-6"><FlywheelPanel /></div>
       <div className="mt-4"><WpStatsBar /></div>
 
       {/* Search — single row (sort is per-column, in column headers) */}

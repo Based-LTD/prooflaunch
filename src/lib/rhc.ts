@@ -51,6 +51,35 @@ export const CAMPAIGN_DEPLOYER_V3 = '0xdDCf167F6DA48e8f6C1fC716fDFef4CCEEBd4fe3'
 // Build-time env switch, default OFF (see rhcEquity.ts for the rationale).
 export const V7_LIVE = process.env.NEXT_PUBLIC_V7_LIVE === '1';
 
+// ── v8: the rev flywheel. Everything below is empty until deploy day; the
+// flip is three build-time env values and a rebuild, no code change:
+//   NEXT_PUBLIC_V8_LIVE=1
+//   NEXT_PUBLIC_POOLLAUNCH_FACTORY_V8=0x…   (CampaignFactoryV6)
+//   NEXT_PUBLIC_PROOF_BURNER=0x…            (ProofBurner)
+// Order is forced by immutables: PROOF launches on v7 → burner → v8.
+// See contracts/rhc/LAUNCH_RUNBOOK.md.
+export const V8_LIVE = process.env.NEXT_PUBLIC_V8_LIVE === '1';
+export const POOLLAUNCH_FACTORY_V8 = (process.env.NEXT_PUBLIC_POOLLAUNCH_FACTORY_V8 || '0x0000000000000000000000000000000000000000') as `0x${string}`;
+export const PROOF_BURNER = (process.env.NEXT_PUBLIC_PROOF_BURNER || '0x0000000000000000000000000000000000000000') as `0x${string}`;
+export const PROOF_BURNER_LIVE = PROOF_BURNER !== '0x0000000000000000000000000000000000000000';
+/// The two fixed legs on every campaign's creator tax. v7: platform 7 +
+/// holder-rewards 3. v8: PROOF burn 30 + platform 10 (founder, 2026-09-22).
+/// Backers get the remainder after the creator's optional legs.
+export const FIXED_LEGS_PCT = V8_LIVE ? { burn: 30, platform: 10, total: 40 } : { burn: 0, platform: 10, total: 10 };
+export const ACTIVE_FACTORY = V8_LIVE ? POOLLAUNCH_FACTORY_V8 : POOLLAUNCH_FACTORY_V7;
+
+export const proofBurnerAbi = parseAbi([
+  'function proofToken() view returns (address)',
+  'function totalEthPulled() view returns (uint256)',
+  'function totalEthSpent() view returns (uint256)',
+  'function totalTokensBurned() view returns (uint256)',
+  'function pendingEth() view returns (uint256)',
+  'function lastCrankBlock() view returns (uint256)',
+  'function pull(address splitter_)',
+  'function pullMany(address[] splitters)',
+  'function crank()',
+]);
+
 // Quote assets a raise can be denominated in. ETH is native; the rest
 // must be pons-approved pair tokens (verified on-chain 2026-09-16) and
 // carry their own decimals — never assume 18.
@@ -276,6 +305,7 @@ export const splitterAbi = parseAbi([
   // forfeitTo() doubles as the generation probe. backerOwed is THE number
   // to show: entitlement − claimed overstates a seller.
   'function forfeitTo() view returns (address)',
+  'function proofBurnBps() view returns (uint16)',
   'function backerOwed(address backer, address asset) view returns (uint256)',
   'function heldBps(address backer) view returns (uint16)',
   'function settle(address backer, address asset)',
@@ -323,6 +353,7 @@ export async function fetchAllCampaigns(me?: `0x${string}`): Promise<CampaignRow
   // v7 joins the board only when the flag is on — a campaign created on
   // it while dark would otherwise launch fine and then be invisible here.
   const factories = [
+    ...(V8_LIVE ? [POOLLAUNCH_FACTORY_V8] : []),
     ...(V7_LIVE ? [POOLLAUNCH_FACTORY_V7] : []),
     POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V2, POOLLAUNCH_FACTORY_V1,
   ];

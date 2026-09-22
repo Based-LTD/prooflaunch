@@ -21,6 +21,7 @@ import { CreatorLaunches } from '../../CreatorLaunches';
 import { CampaignIdentityBar } from '../../CampaignIdentityBar';
 import { BannerManager, useCampaignBanner } from '../../CampaignBanner';
 import { DashboardCard } from '@/components/meme/DashboardCard';
+import { FlywheelPanel } from '../../FlywheelPanel';
 
 interface State {
   meta: { name: string; symbol: string; description: string; logo: string; socials?: { twitter: string; telegram: string; discord: string; website: string; farcaster: string } };
@@ -349,7 +350,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         else if (a.kind === 'sell') text = `Sold ${fmtTok(a.amount ?? -tokDelta)} $${sym} for ${fmtEth(ethNet, 6)} ETH`;
         else if (a.kind === 'approve') text = `Approved the curve to take $${sym} you sell — now hit Sell`;
         else if (a.kind === 'claimTokens') text = `Claimed ${fmtTok(tokDelta)} $${sym} into your wallet`;
-        else if (a.kind === 'claimFees') text = s.splitterV4 && ethNet <= 0n ? 'Nothing paid — you sold your allocation, so that share went to the holder-rewards leg' : `Claimed ${fmtEth(ethNet, 6)} ETH of fees`;
+        else if (a.kind === 'claimFees') text = s.splitterV4 && ethNet <= 0n ? 'Nothing paid — you sold your allocation, so that share went to the PROOF burn' : `Claimed ${fmtEth(ethNet, 6)} ETH of fees`;
         else if (a.kind === 'claimFeesAs' && a.asset) text = `Claimed fees as ${a.asset.symbol}: ${fmtShares((assetAfter ?? 0n) - (a.assetBefore ?? 0n), a.asset.decimals)} ${a.asset.symbol} landed in your wallet`;
         else if (a.kind === 'collect') text = 'Collected accrued fees from pons into the splitter — your share is updated below';
         else if (a.label) text = a.label;
@@ -955,7 +956,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">{(s.backerBps / 100).toFixed(0)}% of every trade&apos;s creator tax goes to backers{s.splitterV4 ? ' · the fee stream follows the tokens' : ''}</p>
                     {s.splitterV4 && iBack && (
                       <p className={`text-[10px] font-mono uppercase tracking-widest mb-2 ${s.myHeldBps >= 9_000 ? 'text-[var(--success)]' : s.myHeldBps > 0 ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--error)]'}`}>
-                        {'> '}You hold {(s.myHeldBps / 100).toFixed(0)}% of your allocation{s.myHeldBps < 10_000 ? ` — you earn ${(s.myHeldBps / 100).toFixed(0)}% of your share; the rest goes to the holder-rewards leg` : ' — full share'}
+                        {'> '}You hold {(s.myHeldBps / 100).toFixed(0)}% of your allocation{s.myHeldBps < 10_000 ? ` — you earn ${(s.myHeldBps / 100).toFixed(0)}% of your share; the rest buys and burns $PROOF` : ' — full share'}
                       </p>
                     )}
                     <div className="space-y-3">
@@ -1033,6 +1034,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             </DashboardCard>
           )}
           <CampaignChat campaign={addr} />
+          {s.splitterV4 && <FlywheelPanel compact />}
         </div>
       </div>
 
