@@ -2,9 +2,9 @@
 
 // The flywheel, in one glance: ETH collected from campaign fees → PROOF
 // bought and burned. Every number is a counter on the ProofBurner
-// contract; nothing here is computed off-chain. Hidden until the burner
-// exists (NEXT_PUBLIC_PROOF_BURNER), so this file ships dark and lights
-// up on deploy day with no code change.
+// contract; nothing here is computed off-chain. Before the burner exists
+// (NEXT_PUBLIC_PROOF_BURNER unset) it shows the rule and says the counters
+// begin with the $PROOF launch — so people can see what is coming.
 import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 import { rhcPublicClient, proofBurnerAbi, PROOF_BURNER, PROOF_BURNER_LIVE, fmtEth, explorerUrl, robinhoodChain } from '@/lib/rhc';
@@ -38,8 +38,34 @@ export function FlywheelPanel({ compact = false }: { compact?: boolean }) {
     return () => { live = false; clearInterval(t); };
   }, []);
 
-  if (!PROOF_BURNER_LIVE) return null;
   const tok = (v: bigint) => (Number(v) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+  if (!PROOF_BURNER_LIVE) {
+    return (
+      <div className="border border-[var(--accent-gold)]/60 bg-[var(--card)]">
+        <div className="flex items-center justify-between border-b border-[var(--accent-gold)]/40 px-3 py-1.5">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">{'// '}FLYWHEEL — fees → burned $PROOF</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">begins with the $PROOF launch</span>
+        </div>
+        <div className={`p-3 ${compact ? '' : 'sm:p-4'}`}>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[['Burned', '— PROOF', 'var(--accent-gold)'], ['ETH spent', '— ETH', 'var(--foreground)'], ['Collected', '— ETH', 'var(--muted)'], ['Next up', '— ETH', 'var(--success)']].map(([k, v, c]) => (
+              <div key={k} className="border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+                <div className="font-mono text-sm opacity-60" style={{ color: c }}>{v}</div>
+                <div className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] mt-0.5">{k}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs font-mono text-[var(--muted)] leading-relaxed">
+            Every launch here will carry two fixed legs on its creator tax, set in the factory and immutable in every campaign:
+            <span className="text-[var(--accent-gold)]"> 30% buys and burns $PROOF</span>, 10% to the platform. Backers keep the rest.
+            Every creation fee and every share a seller forfeits burns $PROOF too. An ownerless contract does the buying — anyone can crank it, nobody can stop it.
+            These counters start the moment $PROOF launches through this site.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="border border-[var(--accent-gold)]/60 bg-[var(--card)]">

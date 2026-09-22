@@ -4,16 +4,17 @@ Everything up to step 1 is already on prod and dark behind env flags.
 The order is forced by immutables: the burner needs the token's campaign,
 the factory needs the burner. Nothing here can be reordered.
 
-Decisions on record (2026-09-22): 30% PROOF burn / 10% platform, fixed;
-backers get the rest; locking pays (×1.25 at 180d, ×1.5 at 365d); zero dev
-allocation; founder takes ONE public seat, locked a year; payout asset
-SpaceX. Ticker and raise style are still yours.
+Decisions on record (2026-09-22): ticker **$PROOF**; **open raise**, goal
+at the 2 ETH beta cap if the REKT crew is in; 30% PROOF burn / 10%
+platform, fixed; backers get the rest; locking pays (×1.25 at 180d, ×1.5
+at 365d); zero dev allocation; founder takes ONE public seat; payout asset
+SpaceX. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 
 ## 0. Before the day
 
 - [ ] Ticker, name, logo (square), banner (3:1), description, socials.
-- [ ] Raise style: seat round (N seats × price) or open raise. Goal ≤ 2 ETH
-      (the beta cap) unless external review has lifted it.
+- [ ] Open raise. Goal 2 ETH (the beta cap; raise it only if external
+      review has lifted the cap). Min per backer 0.05, max 0.
 - [ ] Creator tax for $PROOF itself: **5%** is my recommendation — high
       enough that its own burn leg is visible, low enough to trade.
 - [ ] Deployer wallet `0xC571…c58A` funded. The factory + two satellites
@@ -39,22 +40,16 @@ SpaceX. Ticker and raise style are still yours.
    curve, splitter, launch tx → `docs/rhc-receipts.md`.
 6. Set `PROOF_CAMPAIGN=<campaign address>` in `contracts/rhc/.env`.
 
-## 2. Deploy the burner
+## 2 + 3. Deploy the burner, then v8 — one command
 
 ```bash
-cd contracts/rhc
-forge script script/DeployProofBurner.s.sol --rpc-url rhc --broadcast --keystore ~/.rhc-deployer/<file> -vv
+cd contracts/rhc && bash deploy-v8.sh ~/.rhc-deployer/<keystore file>
 ```
-The constructor reverts `NotLaunched` if step 1.5 isn't done. Copy the
-printed `ProofBurner` address → `PROOF_BURNER=` in `.env`.
-
-## 3. Deploy v8
-
-```bash
-forge script script/DeployV6.s.sol --rpc-url rhc --broadcast --keystore ~/.rhc-deployer/<file> -vv
-```
-Prints factory v8, campaignDeployerV4, splitterDeployerV4. It reads back
-`proofBurner()` and `proofBurnBps()` — check they are the burner and 3000.
+Deploys ProofBurner against `PROOF_CAMPAIGN`, feeds its address into the
+factory deploy (the factory also reads the $PROOF token from the burner
+for the hold-to-launch-free hook; `FEE_WAIVER_THRESHOLD` env, 0 = dormant),
+and writes `v8.addresses.json`. The burner constructor reverts
+`NotLaunched` if $PROOF hasn't launched — it cannot be run early.
 
 ## 4. Verify (Sourcify; Blockscout imports it)
 
@@ -62,15 +57,15 @@ Add to `verify.sh`: ProofBurner, CampaignFactoryV6, CampaignDeployerV4,
 SplitterDeployerV4, the $PROOF CampaignV3 + FeeSplitterV3 instances. Run
 `bash verify.sh`. All must be `exact_match`. Then update `DEPLOYMENTS.md`.
 
-## 5. Flip the UI (no code change)
+## 5. Flip the UI — one command
 
-Vercel → project env (Production), build-time:
+```bash
+node tools/flip-v8.mjs          # add --check to only verify
 ```
-NEXT_PUBLIC_V8_LIVE=1
-NEXT_PUBLIC_POOLLAUNCH_FACTORY_V8=<factory v8>
-NEXT_PUBLIC_PROOF_BURNER=<burner>
-```
-Then deploy with the usual command PLUS those three as `--build-env`.
+Reads `v8.addresses.json`, verifies every address against the chain
+(factory → burner → $PROOF token, bps, satellite; refuses on any mismatch),
+sets the three Vercel production env values, and runs the prod deploy with
+them. The $PROOF CA is never typed by hand: the UI reads it from the burner.
 What lights up, all probe-gated today:
 - board: the FLYWHEEL panel (burned / spent / collected / next up, crank button)
 - create page: targets v8; budget bar shows PROOF burn 30 / platform 10
@@ -84,8 +79,9 @@ counters moving. That screenshot is the post.
 
 ## 6. After
 
-- The 3% holder-rewards leg on v7 campaigns (incl. $PROOF's own) keeps
-  paying the founder EOA. Forward it to the burner by hand and say so, or
-  leave it and disclose it. Pick one before the post.
+- $PROOF's own campaign is v7, so its splitter has the old 7/3 legs (both
+  founder wallets) instead of 30/10. It is the one campaign that predates
+  the flywheel; its 30% coin-burn leg burns $PROOF anyway. Disclosed on the
+  audit page.
 - GitHub support purge of the orphaned commit (from the 09-21 comb).
 - External review of ProofBurner — the brief already has the questions.

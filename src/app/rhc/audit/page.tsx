@@ -26,7 +26,7 @@ const rows: [string, string, string][] = [
   ['Leg Deployer', LEG_DEPLOYER, 'Carries the v3 Burn + Pool Feeder creation code. Ownerless, stateless.'],
   ['pons Factory (target)', PONS_FACTORY, 'The launchpad our campaigns launch through. pons rotates factories — campaigns pin theirs at creation.'],
   ['Platform Fee Leg (7%)', PLATFORM_LEG, 'Receives the platform share of creator fees, per campaign, immutably.'],
-  ['Holder Rewards Leg (3%, v1–v7 campaigns)', REWARDS_LEG, 'The 3% leg on every campaign created before v8. Founder-held until the ProofBurner existed; from v8 on that leg is the 30% PROOF burn instead.'],
+  ['Holder Rewards Leg (3%, v1–v7 campaigns only)', REWARDS_LEG, 'The 3% leg on campaigns created before v8 — test launches only; nothing meaningful ever accrued here. From v8 on that leg is the 30% PROOF burn instead.'],
   ['Airdrop Operator (📸 legs)', AIRDROP_OPERATOR, 'Platform-run holder snapshot airdrops for campaigns that opted in. The one non-trustless bot — labeled so everywhere it appears.'],
 ];
 

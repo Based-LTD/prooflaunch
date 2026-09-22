@@ -5,6 +5,7 @@ import {Script, console2} from "forge-std/Script.sol";
 import {CampaignFactoryV6} from "../src/CampaignFactoryV6.sol";
 import {LegDeployerV3} from "../src/LegDeployerV3.sol";
 import {SplitterDeployerV4} from "../src/SplitterDeployerV4.sol";
+import {ProofBurner} from "../src/ProofBurner.sol";
 import {IERC20} from "../src/interfaces/IPons.sol";
 import {IPonsV2Factory, IPonsV2LaunchAndBuy} from "../src/interfaces/IPonsV2.sol";
 import {IPoolManagerMin, IV4StateView} from "../src/interfaces/IUniV4.sol";
@@ -40,8 +41,11 @@ contract DeployV6 is Script {
             IV4StateView(0xF3334192D15450CdD385c8B70e03f9A6bD9E673b),
             legs,
             0.001 ether,
-            IERC20(address(0)),
-            0,
+            // "hold $PROOF → launch free": the token address is READ from the
+            // burner (one source of truth, nothing to paste); the threshold is
+            // env, 0 = dormant until a number is chosen.
+            IERC20(ProofBurner(payable(vm.envAddress("PROOF_BURNER"))).proofToken()),
+            vm.envOr("FEE_WAIVER_THRESHOLD", uint256(0)),
             vm.envAddress("EQUITY_ROUTER"), // deployed first; see DeployEquityRouter.s.sol
             address(splitters)
         );
@@ -54,6 +58,8 @@ contract DeployV6 is Script {
         console2.log("creationFee       :", f.creationFee());
         console2.log("platformBps       :", f.platformBps());
         console2.log("proofBurnBps      :", f.proofBurnBps());
+        console2.log("feeWaiverToken    :", address(f.feeWaiverToken()));
+        console2.log("feeWaiverThreshold:", f.feeWaiverThreshold());
         console2.log("equityRouter      :", f.equityRouter());
     }
 }
