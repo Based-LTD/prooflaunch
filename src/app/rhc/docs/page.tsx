@@ -2,7 +2,7 @@
 
 // PoolLaunch docs — the SOL /docs page twinned for Robinhood Chain.
 // Same tabbed terminal skin; the content documents the trustless
-// contract architecture, the 90/7/3 split, and the launch-bot stack.
+// contract architecture, the fee split (v7: 90/7/3 → v8: the flywheel), and the launch-bot stack.
 import { useState } from 'react';
 import Link from 'next/link';
 import {
@@ -103,7 +103,8 @@ export default function RhcDocsPage() {
                 goal; when the goal is met, one transaction launches the token on{' '}
                 <strong>pons</strong> and buys it with the entire pool — snipe-exempt, on the
                 launch block. Backers claim tokens pro-rata and earn{' '}
-                <strong>90% of the creator&apos;s trading fees, forever</strong>. On Solana we
+                <strong>the majority of the creator&apos;s trading fees, forever</strong> — 90% on today&apos;s
+                factory, the remainder after a fixed 30% $PROOF burn and 10% platform leg on the next. On Solana we
                 enforce these promises operationally. Here the contracts enforce them:
                 no admin keys, no pause switch, no upgrade path — <strong>the platform
                 cannot touch your funds even if it wanted to</strong>.
@@ -189,7 +190,7 @@ export default function RhcDocsPage() {
                 { icon: Undo2Icon, color: 'text-[var(--error)]', title: 'Withdraw Anytime Pre-Launch', desc: 'Full-amount withdrawal until the moment of launch, no fee, no permission. It\'s a contract function — the platform can\'t block it.' },
                 { icon: Key, color: 'text-[var(--warning)]', title: 'Creator Holds 0%', desc: 'The Campaign contract is the pons creator. The pooled buy lands in the contract and is claimable only pro-rata by backers.' },
                 { icon: Zap, color: 'text-[var(--success)]', title: 'Same Price For Everyone', desc: 'One atomic pooled buy at launch, snipe-exempt on the launch block. Every backer enters at the identical price.' },
-                { icon: WalletIcon, color: 'text-[var(--accent-gold)]', title: 'Claim Tokens + Fees', desc: 'After launch, claim your token share once, then claim your fee share whenever you like — 90% of the creator tax on every trade flows to backers pro-rata, in ETH, forever. Pull-based: your money waits for you in the contract.' },
+                { icon: WalletIcon, color: 'text-[var(--accent-gold)]', title: 'Claim Tokens + Fees', desc: 'After launch, claim your token share once, then claim your fee share whenever you like — the backer share of the creator tax on every trade (90% on today\u2019s factory; 50\u201360% on the flywheel factory, where 30% buys and burns $PROOF and 10% is the platform) flows to backers pro-rata, in ETH, forever. Pull-based: your money waits for you in the contract.' },
                 { icon: Landmark, color: 'text-[var(--accent)]', title: 'Fees in Stock, If the Creator Says So', desc: 'Creators can set the payout asset to a tokenized stock. Your ETH fee share is swapped through the Uniswap v4 pool on the way to your wallet, in the same transaction you claim — the contract never holds the shares. Plain ETH is always one click away as the safety hatch.' },
                 { icon: Eye, color: 'text-[var(--success)]', title: 'The Roster Shows Who Is Still In', desc: 'Every backer wallet, its stake, and after launch its live token balance against what it was allocated. Read from the contract, not self-reported. If a genesis wallet sold, everyone can see it.' },
                 { icon: MessageCircle, color: 'text-[var(--muted)]', title: 'Chat With the Room', desc: 'Every campaign page has a chat. One wallet signature to post; the server verifies every message came from the wallet it says.' },
@@ -341,8 +342,8 @@ export default function RhcDocsPage() {
                 <TrendingUp className="w-5 h-5 text-[var(--accent)]" /> Stacking + budget
               </h3>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Bots are carved from the backer share. Platform (7%) and holder rewards (3%)
-                are fixed; you design the rest:
+                Bots are carved from the backer share. The fixed legs (today: platform 7% + holder
+                rewards 3%; on the flywheel factory: $PROOF burn 30% + platform 10%) never move; you design the rest:
               </p>
               <div className="bg-[var(--background)] border border-[var(--border)] p-4 font-mono text-xs space-y-1">
                 <div>BURN ............ 20%</div>
@@ -366,7 +367,7 @@ export default function RhcDocsPage() {
               <p className="text-sm text-[var(--muted)] leading-relaxed">
                 Every bot was proven against the live pons trading pool in fork tests before
                 deployment: real launches, real swaps, burn balances verifiably at the dead
-                address, LP positions minted and compounding, and the full 90/7/3 fee flow
+                address, LP positions minted and compounding, and the full fee flow
                 measured in ETH and tokens — 21/21 tests green. The full suite ships in
                 the open-source repo.
               </p>
@@ -416,8 +417,35 @@ export default function RhcDocsPage() {
                 in ETH at pons&apos; fee escrow until anyone cranks it into the splitter — the
                 campaign page&apos;s claim button does that for you as its first signature.
               </p>
+              <div className="bg-[var(--background)] border-2 border-[var(--accent-gold)]/50 p-4 mt-4">
+                <h3 className="font-bold mb-1 uppercase tracking-wide text-[var(--accent-gold)]">The Flywheel Split — every launch after $PROOF</h3>
+                <p className="text-xs text-[var(--muted)] mb-3">Two legs fixed in the factory, immutable in every campaign. Backers get the rest. Shown on the Flywheel preset (10% coin burn).</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between p-2 bg-[var(--success)]/10">
+                    <span className="text-[var(--success)] font-bold">Backers, weighted by stake and lock (50%)</span>
+                    <span className="font-bold">pull anytime · sellers forfeit</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-[var(--accent-gold)]/10">
+                    <span className="text-[var(--accent-gold)] font-bold">$PROOF buy &amp; burn (30%)</span>
+                    <span className="font-bold">anyone cranks</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-[var(--accent)]/10">
+                    <span className="text-[var(--accent)]">Platform (10%)</span>
+                    <span className="font-bold">pull anytime</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-[var(--error)]/10">
+                    <span className="text-[var(--error)]">The coin&apos;s own burn (creator dial, 10% default)</span>
+                    <span className="font-bold">anyone cranks</span>
+                  </div>
+                </div>
+                <p className="text-xs text-[var(--muted)] mt-3 leading-relaxed">
+                  Backer Max preset: no coin burn, backers 60%. Burn Heavy: coin burn 30%, backers 30%.
+                  Every creation fee and every share a seller forfeits goes to the $PROOF burn on top of the 30%.
+                </p>
+              </div>
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 mt-4">
-                <h3 className="font-bold mb-3 uppercase tracking-wide">The 90/7/3 Split (no bots stacked)</h3>
+                <h3 className="font-bold mb-1 uppercase tracking-wide">Today&apos;s factory (v7) — until $PROOF launches</h3>
+                <p className="text-xs text-[var(--muted)] mb-3">Campaigns created before the flywheel factory keep these terms forever; $PROOF itself launches on this one.</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between p-2 bg-[var(--success)]/10">
                     <span className="text-[var(--success)] font-bold">Backers, pro-rata to the raise (90%)</span>
@@ -427,8 +455,8 @@ export default function RhcDocsPage() {
                     <span className="text-[var(--accent)]">Platform (7%)</span>
                     <span className="font-bold">pull anytime</span>
                   </div>
-                  <div className="flex justify-between p-2 bg-[var(--accent-gold)]/10">
-                    <span className="text-[var(--accent-gold)] font-bold">Holder rewards (3%)</span>
+                  <div className="flex justify-between p-2 bg-[var(--muted)]/10">
+                    <span className="text-[var(--muted)]">Holder rewards (3%) — retired with v8</span>
                     <span className="font-bold">pull anytime</span>
                   </div>
                 </div>

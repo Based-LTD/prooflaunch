@@ -226,7 +226,7 @@ export default function RhcBoardPage() {
             { step: '01', title: 'SUBMIT', desc: 'Creator submits a token and sets the raise terms — immutable once deployed' },
             { step: '02', title: 'BACK', desc: 'Community backs with ETH — withdraw any time before launch, full refunds if it expires' },
             { step: '03', title: 'LAUNCH', desc: 'Goal met = token launches on pons in one transaction; backers claim tokens pro-rata' },
-            { step: '04', title: 'EARN', desc: '90% of creator fees stream to backers forever — enforced by ownerless contracts, not promises' },
+            { step: '04', title: 'EARN', desc: 'The backer share of creator fees streams to backers forever, and 30% of every launch\u2019s tax burns $PROOF — enforced by ownerless contracts, not promises' },
           ].map((item) => (
             <div key={item.step} className="p-4">
               <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">

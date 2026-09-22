@@ -105,7 +105,7 @@ export default function CreateCampaignPage() {
   const [botsEnabled, setBotsEnabled] = useState(false);
   const [stack, setStack] = useState<BotItem[]>([]);
   // pons V2 creator tax: 0–10% of every trade, immutable at launch, earned
-  // by the FeeSplitter — i.e. by the backers (90/7/3 of it).
+  // by the FeeSplitter — i.e. by the backers (after the fixed legs).
   // Two raise styles, both riding the same goal-based contract:
   //   open  — ETH goal, unlimited backers, optional per-backer whale cap
   //   seats — N identical seats at a fixed price; goal = seats x price and
