@@ -102,8 +102,11 @@ export default function CreateCampaignPage() {
     setImageFile(null); setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
-  const [botsEnabled, setBotsEnabled] = useState(false);
-  const [stack, setStack] = useState<BotItem[]>([]);
+  // Flywheel is the default: a creator who never touches this section gets
+  // the 10% coin burn. Backer Max is the off switch; there is no toggle.
+  const botsEnabled = true;
+  const [stack, setStack] = useState<BotItem[]>([{ kind: 'burn', pct: '10', addr: '' }]);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   // pons V2 creator tax: 0–10% of every trade, immutable at launch, earned
   // by the FeeSplitter — i.e. by the backers (after the fixed legs).
   // Two raise styles, both riding the same goal-based contract:
@@ -1107,29 +1110,17 @@ export default function CreateCampaignPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                    LAUNCH BOTS · PROGRAMMABLE TOKENOMICS
+                    FEE STACK · WHERE YOUR TOKEN&apos;S CREATOR TAX GOES
                   </div>
                   <div className="text-sm font-mono text-[var(--foreground)]">
-                    Stack actions + named vault legs
+                    Pick a preset. Tune it under Advanced if you care.
                   </div>
                   <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
-                    Each bot becomes a fee leg on your campaign&apos;s splitter, carved from the
-                    backer share — immutable from creation, pull-based forever. Burn and Pool
-                    Feeder run as ownerless contracts on the Uniswap-v4 pool: anyone can crank
-                    them, nobody can stop them, nobody can change them.
+                    The fixed legs never move{FIXED_LEGS_PCT.burn > 0 ? ` (${FIXED_LEGS_PCT.burn}% buys and burns $PROOF, ${FIXED_LEGS_PCT.platform}% platform)` : ` (${FIXED_LEGS_PCT.platform}% platform + rewards)`}.
+                    Everything else is yours to split between backers and ownerless bots — burn, locked liquidity, named vaults —
+                    immutable from creation, pull-based forever. Anyone can crank the bots; nobody can stop or change them.
                   </p>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={botsEnabled}
-                    onChange={(e) => setBotsEnabled(e.target.checked)}
-                    className="w-4 h-4 accent-[var(--accent)]"
-                  />
-                  <span className="text-xs font-mono uppercase tracking-wider text-[var(--foreground)]">
-                    {botsEnabled ? 'ON' : 'OFF'}
-                  </span>
-                </label>
               </div>
 
               {botsEnabled && (
@@ -1179,8 +1170,13 @@ export default function CreateCampaignPage() {
                     </div>
                   </div>
 
-                  {/* Action picker — always-visible tiles. Tap to add. */}
-                  <div className="space-y-2">
+                  {/* Advanced — the tiles and per-leg dials, collapsed by default. */}
+                  <button type="button" onClick={() => setAdvancedOpen((v) => !v)} aria-expanded={advancedOpen}
+                    className="flex items-center justify-between w-full text-left text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--foreground)] border-t border-[var(--border)] pt-3">
+                    <span>Advanced — add or tune legs ({stack.filter((b) => Number(b.pct) > 0).length} active)</span>
+                    <span>{advancedOpen ? '▴' : '▾'}</span>
+                  </button>
+                  <div className={advancedOpen ? 'space-y-2' : 'hidden'}>
                     <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                       ADD A BOT
                     </div>
