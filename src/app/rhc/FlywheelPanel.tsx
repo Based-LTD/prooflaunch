@@ -8,6 +8,7 @@
 // comes from /api/rhc/flywheel, which reads the chain; nothing is
 // estimated. Respects prefers-reduced-motion.
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useAccount, useWriteContract } from 'wagmi';
 import { proofBurnerAbi, PROOF_BURNER, PROOF_BURNER_LIVE, fmtEth, explorerUrl, robinhoodChain } from '@/lib/rhc';
 import type { FlywheelFeed } from '../api/rhc/flywheel/route';
@@ -62,7 +63,9 @@ function Wheel({ speed, live }: { speed: number; live: boolean }) {
   );
 }
 
-const MECHANISM = ['VOLUME ON ANY PROOFLAUNCH TOKEN', '→ CREATOR TAX', '→ 30% TO THE BURNER', '→ $PROOF BOUGHT ON-CHAIN', '→ SENT TO 0x…dEaD', '+ EVERY CREATION FEE', '+ EVERY SELLER\'S FORFEITED SHARE', '→ SUPPLY SHRINKS', 'ANYONE CAN CRANK · NOBODY CAN STOP IT'];
+// One moving thing on the panel (the wheel). Everything else holds still:
+// a five-step flow strip before launch, the last three burns after.
+const FLOW = ['a trade', 'creator tax', '30% → burner', '$PROOF bought', 'burned'];
 
 export function FlywheelPanel({ compact = false }: { compact?: boolean }) {
   const [f, setF] = useState<FlywheelFeed | null>(null);
@@ -99,18 +102,16 @@ export function FlywheelPanel({ compact = false }: { compact?: boolean }) {
   // idle: one turn per 24s; with ETH waiting, down to one per 4s
   const speed = !PROOF_BURNER_LIVE ? 30 : pending > 0 ? Math.max(4, 24 - Math.min(20, pending * 200)) : 24;
 
-  const tape: { text: string; href?: string; hot?: boolean }[] = PROOF_BURNER_LIVE && f?.burns?.length
-    ? f.burns.map((b) => ({ text: `🔥 ${eth(Number(b.ethIn) / 1e18)} ETH → ${tok(Number(b.tokens) / 1e18)} $PROOF burned · ${b.viaCurve ? 'curve' : 'v4'} · ${ago(b.ts)}`, href: `https://robinhoodchain.blockscout.com/tx/${b.tx}`, hot: true }))
-    : MECHANISM.map((t) => ({ text: t }));
-  const loop = [...tape, ...tape];
+  const recent = (f?.burns ?? []).slice(0, 3);
 
   return (
     <div className={`border border-[var(--accent-gold)]/60 bg-[var(--card)] overflow-hidden ${flash ? 'fw-flash' : ''}`}>
       <div className="flex items-center justify-between border-b border-[var(--accent-gold)]/40 px-3 py-1.5">
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">{'// '}FLYWHEEL — fees → burned $PROOF</span>
-        {PROOF_BURNER_LIVE
-          ? <a href={explorerUrl(PROOF_BURNER)} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)]">burner ↗</a>
-          : <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">begins with the $PROOF launch</span>}
+        <span className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+          {!PROOF_BURNER_LIVE && <span>begins with the $PROOF launch</span>}
+          <Link href="/rhc/flywheel" className="text-[var(--accent)] hover:text-[var(--accent-hover)]">full flywheel →</Link>
+        </span>
       </div>
 
       <div className={`p-3 ${compact ? '' : 'sm:p-4'}`}>
@@ -145,14 +146,26 @@ export function FlywheelPanel({ compact = false }: { compact?: boolean }) {
           ))}
         </div>
 
-        {/* the tape */}
-        <div className="mt-3 border-y border-[var(--accent-gold)]/30 py-1.5 overflow-hidden fw-tape-mask">
-          <div className="fw-tape flex gap-8 whitespace-nowrap text-[10px] font-mono uppercase tracking-widest" style={{ animationDuration: `${Math.max(18, loop.length * 4)}s` }}>
-            {loop.map((t, i) => t.href
-              ? <a key={i} href={t.href} target="_blank" rel="noopener noreferrer" className="text-[var(--accent-gold)] hover:text-[var(--accent)]">{t.text}</a>
-              : <span key={i} className={t.text.startsWith('→') || t.text.startsWith('+') ? 'text-[var(--muted)]' : 'text-[var(--accent-gold)]'}>{t.text}</span>)}
+        {PROOF_BURNER_LIVE && recent.length > 0 ? (
+          <div className="mt-3 border-t border-[var(--accent-gold)]/30 pt-2 space-y-1">
+            {recent.map((b) => (
+              <a key={b.tx} href={`https://robinhoodchain.blockscout.com/tx/${b.tx}`} target="_blank" rel="noopener noreferrer"
+                className="flex flex-wrap items-baseline justify-between gap-x-3 text-[10px] font-mono uppercase tracking-widest hover:text-[var(--accent)]">
+                <span><span className="text-[var(--accent-gold)]">🔥 {tok(Number(b.tokens) / 1e18)} $PROOF</span> <span className="text-[var(--muted)]">for {eth(Number(b.ethIn) / 1e18)} ETH · {b.viaCurve ? 'curve' : 'v4'}</span></span>
+                <span className="text-[var(--muted)]">{ago(b.ts)}</span>
+              </a>
+            ))}
           </div>
-        </div>
+        ) : (
+          <div className="mt-3 border-t border-[var(--accent-gold)]/30 pt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono uppercase tracking-widest">
+            {FLOW.map((t, i) => (
+              <span key={t} className="flex items-center gap-2">
+                <span className={i === FLOW.length - 1 ? 'text-[var(--accent-gold)]' : 'text-[var(--foreground)]'}>{t}</span>
+                {i < FLOW.length - 1 && <span className="text-[var(--muted-soft)]">→</span>}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
@@ -172,18 +185,13 @@ export function FlywheelPanel({ compact = false }: { compact?: boolean }) {
         @keyframes fw-rot { to { transform: rotate(360deg); } }
         .fw-flame { animation: fw-flick 0.9s ease-in-out infinite; display: inline-block; }
         @keyframes fw-flick { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(255,157,0,.6)); } 50% { transform: scale(1.18); filter: drop-shadow(0 0 12px rgba(255,157,0,.95)); } }
-        .fw-tape { animation: fw-scroll linear infinite; }
-        .fw-tape:hover { animation-play-state: paused; }
-        @keyframes fw-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        .fw-tape-mask { mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
         .fw-bar { transition: width 0.9s cubic-bezier(.2,.8,.2,1); box-shadow: 0 0 10px rgba(255,157,0,.6); }
         .fw-glow { animation: fw-pulse 1.6s ease-in-out infinite; }
         @keyframes fw-pulse { 0%,100% { box-shadow: 0 0 0 rgba(255,157,0,0); } 50% { box-shadow: 0 0 16px rgba(255,157,0,.55); } }
         .fw-flash { animation: fw-hit 1.6s ease-out; }
         @keyframes fw-hit { 0% { box-shadow: inset 0 0 0 2px rgba(255,157,0,.9), 0 0 24px rgba(255,157,0,.5); } 100% { box-shadow: none; } }
         @media (prefers-reduced-motion: reduce) {
-          .fw-spin, .fw-flame, .fw-tape, .fw-glow, .fw-flash { animation: none !important; }
-          .fw-tape { overflow-x: auto; }
+          .fw-spin, .fw-flame, .fw-glow, .fw-flash { animation: none !important; }
         }
       `}</style>
     </div>
