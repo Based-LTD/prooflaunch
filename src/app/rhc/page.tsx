@@ -1,15 +1,14 @@
 'use client';
 
-// RHC home. The page is the tokens: one kicker line, the flywheel strip,
-// search, the board. No hero, no stat rows, no explainer — those live on
-// /rhc/flywheel and /rhc/docs (founder, 2026-09-22).
+// RHC home: the hero (mainnet chip, one-line headline, the flywheel in
+// the stat tiles, CTA), search, the board. No explainer blocks — those
+// live on /rhc/flywheel and /rhc/docs (founder, 2026-09-22).
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, Flame, Zap, Rocket } from 'lucide-react';
 import { fetchAllCampaigns, parseRows, readBoardCache, writeBoardCache, takeBoardDirty, CampaignRow } from '@/lib/rhc';
 import { CampaignCard } from './components';
 import Link from 'next/link';
-import { RhcHeader } from './components';
-import { FlywheelPanel } from './FlywheelPanel';
+import { RhcHero } from './RhcHero';
 
 type BackingSort = 'ending_soon' | 'newest' | 'progress';
 type SimpleSort = 'newest' | 'oldest';
@@ -88,8 +87,7 @@ export default function RhcBoardPage() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <RhcHeader />
-      <FlywheelPanel strip />
+      <RhcHero />
 
       {/* Search — single row (sort is per-column, in column headers) */}
       <div className="border border-[var(--border)] bg-[var(--card)] flex items-center gap-2 px-3 py-2">
