@@ -11,7 +11,7 @@ import { useSignMessage } from 'wagmi';
 import { uploadBanner, attachBanner, BANNER_MAX_BYTES } from '../CampaignBanner';
 import { AlertCircle, Upload, X } from 'lucide-react';
 import {
-  POOLLAUNCH_FACTORY_V6, V7_LIVE, ACTIVE_FACTORY, FIXED_LEGS_PCT, QUOTE_ASSETS, clearBoardCache,
+  POOLLAUNCH_FACTORY_V6, V7_LIVE, ACTIVE_FACTORY, FIXED_LEGS_PCT, FIXED_LEGS_NOTE, QUOTE_ASSETS, clearBoardCache,
   AIRDROP_OPERATOR, factoryV4Abi, factoryV5Abi, robinhoodChain, rhcPublicClient,
 } from '@/lib/rhc';
 import { EQUITY_ASSETS, PRICEY_FEE_BPS } from '@/lib/rhcEquity';
@@ -1116,10 +1116,13 @@ export default function CreateCampaignPage() {
                     Pick a preset. Tune it under Advanced if you care.
                   </div>
                   <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
-                    The fixed legs never move{FIXED_LEGS_PCT.burn > 0 ? ` (${FIXED_LEGS_PCT.burn}% buys and burns $PROOF, ${FIXED_LEGS_PCT.platform}% platform)` : ` (${FIXED_LEGS_PCT.platform}% platform + rewards)`}.
-                    Everything else is yours to split between backers and ownerless bots — burn, locked liquidity, named vaults —
+                    Two legs are fixed and never move: <span className="text-[var(--accent-gold)]">{FIXED_LEGS_PCT.burn}% buys and burns $PROOF</span>, {FIXED_LEGS_PCT.platform}% platform.
+                    The other {100 - FIXED_LEGS_PCT.total}% is yours to split between backers and ownerless bots — burn, locked liquidity, named vaults —
                     immutable from creation, pull-based forever. Anyone can crank the bots; nobody can stop or change them.
                   </p>
+                  {FIXED_LEGS_NOTE && (
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] max-w-md">{FIXED_LEGS_NOTE}</p>
+                  )}
                 </div>
               </div>
 
@@ -1135,17 +1138,19 @@ export default function CreateCampaignPage() {
                         <span className="text-[var(--muted)]">/</span>
                         <span className="text-[var(--foreground)]">Backers {backerPct}%</span>
                         <span className="text-[var(--muted)]">/</span>
-                        <span className="text-[var(--muted)]">{FIXED_LEGS_PCT.burn > 0 ? `PROOF burn ${FIXED_LEGS_PCT.burn}% / ` : ''}Platform {FIXED_LEGS_PCT.platform}%</span>
+                        <span className="text-[var(--accent-gold)]">$PROOF burn {FIXED_LEGS_PCT.burn}%</span>
+                        <span className="text-[var(--muted)]">/</span>
+                        <span className="text-[var(--muted)]">Platform {FIXED_LEGS_PCT.platform}%</span>
                       </div>
                       <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : botsPct >= budget ? 'text-[var(--muted)]' : 'text-[var(--accent)]'}`}>
                         {overBudget ? 'over budget' : botsPct >= budget ? 'budget full' : `${budget - botsPct}% left`}
                       </div>
                     </div>
                     <div className="flex h-1.5 mt-1.5 border border-[var(--border)] overflow-hidden">
-                      <div className="bg-[var(--accent)]/60" style={{ width: `${Math.min(botsPct, budget)}%` }} />
-                      <div className="bg-[var(--foreground)]/20" style={{ width: `${backerPct}%` }} />
-                      {FIXED_LEGS_PCT.burn > 0 && <div className="bg-[var(--accent-gold)]/50" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} />}
-                      <div className="bg-[var(--muted)]/40" style={{ width: `${FIXED_LEGS_PCT.platform}%` }} />
+                      <div className="bg-[var(--accent)]" style={{ width: `${Math.min(botsPct, budget)}%` }} title={`Bots ${botsPct}%`} />
+                      <div className="bg-[var(--success)]/70" style={{ width: `${backerPct}%` }} title={`Backers ${backerPct}%`} />
+                      <div className="bg-[var(--accent-gold)]/80" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} title={`$PROOF burn ${FIXED_LEGS_PCT.burn}%`} />
+                      <div className="bg-[var(--muted)]/60" style={{ width: `${FIXED_LEGS_PCT.platform}%` }} title={`Platform ${FIXED_LEGS_PCT.platform}%`} />
                     </div>
                   </div>
 
@@ -1456,10 +1461,10 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
             <span className="text-[var(--accent)]">{botTotal}% bots</span>
           </div>
           <div className="flex h-2 border border-[var(--border)] overflow-hidden">
-            <div className="bg-[var(--accent)]/60" style={{ width: `${Math.min(botTotal, 100 - FIXED_LEGS_PCT.total)}%` }} />
-            <div className="bg-[var(--foreground)]/30" style={{ width: `${backerPct}%` }} />
-            {FIXED_LEGS_PCT.burn > 0 && <div className="bg-[var(--accent-gold)]/50" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} />}
-            <div className="bg-[var(--muted)]/50" style={{ width: `${FIXED_LEGS_PCT.platform}%` }} />
+            <div className="bg-[var(--accent)]" style={{ width: `${Math.min(botTotal, 100 - FIXED_LEGS_PCT.total)}%` }} />
+            <div className="bg-[var(--success)]/70" style={{ width: `${backerPct}%` }} />
+            <div className="bg-[var(--accent-gold)]/80" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} />
+            <div className="bg-[var(--muted)]/60" style={{ width: `${FIXED_LEGS_PCT.platform}%` }} />
           </div>
           <div className="grid grid-cols-3 gap-1 text-[9px] font-mono uppercase tracking-widest text-center">
             <div>
@@ -1471,8 +1476,8 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
               <div className="text-[var(--foreground)]">{backerPct}%</div>
             </div>
             <div>
-              <div className="text-[var(--muted)]">{FIXED_LEGS_PCT.burn > 0 ? 'PROOF burn + Platform' : 'Platform + Rewards'}</div>
-              <div className="text-[var(--foreground)]">{FIXED_LEGS_PCT.total}%</div>
+              <div className="text-[var(--muted)]">$PROOF burn + Platform</div>
+              <div className="text-[var(--foreground)]">{FIXED_LEGS_PCT.burn} + {FIXED_LEGS_PCT.platform}%</div>
             </div>
           </div>
         </div>
