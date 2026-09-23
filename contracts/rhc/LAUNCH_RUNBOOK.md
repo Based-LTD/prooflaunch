@@ -44,17 +44,23 @@ SpaceX. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 
 ## 1. Launch $PROOF on v7 (the live factory) — from the website
 
-1. prooflaunch.fun/rhc/create, connected as the founder wallet.
+1. prooflaunch.fun/rhc/create, connected as a **fresh launcher wallet**
+   (gas only, never trades). Axiom and friends tag the wallet that signs
+   the launch tx as the "DA", not pons' deployer (the contract). RWA TEST
+   showed `0xD533…` as DA because it launched AND sat AND sold. A clean
+   launcher reads as: dev holds 0, dev never sold. The founder's known
+   wallet takes its seat as a backer in step 4.
 2. Preset **Burn Heavy** (coin burn 30%). On v7 that BURN leg buys and
    burns $PROOF itself from the first trade — the flywheel starts before
    v8 exists. (Fixed legs on v7 are 7% platform + 3% holder-rewards → the
    two founder wallets; that is documented on the audit page.)
 3. FEE PAYOUT: SpaceX. Tax: 5%. Team round if you want a reserved seat.
-4. Create. Take ONE seat from the founder wallet.
+4. Create (launcher wallet). Take ONE seat from the KNOWN founder wallet
+   `0xD533…` — it shows on the roster as a backer, not as the dev.
    v7 campaigns have no lock, so the founder seat's "locked a year" is a
    public commitment (say it in the post) enforced by not claiming; v8
    campaigns enforce it on-chain.
-5. When the raise fills, Launch. Record: campaign address, token address,
+5. When the raise fills, Launch from the launcher wallet. Record: campaign address, token address,
    curve, splitter, launch tx → `docs/rhc-receipts.md`.
 6. Set `PROOF_CAMPAIGN=<campaign address>` in `contracts/rhc/.env`.
 
