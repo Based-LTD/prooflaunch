@@ -197,8 +197,8 @@ export default function DocsPage() {
               <p className="text-[var(--foreground)]/80 leading-relaxed">
                 The same pooled-launch model runs on <strong>Robinhood Chain</strong> as{' '}
                 <strong>ProofLaunch on Robinhood Chain</strong> — with the promises enforced by <strong>ownerless
-                smart contracts</strong> instead of platform operations: 90% of creator fees to
-                backers, trustless burn and pool-feeder bots, no custodial wallets anywhere.
+                smart contracts</strong> instead of platform operations: backers keep most of the creator
+                tax and 30% of it burns $PROOF, trustless burn and pool-feeder bots, no custodial wallets anywhere.
                 Toggle <strong>SOL | RHC</strong> in the navbar, or read the{' '}
                 <Link href="/rhc/docs" className="text-[var(--accent-gold)] hover:underline font-bold">
                   Robinhood Chain docs →

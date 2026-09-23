@@ -1,4 +1,7 @@
-# PoolLaunch on RHC — X post series
+# ProofLaunch on RHC — X post series
+
+> **2026-09-23:** Threads A–E and the standalones predate the rev flywheel. Any line that says 90% to backers is STALE — the split is now 30% $PROOF burn / 10% platform / the rest to backers (50% default). Threads F and G are current.
+
 
 Audience: crypto X. Goal: introduce the pooled-launch model on Robinhood
 Chain, weaponize WalletProof's numbers, court the pons creator audience,
@@ -255,8 +258,8 @@ ProofLaunch is live on Robinhood Chain.
 
 Pooled token launches on pons. The community funds the launch, one
 transaction creates the token and buys with the whole pool, and the
-backers earn 90% of the creator fee stream. Enforced by contracts with
-no admin key. Not by us.
+backers keep most of the creator tax. 30% of it buys and burns $PROOF.
+Enforced by contracts with no admin key. Not by us.
 
 prooflaunch.fun
 
