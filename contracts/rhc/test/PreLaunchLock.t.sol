@@ -200,4 +200,58 @@ contract PreLaunchLockTest is Test {
         assertEq(c.lockDays(alice), 30);
         assertEq(c.lockMultiplierBps(30), 10_000, "short locks are a signal, not a bonus");
     }
+
+    // ── creator edits before launch ──────────────────────────────────
+
+    function test_updateMeta_creatorOnly_preLaunchOnly() public {
+        CampaignV4 c = _create(1 ether);
+        PonsTokenMeta memory m = PonsTokenMeta("Renamed", "RNM", "ipfs://logo", "new pitch", PonsSocials("https://x.com/rnm", "", "", "https://rnm.xyz", ""), address(0));
+        vm.expectRevert(CampaignV4.OnlyCreator.selector);
+        vm.prank(alice); c.updateMeta(m);
+        vm.prank(creator); c.updateMeta(m);
+        PonsTokenMeta memory got = c.tokenMeta();
+        assertEq(got.name, "Renamed"); assertEq(got.symbol, "RNM"); assertEq(got.socials.website, "https://rnm.xyz");
+        // empty identity is refused
+        m.name = "";
+        vm.expectRevert(CampaignV4.BadAmount.selector);
+        vm.prank(creator); c.updateMeta(m);
+        // launched → frozen forever
+        m.name = "Again";
+        vm.prank(alice); c.deposit{value: 1 ether}();
+        vm.prank(creator); c.launch();
+        vm.expectRevert(CampaignV4.BadState.selector);
+        vm.prank(creator); c.updateMeta(m);
+        assertEq(c.tokenMeta().name, "Renamed", "what launched is what stays");
+    }
+
+    function test_teamMaxDeposit_teamSeatsCanTakeMore() public {
+        CampaignParams memory p;
+        p.goal = 1 ether; p.minDeposit = 0.1 ether; p.maxDeposit = 0.2 ether; p.maxBackers = 4; p.reservedSeats = 1;
+        p.deadline = block.timestamp + 1 days;
+        p.meta = PonsTokenMeta("TM", "TM", "", "t", PonsSocials("", "", "", "", ""), address(0));
+        p.allowlist = new address[](1); p.allowlist[0] = bob;
+        vm.prank(creator);
+        CampaignV4 c = cf.createCampaign{value: FEE}(p, 0, 0, new address[](0), new uint16[](0), bytes32(uint256(8)));
+        // no team cap set: team seat uses the public cap
+        vm.expectRevert(CampaignV4.BadAmount.selector);
+        vm.prank(bob); c.deposit{value: 0.5 ether}();
+        // creator sets a team cap; public cap unchanged
+        vm.expectRevert(CampaignV4.OnlyCreator.selector);
+        vm.prank(alice); c.setTeamMaxDeposit(0.5 ether);
+        vm.prank(creator); c.setTeamMaxDeposit(0.5 ether);
+        vm.prank(bob); c.deposit{value: 0.5 ether}();       // team seat, 0.5 ok
+        vm.expectRevert(CampaignV4.BadAmount.selector);
+        vm.prank(alice); c.deposit{value: 0.5 ether}();     // public seat still capped at 0.2
+        vm.prank(alice); c.deposit{value: 0.2 ether}();
+        assertEq(c.seatBucket(bob), 2); assertEq(c.seatBucket(alice), 1);
+        // below min or after launch: refused
+        vm.expectRevert(CampaignV4.BadAmount.selector);
+        vm.prank(creator); c.setTeamMaxDeposit(0.05 ether);
+    }
+
+    function test_teamMaxDeposit_needsTeamSeats() public {
+        CampaignV4 c = _create(1 ether); // no reserved seats
+        vm.expectRevert(CampaignV4.BadAmount.selector);
+        vm.prank(creator); c.setTeamMaxDeposit(0.5 ether);
+    }
 }

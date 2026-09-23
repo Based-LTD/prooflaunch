@@ -11,16 +11,67 @@ import { Upload, X } from 'lucide-react';
 
 export const BANNER_MAX_BYTES = 2 * 1024 * 1024;
 
-export function useCampaignBanner(campaign: `0x${string}`, refreshKey = '') {
-  const [url, setUrl] = useState<string | null>(null);
+export interface CampaignMedia { banner_url: string | null; description: string | null; twitter: string | null; telegram: string | null; discord: string | null; website: string | null }
+const EMPTY: CampaignMedia = { banner_url: null, description: null, twitter: null, telegram: null, discord: null, website: null };
+
+/// Banner + the creator's soft-metadata overrides, in one read.
+export function useCampaignMedia(campaign: `0x${string}`, refreshKey = ''): CampaignMedia {
+  const [m, setM] = useState<CampaignMedia>(EMPTY);
   useEffect(() => {
     let live = true;
     fetch(`/api/rhc/media?campaign=${campaign}`, { cache: 'no-store' })
-      .then((r) => r.json()).then((j) => { if (live) setUrl(j.banner_url ?? null); })
-      .catch(() => { /* no banner is a fine answer */ });
+      .then((r) => r.json()).then((j) => { if (live) setM({ ...EMPTY, ...j }); })
+      .catch(() => { /* nothing is a fine answer */ });
     return () => { live = false; };
   }, [campaign, refreshKey]);
-  return url;
+  return m;
+}
+export function useCampaignBanner(campaign: `0x${string}`, refreshKey = '') { return useCampaignMedia(campaign, refreshKey).banner_url; }
+
+/// Sign once, save description + links. `''` clears a field.
+export async function saveSoftMeta(
+  campaign: `0x${string}`, wallet: `0x${string}`, fields: Partial<Omit<CampaignMedia, 'banner_url'>>,
+  signMessageAsync: (a: { message: string }) => Promise<`0x${string}`>,
+): Promise<void> {
+  const message = `rhc-banner:${campaign.toLowerCase()}:${wallet.toLowerCase()}:${Date.now()}`;
+  const signature = await signMessageAsync({ message });
+  const r = await fetch('/api/rhc/media', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ campaign, wallet, ...fields, auth_message: message, auth_signature: signature }),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `save failed (${r.status})`);
+}
+
+/// Creator-only: the soft fields, editable for the token's lifetime.
+export function SoftMetaEditor({ campaign, current, onSaved }: { campaign: `0x${string}`; current: CampaignMedia; onSaved: () => void }) {
+  const { address: me } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const [f, setF] = useState({ description: current.description ?? '', twitter: current.twitter ?? '', telegram: current.telegram ?? '', discord: current.discord ?? '', website: current.website ?? '' });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => { setF({ description: current.description ?? '', twitter: current.twitter ?? '', telegram: current.telegram ?? '', discord: current.discord ?? '', website: current.website ?? '' }); }, [current]);
+  const save = async () => {
+    if (!me) return; setBusy(true); setMsg(null);
+    try { await saveSoftMeta(campaign, me, f, signMessageAsync); setMsg('Saved — the page updates on the next load'); onSaved(); }
+    catch (e) { const m = e instanceof Error ? e.message : String(e); setMsg(/reject|denied/i.test(m) ? 'Signature declined — nothing saved' : m.slice(0, 140)); }
+    finally { setBusy(false); }
+  };
+  const input = 'w-full bg-[var(--background)] border border-[var(--border)] px-3 py-2 text-xs font-mono focus:border-[var(--accent)] focus:outline-none';
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-mono text-[var(--muted)]">Description and links shown on this page. Editable any time; one signature saves. The token&apos;s on-chain name, symbol and logo are what pons has — those cannot change after launch.</p>
+      <textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} maxLength={600} rows={3} placeholder="Description (leave empty to use the on-chain one)" className={input} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {(['twitter', 'telegram', 'discord', 'website'] as const).map((k) => (
+          <input key={k} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} placeholder={`${k} https://…`} className={input} />
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={() => void save()} disabled={busy || !me} className="btn-primary !px-3 !py-1.5 !text-[10px]">{busy ? 'Sign in your wallet…' : 'Save · 1 signature'}</button>
+        {msg && <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">{msg}</span>}
+      </div>
+    </div>
+  );
 }
 
 /// Upload a banner file to storage. Returns its public URL.

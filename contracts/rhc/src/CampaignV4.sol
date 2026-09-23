@@ -43,6 +43,10 @@ contract CampaignV4 {
     uint256 public immutable launchFeeEscrowed; // native ETH held for pons' launch fee (ERC20 quotes)
 
     PonsTokenMeta internal meta;
+    /// Team seats may take more than public ones (0 = same cap as the
+    /// public, i.e. maxDeposit). Creator-set before launch, immutable
+    /// after. Shown on the page; a backer who dislikes it withdraws.
+    uint256 public teamMaxDeposit;
 
     // ── state ────────────────────────────────────────────────────────
     mapping(address => bool) public allowlisted;
@@ -94,6 +98,8 @@ contract CampaignV4 {
     event Refunded(address indexed backer, uint256 amount);
     event LaunchFeeRefunded(address indexed creator, uint256 amount);
     event Cancelled();
+    event MetaUpdated(string name, string symbol, string logo);
+    event TeamMaxDepositSet(uint256 teamMaxDeposit);
     event Locked(address indexed backer, uint32 lockDays, uint16 multiplierBps);
 
     error BadState();
@@ -254,7 +260,10 @@ contract CampaignV4 {
         if (block.timestamp >= deadline) revert PastDeadline();
         uint256 newContribution = contributionOf[msg.sender] + amount;
         if (amount == 0 || newContribution < minDeposit) revert BadAmount();
-        if (maxDeposit != 0 && newContribution > maxDeposit) revert BadAmount();
+        // team seats get their own ceiling once assigned (reserved bucket)
+        uint256 cap = (seatBucket[msg.sender] == 2 || (contributionOf[msg.sender] == 0 && allowlisted[msg.sender] && maxBackers != 0 && reservedSeatsUsed < reservedSeats))
+            && teamMaxDeposit != 0 ? teamMaxDeposit : maxDeposit;
+        if (cap != 0 && newContribution > cap) revert BadAmount();
 
         if (contributionOf[msg.sender] == 0) {
             // token gate applies at entry
@@ -404,6 +413,29 @@ contract CampaignV4 {
     }
 
     // ── failure paths ────────────────────────────────────────────────
+
+    // ── pre-launch creator edits ─────────────────────────────────────
+    // The SOL rule, on-chain: identity (name, symbol, logo) and the soft
+    // fields are editable by the creator until launch, when they become
+    // pons' immutable token meta. Never after. Any backer who dislikes an
+    // edit can withdraw in full, so nothing here can trap anyone.
+
+    function updateMeta(PonsTokenMeta calldata m) external {
+        if (msg.sender != creator) revert OnlyCreator();
+        if (launched || cancelled) revert BadState();
+        if (bytes(m.name).length == 0 || bytes(m.symbol).length == 0) revert BadAmount();
+        meta = m;
+        emit MetaUpdated(m.name, m.symbol, m.logo);
+    }
+
+    function setTeamMaxDeposit(uint256 cap) external {
+        if (msg.sender != creator) revert OnlyCreator();
+        if (launched || cancelled) revert BadState();
+        if (reservedSeats == 0) revert BadAmount();           // no team seats, no team cap
+        if (cap != 0 && cap < minDeposit) revert BadAmount();
+        teamMaxDeposit = cap;
+        emit TeamMaxDepositSet(cap);
+    }
 
     function cancel() external {
         if (msg.sender != creator) revert OnlyCreator();

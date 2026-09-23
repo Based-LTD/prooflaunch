@@ -276,6 +276,10 @@ export const campaignV4Abi = parseAbi([
   'function depositTokenLocked(uint256 amount, uint32 days_)',
   'function extendLock(uint32 days_)',
   'function claimExcess()',
+  // pre-launch creator edits (v8)
+  'function updateMeta((string name, string symbol, string logo, string description, (string twitter, string telegram, string discord, string website, string farcaster) socials, address feeWallet) m)',
+  'function setTeamMaxDeposit(uint256 cap)',
+  'function teamMaxDeposit() view returns (uint256)',
 ]);
 
 /// The lock tiers, mirrored from CampaignV4.lockMultiplierBps so the UI can

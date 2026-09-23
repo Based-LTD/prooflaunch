@@ -19,9 +19,10 @@ import { BackerRoster } from '../../BackerRoster';
 import { CampaignChat } from '../../CampaignChat';
 import { CreatorLaunches } from '../../CreatorLaunches';
 import { CampaignIdentityBar } from '../../CampaignIdentityBar';
-import { BannerManager, useCampaignBanner } from '../../CampaignBanner';
+import { BannerManager, SoftMetaEditor, useCampaignMedia } from '../../CampaignBanner';
 import { BotLegsPanel } from '../../BotLegsPanel';
 import { MobileStickyCta } from '../../MobileStickyCta';
+import { OnChainMetaEditor } from '../../OnChainMetaEditor';
 import { DashboardCard } from '@/components/meme/DashboardCard';
 import { FlywheelPanel } from '../../FlywheelPanel';
 
@@ -115,7 +116,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   // A lock is irreversible: the deposit waits behind one explicit confirm
   // that repeats the date in words (punch list: fat-finger 2-year lock).
   const [lockConfirm, setLockConfirm] = useState<bigint | null>(null); // units awaiting confirm
-  const banner = useCampaignBanner(addr, bannerKey);
+  const media = useCampaignMedia(addr, bannerKey);
+  const banner = media.banner_url;
   const { isSuccess: txConfirmed, data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
 
   // ── action receipts (punch list #5) ─────────────────────────────────
@@ -487,7 +489,10 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       <CampaignIdentityBar
         logo={s.meta.logo} name={s.meta.name} symbol={s.meta.symbol} creator={s.creator}
         token={s.launched ? s.token : undefined}
-        socials={s.meta.socials}
+        socials={{
+          twitter: media.twitter ?? s.meta.socials?.twitter, telegram: media.telegram ?? s.meta.socials?.telegram,
+          discord: media.discord ?? s.meta.socials?.discord, website: media.website ?? s.meta.socials?.website, farcaster: s.meta.socials?.farcaster,
+        }}
         status={<StatusPill launched={s.launched} cancelled={s.cancelled} refundable={s.refundable}
           deadline={s.deadline} totalRaised={s.totalRaised} goal={s.goal} />}
         metrics={[
@@ -497,9 +502,9 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         ]}
       />
 
-      {s.meta.description && (
+      {(media.description || s.meta.description) && (
         <DashboardCard label="DESCRIPTION" className="mt-3">
-          <p className="text-sm font-mono text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap">{s.meta.description}</p>
+          <p className="text-sm font-mono text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap">{media.description || s.meta.description}</p>
         </DashboardCard>
       )}
 
@@ -1058,7 +1063,19 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           page post-launch. Today: the banner. */}
       {isConnected && iAmCreator && (
         <DashboardCard label="CREATOR CONTROLS" className="mt-3">
-          <BannerManager campaign={addr} current={banner} onChanged={() => setBannerKey(String(Date.now()))} />
+          <div className="space-y-5">
+            {v8 && !s.launched && !s.cancelled && (
+              <div className="border-b border-[var(--border)] pb-4">
+                <OnChainMetaEditor campaign={addr} onSent={() => { void startAction('other', { label: 'Metadata updated on-chain — what launches is what you see now' }); }}
+                  current={{ name: s.meta.name, symbol: s.meta.symbol, logo: s.meta.logo, description: s.meta.description,
+                    socials: { twitter: s.meta.socials?.twitter ?? '', telegram: s.meta.socials?.telegram ?? '', discord: s.meta.socials?.discord ?? '', website: s.meta.socials?.website ?? '', farcaster: s.meta.socials?.farcaster ?? '' } }} />
+              </div>
+            )}
+            <BannerManager campaign={addr} current={banner} onChanged={() => setBannerKey(String(Date.now()))} />
+            <div className="border-t border-[var(--border)] pt-4">
+              <SoftMetaEditor campaign={addr} current={media} onSaved={() => setBannerKey(String(Date.now()))} />
+            </div>
+          </div>
         </DashboardCard>
       )}
 
