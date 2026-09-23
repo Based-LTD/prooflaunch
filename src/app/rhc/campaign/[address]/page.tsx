@@ -20,6 +20,8 @@ import { CampaignChat } from '../../CampaignChat';
 import { CreatorLaunches } from '../../CreatorLaunches';
 import { CampaignIdentityBar } from '../../CampaignIdentityBar';
 import { BannerManager, useCampaignBanner } from '../../CampaignBanner';
+import { BotLegsPanel } from '../../BotLegsPanel';
+import { MobileStickyCta } from '../../MobileStickyCta';
 import { DashboardCard } from '@/components/meme/DashboardCard';
 import { FlywheelPanel } from '../../FlywheelPanel';
 
@@ -504,7 +506,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       {/* ── RAISE — the action panel, full width, only while there is
           something to do (back, withdraw, launch, refund, cancel). */}
       {!s.launched && (
-        <DashboardCard label={s.cancelled ? 'CANCELLED' : s.refundable ? 'REFUNDS OPEN' : 'RAISE'} meta={`${Math.min(100, pct)}% funded`} className="mt-3">
+        <DashboardCard label={s.cancelled ? 'CANCELLED' : s.refundable ? 'REFUNDS OPEN' : 'RAISE'} meta={`${Math.min(100, pct)}% funded`} className="mt-3 scroll-mt-20" >
+        <div id="raise-card" />
           {/* Slot grid — the SOL detail treatment: filled blocks for
               backers in, outlined for open slots. Open raises (maxBackers
               0) show the bar alone. */}
@@ -774,6 +777,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             quoteSymbol={qSym} quoteDecimals={qDec} isErc20Quote={isErc20Quote}
             refreshKey={lastReceipt?.hash ?? ''}
           />
+          <BotLegsPanel splitter={s.feeSplitter} feeAsset={s.isV4 ? ZERO_ADDR : RHC_WETH} symbol={s.meta.symbol} launched={s.launched} refreshKey={lastReceipt?.hash ?? ''} />
           <CreatorLaunches creator={s.creator} exclude={addr} />
         </div>
         <div className="space-y-3">
@@ -909,7 +913,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             </DashboardCard>
           )}
           {s.launched && (
-            <DashboardCard label={s.myContribution > 0n ? 'YOUR REWARDS' : 'FEES'}>
+            <DashboardCard label={s.myContribution > 0n ? 'YOUR REWARDS' : 'FEES'} className="scroll-mt-20">
+              <div id="rewards-card" />
               <div className="space-y-3">
               {s.myContribution > 0n && !s.myTokensClaimed && (
                 iAmLocked ? (
@@ -1037,6 +1042,17 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           {s.splitterV4 && <FlywheelPanel compact />}
         </div>
       </div>
+
+      {/* One action in reach on a phone. */}
+      <MobileStickyCta
+        targetId={s.launched ? 'rewards-card' : 'raise-card'}
+        tone={s.launched ? 'gold' : 'primary'}
+        label={!isConnected ? null
+          : !s.launched && !s.cancelled && !s.refundable && now < s.deadline ? (s.myContribution > 0n ? 'Your seat ↑' : 'Back this launch ↑')
+          : s.launched && s.myContribution > 0n && !s.myTokensClaimed && !iAmLocked ? `Claim your $${s.meta.symbol} ↑`
+          : s.launched && s.myContribution > 0n && (feesOwed > 0n || s.projectedShare > 0n) ? 'Claim your fees ↑'
+          : null}
+      />
 
       {/* Creator controls — full-width row below the grid, like the SOL
           page post-launch. Today: the banner. */}

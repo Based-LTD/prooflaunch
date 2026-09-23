@@ -292,6 +292,10 @@ export const erc20Abi = parseAbi([
 
 export const splitterAbi = parseAbi([
   'function backerBps() view returns (uint16)',
+  'function legCount() view returns (uint256)',
+  'function legRecipients(uint256) view returns (address)',
+  'function legBps(uint256) view returns (uint16)',
+  'function legOwed(address leg, address asset) view returns (uint256)',
   'function backerPool(address asset) view returns (uint256)',
   'function backerClaimed(address backer, address asset) view returns (uint256)',
   'function backerEntitlement(address backer, address asset) view returns (uint256)',
