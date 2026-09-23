@@ -129,6 +129,7 @@ contract ForkProofBurner is Test {
         vm.roll(block.number + 1);
         vm.prank(address(0xBEEF)); b.crank();
         assertGt(IERC20(proofC.token()).balanceOf(DEAD) - deadBefore, 0, "another coin's fees burned PROOF");
-        assertEq(b.totalEthSpent(), 0.03 ether);
+        assertEq(b.totalEthSpent(), 0.03 ether - 0.0003 ether, "the 30% leg, less the cranker's 1%");
+        assertEq(b.totalTips(), 0.0003 ether);
     }
 }

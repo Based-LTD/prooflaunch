@@ -140,7 +140,8 @@ export default function CreateCampaignPage() {
     .filter((w) => w.length > 0);
   const allowlistValid = allowlist.every((w) => isAddress(w));
   const gateValid = !gateAddr.trim() || isAddress(gateAddr.trim());
-  const [taxPct, setTaxPct] = useState('1');
+  // Default 2%: 0% makes the flywheel a lie, 5%+ loses listings to raw pons.
+  const [taxPct, setTaxPct] = useState('2');
   const [buyback, setBuyback] = useState(false);
   const taxValid = (Number(taxPct) || 0) >= 0 && (Number(taxPct) || 0) <= 10;
   const { writeContract, data: txHash, isPending, error } = useWriteContract();

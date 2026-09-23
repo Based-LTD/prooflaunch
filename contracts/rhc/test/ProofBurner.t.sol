@@ -38,6 +38,7 @@ contract ReentrantSplitter {
 }
 
 contract ProofBurnerTest is Test {
+    receive() external payable {} // this contract cranks in several tests and takes the tip
     MockERC20 proof; MockCurve curve; MockCampaignView proofCampaign;
     ProofBurner burner;
     address constant DEAD = 0x000000000000000000000000000000000000dEaD;
@@ -65,10 +66,14 @@ contract ProofBurnerTest is Test {
         assertEq(burner.totalEthPulled(), 0.08 ether);
         assertEq(burner.pendingEth(), 0.08 ether);
 
+        uint256 crankerBefore = address(0xCAFE).balance;
         vm.prank(address(0xCAFE)); burner.crank();
-        assertEq(burner.totalEthSpent(), 0.08 ether);
-        assertEq(proof.balanceOf(DEAD), 0.08 ether * 1000, "mock curve mints 1000/ETH, all of it burned");
-        assertEq(burner.totalTokensBurned(), 0.08 ether * 1000);
+        uint256 spent = 0.08 ether - 0.0008 ether; // 1% keeper tip
+        assertEq(burner.totalEthSpent(), spent);
+        assertEq(burner.totalTips(), 0.0008 ether);
+        assertEq(address(0xCAFE).balance - crankerBefore, 0.0008 ether, "cranker tipped 1%");
+        assertEq(proof.balanceOf(DEAD), spent * 1000, "mock curve mints 1000/ETH, all of it burned");
+        assertEq(burner.totalTokensBurned(), spent * 1000);
         assertEq(address(burner).balance, 0);
         assertEq(proof.balanceOf(address(burner)), 0);
     }
@@ -76,12 +81,27 @@ contract ProofBurnerTest is Test {
     function test_crank_capPerBlock_andOncePerBlock() public {
         vm.deal(address(burner), 0.5 ether); // creation fees / direct sends count too
         vm.roll(100); burner.crank();
-        assertEq(burner.totalEthSpent(), 0.2 ether, "capped");
+        assertEq(burner.totalEthSpent(), 0.198 ether, "capped at 0.2, less the 1% tip");
         vm.expectRevert(ProofBurner.CrankedThisBlock.selector);
         burner.crank();
         vm.roll(101); burner.crank();
         vm.roll(102); burner.crank();
-        assertEq(burner.totalEthSpent(), 0.5 ether);
+        assertEq(burner.totalEthSpent() + burner.totalTips(), 0.5 ether);
+        assertEq(burner.totalTips(), 0.005 ether);
+        assertEq(address(burner).balance, 0);
+    }
+
+    function test_crankerThatCannotReceive_forfeitsTip_andItBurnsNextCrank() public {
+        vm.deal(address(burner), 0.1 ether);
+        NoReceive nr = new NoReceive();
+        vm.roll(200); nr.crank(burner);
+        assertEq(burner.totalTips(), 0, "undeliverable tip is not counted");
+        assertEq(address(burner).balance, 0.001 ether, "it stayed behind");
+        vm.roll(201);
+        vm.expectRevert(ProofBurner.BelowMinimum.selector);
+        burner.crank(); // 0.001 is under the floor: it waits for more ETH, no dust buy
+        vm.deal(address(burner), 0.011 ether);
+        burner.crank();
         assertEq(address(burner).balance, 0);
     }
 
@@ -126,6 +146,22 @@ contract ProofBurnerTest is Test {
         new ProofBurner(ICampaignV2View(address(nl)), IPonsV2FactoryLegView(address(0xF)), IPoolManagerMin(address(0xB0)), address(0xB1));
     }
 
+    function test_dust_cannotBeCrankedForTips_butHeldProofAlwaysBurns() public {
+        vm.deal(address(burner), 0.004 ether); // below MIN_CRANK_ETH
+        vm.expectRevert(ProofBurner.BelowMinimum.selector);
+        burner.crank();
+        // PROOF sitting here can still be burned, the dust just waits
+        proof.mint(address(burner), 5 ether);
+        burner.crank();
+        assertEq(proof.balanceOf(DEAD), 5 ether);
+        assertEq(address(burner).balance, 0.004 ether, "dust untouched - no micro-buy, no tip");
+        assertEq(burner.totalTips(), 0);
+        // top it over the floor and the whole pile (less tip) burns
+        vm.deal(address(burner), 0.01 ether);
+        vm.roll(block.number + 1); burner.crank();
+        assertEq(address(burner).balance, 0);
+    }
+
     function test_noWayOut() public view {
         // The only ETH-moving paths are curve.buy / poolManager.settle inside
         // crank(). There is no withdraw, sweep, owner or setter to call —
@@ -136,6 +172,8 @@ contract ProofBurnerTest is Test {
         assertEq(burner.MAX_ETH_PER_CRANK(), 0.2 ether);
     }
 }
+
+contract NoReceive { function crank(ProofBurner b) external { b.crank(); } }
 
 contract NotLaunchedView {
     function token() external pure returns (address) { return address(0); }

@@ -31,11 +31,19 @@ contract ProofBurner is V4LegBase {
 
     address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
     uint256 public constant MAX_ETH_PER_CRANK = 0.2 ether;
+    /// Nobody calls a function that only lights money on fire. The cranker
+    /// keeps 1% of the ETH they put through — a permissionless keeper
+    /// bounty, no operator — and a crank needs at least MIN_CRANK_ETH so
+    /// the tip can't be farmed on dust with price-worsening micro-buys.
+    /// (Held PROOF can always be burned; the floor is on the ETH side.)
+    uint256 public constant CRANK_TIP_BPS = 100;
+    uint256 public constant MIN_CRANK_ETH = 0.005 ether;
 
     address public immutable proofToken;
 
     uint256 public totalEthPulled;    // ETH collected from campaign splitters via pull()
-    uint256 public totalEthSpent;     // ETH turned into burned PROOF
+    uint256 public totalEthSpent;     // ETH turned into burned PROOF (after tips)
+    uint256 public totalTips;         // ETH paid to crankers
     uint256 public totalTokensBurned; // PROOF sent to DEAD
     uint256 public lastCrankBlock;
 
@@ -43,9 +51,11 @@ contract ProofBurner is V4LegBase {
 
     error CrankedThisBlock();
     error Reentrancy();
+    error BelowMinimum();
 
     event Pulled(address indexed splitter, uint256 ethAmount);
     event Burned(uint256 ethIn, uint256 tokensBurned, bool viaCurve);
+    event Tipped(address indexed cranker, uint256 amount);
     event ForeignBurned(address indexed token, uint256 amount);
 
     /// `initializer` is address(0): the base's one-time init() can never be
@@ -111,21 +121,25 @@ contract ProofBurner is V4LegBase {
     // ── burn ─────────────────────────────────────────────────────────
 
     /// Permissionless burn round: any PROOF held burns; up to the cap of
-    /// ETH buys PROOF, which burns.
+    /// ETH (less the cranker's 1%) buys PROOF, which burns. Reverts if
+    /// there is neither enough ETH for a real buy nor any PROOF to burn.
     function crank() external nonReentrant {
         if (lastCrankBlock == block.number) revert CrankedThisBlock();
-        lastCrankBlock = block.number;
         address token = proofToken;
+        uint256 tb = IERC20(token).balanceOf(address(this));
+        uint256 eb = address(this).balance;
+        if (eb < MIN_CRANK_ETH && tb == 0) revert BelowMinimum();
+        lastCrankBlock = block.number;
         uint256 burnedNow = 0;
 
-        uint256 tb = IERC20(token).balanceOf(address(this));
         if (tb > 0) {
             IERC20(token).transfer(DEAD, tb);
             burnedNow += tb;
         }
 
-        uint256 eb = address(this).balance;
-        uint256 amt = eb > MAX_ETH_PER_CRANK ? MAX_ETH_PER_CRANK : eb;
+        uint256 amt = eb < MIN_CRANK_ETH ? 0 : (eb > MAX_ETH_PER_CRANK ? MAX_ETH_PER_CRANK : eb);
+        uint256 tip = (amt * CRANK_TIP_BPS) / 10_000;
+        amt -= tip;
         bool viaCurve = false;
         if (amt > 0) {
             IPonsV2CurveLeg curve = IPonsV2CurveLeg(campaign.curve());
@@ -145,6 +159,15 @@ contract ProofBurner is V4LegBase {
 
         totalTokensBurned += burnedNow;
         emit Burned(amt, burnedNow, viaCurve);
+        if (tip > 0) {
+            // A cranker that cannot receive ETH forfeits the tip: it stays
+            // here and burns on the next crank. Only a delivered tip counts.
+            (bool ok, ) = msg.sender.call{value: tip}("");
+            if (ok) {
+                totalTips += tip;
+                emit Tipped(msg.sender, tip);
+            }
+        }
     }
 
     /// ETH waiting to be burned — the ticker's "next up" number.
