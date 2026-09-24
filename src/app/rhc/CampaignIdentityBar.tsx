@@ -7,7 +7,7 @@ import { type ReactNode, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { explorerUrl } from '@/lib/rhc';
 
-interface Socials { twitter?: string; telegram?: string; discord?: string; website?: string; farcaster?: string }
+interface Socials { twitter?: string; telegram?: string; discord?: string; website?: string; farcaster?: string; github?: string }
 
 export function CampaignIdentityBar({ logo, name, symbol, creator, status, metrics, socials, token }: {
   logo: string; name: string; symbol: string; creator: `0x${string}`;
@@ -19,7 +19,7 @@ export function CampaignIdentityBar({ logo, name, symbol, creator, status, metri
   const [copied, setCopied] = useState(false);
   const copy = (t: string) => { try { void navigator.clipboard.writeText(t); } catch { /* no clipboard */ } setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const pills: [string, string | undefined][] = [
-    ['X', socials?.twitter], ['TG', socials?.telegram], ['DC', socials?.discord], ['WEB', socials?.website], ['FC', socials?.farcaster],
+    ['X', socials?.twitter], ['TG', socials?.telegram], ['DC', socials?.discord], ['WEB', socials?.website], ['FC', socials?.farcaster], ['GH', socials?.github],
   ];
   return (
     <div className="border border-[var(--border)] bg-[var(--card)] p-3">

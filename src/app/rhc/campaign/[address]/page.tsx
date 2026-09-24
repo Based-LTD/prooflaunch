@@ -492,6 +492,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         socials={{
           twitter: media.twitter ?? s.meta.socials?.twitter, telegram: media.telegram ?? s.meta.socials?.telegram,
           discord: media.discord ?? s.meta.socials?.discord, website: media.website ?? s.meta.socials?.website, farcaster: s.meta.socials?.farcaster,
+          github: media.github ?? undefined,
         }}
         status={<StatusPill launched={s.launched} cancelled={s.cancelled} refundable={s.refundable}
           deadline={s.deadline} totalRaised={s.totalRaised} goal={s.goal} />}

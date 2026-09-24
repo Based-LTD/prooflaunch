@@ -31,12 +31,12 @@ export async function GET(req: NextRequest) {
   if (!isAddress(campaign)) return NextResponse.json({ error: 'campaign required' }, { status: 400 });
   try {
     const db = createServerClient();
-    const { data, error } = await db.from('rhc_campaign_media').select('banner_url, description, twitter, telegram, discord, website, set_by').eq('campaign', campaign).maybeSingle();
+    const { data, error } = await db.from('rhc_campaign_media').select('banner_url, description, twitter, telegram, discord, website, github, set_by').eq('campaign', campaign).maybeSingle();
     if (error) {
       if (tableMissing(error)) return NextResponse.json({ banner_url: null, disabled: true });
       return NextResponse.json({ banner_url: null }, { status: 500 });
     }
-    const empty = { banner_url: null, description: null, twitter: null, telegram: null, discord: null, website: null };
+    const empty = { banner_url: null, description: null, twitter: null, telegram: null, discord: null, website: null, github: null };
     if (!data) return NextResponse.json(empty, { headers: { 'cache-control': 'public, s-maxage=60, stale-while-revalidate=300' } });
     // Read-time check: only the on-chain creator's row is ever shown.
     const creator = await creatorOf(campaign as `0x${string}`);
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   // Soft fields: undefined = leave alone, '' = clear, string = set. Bounded and URL-shaped.
   const soft: Record<string, string | null> = {};
   const urlOk = (v: string) => /^https?:\/\/[^\s]{3,200}$/i.test(v);
-  for (const k of ['description', 'twitter', 'telegram', 'discord', 'website'] as const) {
+  for (const k of ['description', 'twitter', 'telegram', 'discord', 'website', 'github'] as const) {
     const v = body[k];
     if (v === undefined) continue;
     if (v === null || v === '') { soft[k] = null; continue; }

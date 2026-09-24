@@ -78,7 +78,7 @@ export default function CreateCampaignPage() {
   const onRhc = chainId === robinhoodChain.id;
   const [f, setF] = useState({
     name: '', symbol: '', description: '',
-    twitter: '', telegram: '', discord: '', website: '', farcaster: '',
+    twitter: '', telegram: '', discord: '', website: '', farcaster: '', github: '',
     goal: '1', min: '0.05', max: '0', slots: '0', days: '3',
   });
   // Token image — uploaded to /api/upload/image at submit (same route as
@@ -165,10 +165,13 @@ export default function CreateCampaignPage() {
   const bannerUrlRef = useRef<string | null>(null);
   const [bannerState, setBannerState] = useState<'none' | 'pending' | 'signing' | 'done' | 'failed'>('none');
   const { signMessageAsync } = useSignMessage();
+  // Banner + GitHub live off-chain (pons' meta has neither); one signature
+  // binds both to the new campaign right after it exists.
   const bindBanner = async (campaign: string) => {
-    if (!bannerUrlRef.current || !address) return;
+    const gh = f.github.trim();
+    if ((!bannerUrlRef.current && !gh) || !address) return;
     setBannerState('signing');
-    try { await attachBanner(campaign as `0x${string}`, address, bannerUrlRef.current, signMessageAsync); setBannerState('done'); }
+    try { await attachBanner(campaign as `0x${string}`, address, bannerUrlRef.current, signMessageAsync, gh ? { github: gh } : {}); setBannerState('done'); }
     catch { setBannerState('failed'); }
   };
 
@@ -211,7 +214,7 @@ export default function CreateCampaignPage() {
             const campaignAddr = (ev.args as { campaign: string }).campaign;
             setCreated(campaignAddr);
             clearBoardCache(); // the board must show this campaign on the very next visit
-            if (bannerUrlRef.current) void bindBanner(campaignAddr);
+            if (bannerUrlRef.current || f.github.trim()) void bindBanner(campaignAddr);
           }
         } catch { /* not ours */ }
       }
@@ -374,11 +377,11 @@ export default function CreateCampaignPage() {
             </a>
             {bannerState !== 'none' && (
               <p className="mt-3 text-[10px] font-mono uppercase tracking-widest">
-                {bannerState === 'signing' && <span className="text-[var(--accent)] animate-pulse">&gt; Sign once to attach your banner…</span>}
-                {bannerState === 'done' && <span className="text-[var(--success)]">✓ Banner attached</span>}
+                {bannerState === 'signing' && <span className="text-[var(--accent)] animate-pulse">&gt; Sign once to attach your banner and links…</span>}
+                {bannerState === 'done' && <span className="text-[var(--success)]">✓ Banner and links attached</span>}
                 {(bannerState === 'failed' || bannerState === 'pending') && (
                   <button type="button" onClick={() => void bindBanner(created)} className="text-[var(--accent)] underline underline-offset-4">
-                    Banner not attached yet — sign to attach it
+                    Banner and links not attached yet — sign to attach them
                   </button>
                 )}
               </p>
@@ -639,6 +642,7 @@ export default function CreateCampaignPage() {
                     ['telegram', 'Telegram', 'https://t.me/...'],
                     ['discord', 'Discord', 'https://discord.gg/...'],
                     ['farcaster', 'Farcaster', 'https://farcaster.xyz/...'],
+                    ['github', 'GitHub (off-chain, attached after creation)', 'https://github.com/...'],
                   ] as const).map(([key, lbl, ph]) => (
                     <div key={key}>
                       <label className={labelClass}>{lbl}</label>
@@ -1337,7 +1341,7 @@ export default function CreateCampaignPage() {
 
 // ── Live preview rail — the SOL TokenPreviewPanel, twinned ──────────
 function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet, taxPct, buyback, raiseStyle, seatPrice, effGoalEth }: {
-  f: { name: string; symbol: string; description: string; twitter: string; telegram: string; discord: string; website: string; farcaster: string; goal: string; min: string; max: string; slots: string };
+  f: { name: string; symbol: string; description: string; twitter: string; telegram: string; discord: string; website: string; farcaster: string; github: string; goal: string; min: string; max: string; slots: string };
   imagePreview: string | null;
   stack: BotItem[];
   backerPct: number;
@@ -1357,6 +1361,7 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
     { label: 'DC',  href: f.discord.trim() },
     { label: 'WEB', href: f.website.trim() },
     { label: 'FC',  href: f.farcaster.trim() },
+    { label: 'GH',  href: f.github.trim() },
   ].filter((s) => !!s.href);
 
   return (
