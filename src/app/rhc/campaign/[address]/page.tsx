@@ -542,12 +542,12 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   return (
                     <div
                       key={i}
-                      title={reserved ? 'Reserved for the team allowlist' : 'Open seat'}
+                      title={reserved ? (taken ? 'Team seat — taken' : 'Team seat — reserved for the allowlist') : (taken ? 'Public seat — taken' : 'Public seat — open')}
                       className={`h-4 ${
                         taken
-                          ? reserved ? 'bg-[var(--muted)]' : 'bg-[var(--accent)]'
+                          ? reserved ? 'bg-[var(--accent-gold)]' : 'bg-[var(--accent)]'
                           : reserved
-                            ? 'border border-dashed border-[var(--muted)]'
+                            ? 'border border-dashed border-[var(--accent-gold)]/70'
                             : 'border border-[var(--accent)]'
                       }`}
                     />
@@ -555,10 +555,10 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                 })}
               </div>
               {v7 && v7.reservedSeats > 0 && (
-                <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  {publicSeatsLeft > 0 ? `${publicSeatsLeft} open` : 'open seats full'}
-                  {' · '}{v7.reservedSeats - Number(v7.reservedSeatsUsed)} reserved for the team
-                  {v7.iAmAllowlisted && ' · you are on the allowlist'}
+                <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
+                  <span className="inline-flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 bg-[var(--accent)]" />public {Number(v7.publicSeatsUsed)}/{publicSeats}{publicSeatsLeft <= 0 ? ' · full' : ''}</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 bg-[var(--accent-gold)]" />team {Number(v7.reservedSeatsUsed)}/{v7.reservedSeats}</span>
+                  {v7.iAmAllowlisted && <span className="text-[var(--accent-gold)]">you are on the team allowlist</span>}
                 </p>
               )}
             </div>
