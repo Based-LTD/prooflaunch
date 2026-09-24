@@ -11,7 +11,8 @@ at ETH $2,700); **5 reserved TEAM seats** on the allowlist (named founder
 wallets, tagged TEAM on the roster, disclosed in the post as held — v7 has
 no on-chain lock, so it is a promise the roster lets everyone watch), 15
 public; 30% PROOF burn / 10% platform fixed on every launch after this one
-(this one is v7: 7/3); creator tax 5%; payout asset SpaceX; Burn Heavy
+(this one is v7: 7/3); creator tax 3% (traders pay 4% with pons' 1%);
+payout asset SpaceX; Burn Heavy
 preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 
 ## Rehearsed 2026-09-22
@@ -38,8 +39,9 @@ preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 - [ ] Seat round: 20 seats × 0.05 ETH (goal 1 ETH). Team round with
       reservedSeats = 5 and the allowlist = the five team wallets, each
       funded with 0.05 ETH + gas from a DISCLOSED source. Public seats 15.
-- [ ] Creator tax for $PROOF itself: **5%** is my recommendation — high
-      enough that its own burn leg is visible, low enough to trade.
+- [ ] Creator tax for $PLAUNCH itself: **3%** (founder decision 2026-09-24;
+      4% to the trader with pons' 1%). Enter links WITH https:// — the form
+      now adds it, but check the review modal before confirming.
 - [ ] Deployer wallet `0xC571…c58A` funded. The factory + two satellites
       are the expensive deploy (v7 was the same shape); check the live
       gas price and budget generously — 0.01 ETH at 0.1 gwei is plenty.
@@ -59,9 +61,13 @@ preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
    burns $PROOF itself from the first trade — the flywheel starts before
    v8 exists. (Fixed legs on v7 are 7% platform + 3% holder-rewards → the
    two founder wallets; that is documented on the audit page.)
-3. FEE PAYOUT: SpaceX. Tax: 5%. RAISE STYLE: seats, 20 × 0.05 ETH,
+3. FEE PAYOUT: SpaceX. Tax: 3%. RAISE STYLE: seats, 20 × 0.05 ETH,
    reserved seats 5, allowlist = the five team wallets.
-4. Create (launcher wallet). Take the five TEAM seats from the five
+4. Review modal → confirm → wallet. On the success screen, sign ONCE to
+   attach the banner + GitHub link (the dry run on 09-24 skipped this and
+   the page had no banner). Then open the campaign page and read the
+   METADATA card top to bottom before sharing the link.
+   Take the five TEAM seats from the five
    allowlisted wallets (one is the known `0xD533…`); they show on the
    roster tagged TEAM. Fifteen public seats fill from the room.
    v7 campaigns have no lock, so the founder seat's "locked a year" is a

@@ -9,6 +9,11 @@ import { useAccount, useReadContract, useSwitchChain, useWriteContract, useWaitF
 import { parseEther, parseUnits, formatUnits, decodeEventLog, isAddress } from 'viem';
 import { useSignMessage } from 'wagmi';
 import { uploadBanner, attachBanner, BANNER_MAX_BYTES } from '../CampaignBanner';
+import { Modal } from '../components';
+
+// Links are immutable once minted. Normalize at submit: add https:// when
+// the scheme is missing, drop stray spaces; leave empties empty.
+const normUrl = (v: string) => { const t = v.trim(); if (!t) return ''; return /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/+/, '')}`; };
 import { AlertCircle, Upload, X } from 'lucide-react';
 import {
   POOLLAUNCH_FACTORY_V6, V7_LIVE, ACTIVE_FACTORY, FIXED_LEGS_PCT, FIXED_LEGS_NOTE, QUOTE_ASSETS, clearBoardCache,
@@ -221,7 +226,15 @@ export default function CreateCampaignPage() {
     }
   }, [isSuccess, receipt]);
 
+  // Every term is read back to the creator before the wallet opens. The
+  // \$PLAUNCH dry run went out with the wrong preset and payout because the
+  // form let a click through; a review step is the only honest fix.
+  const [review, setReview] = useState(false);
   const submit = async () => {
+    // Links: same rule as the server, applied before anything is immutable.
+    const fixed = { ...f, twitter: normUrl(f.twitter), telegram: normUrl(f.telegram), discord: normUrl(f.discord), website: normUrl(f.website), farcaster: normUrl(f.farcaster), github: normUrl(f.github) };
+    if (JSON.stringify(fixed) !== JSON.stringify(f)) setF(fixed);
+    const L = fixed;
     // Upload the token image first — its public URL is baked into the
     // immutable on-chain metadata, so it has to exist before the tx.
     let logoUrl = '';
@@ -261,7 +274,7 @@ export default function CreateCampaignPage() {
 
     const meta = {
       name: f.name, symbol: f.symbol.toUpperCase(), logo: logoUrl, description: f.description,
-      socials: { twitter: f.twitter, telegram: f.telegram, discord: f.discord, website: f.website, farcaster: f.farcaster },
+      socials: { twitter: L.twitter, telegram: L.telegram, discord: L.discord, website: L.website, farcaster: L.farcaster },
       feeWallet: '0x0000000000000000000000000000000000000000' as `0x${string}`, // unused on V2 — the contract sets creatorFeeRecipient = FeeSplitter
     };
     const vaultAddrs = vaultLegs.map((b) => (b.kind === 'airdrop' ? AIRDROP_OPERATOR : (b.addr as `0x${string}`)));
@@ -367,33 +380,68 @@ export default function CreateCampaignPage() {
             </span>
           </div>
           <div className="p-6">
-            <h2 className="text-base font-mono font-semibold uppercase tracking-tight mb-2">Campaign is live</h2>
-            <p className="text-xs font-mono text-[var(--muted)]">&gt; Share this link with your backers:</p>
+            <h2 className="text-base font-mono font-semibold uppercase tracking-tight mb-2">Campaign created</h2>
+            {bannerState !== 'none' && bannerState !== 'done' ? (
+              <div className="border border-[var(--accent-gold)]/60 bg-[var(--accent-gold)]/5 p-4 space-y-2">
+                <p className="text-xs font-mono text-[var(--foreground)]">
+                  <span className="text-[var(--accent-gold)]">One step left:</span> your banner{f.github.trim() ? ' and GitHub link' : ''} live off-chain and need one signature from this wallet to attach to the campaign. Without it the page shows no banner.
+                </p>
+                <button type="button" onClick={() => void bindBanner(created)} disabled={bannerState === 'signing'} className="btn-primary">
+                  {bannerState === 'signing' ? 'Sign in your wallet…' : bannerState === 'failed' ? 'Try the signature again' : 'Attach banner & links · 1 signature'}
+                </button>
+                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">You can also do this later from the campaign page&apos;s creator controls.</p>
+              </div>
+            ) : bannerState === 'done' ? (
+              <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">✓ Banner and links attached</p>
+            ) : null}
+            <p className="mt-4 text-xs font-mono text-[var(--muted)]">&gt; Your campaign page:</p>
             <a
               href={`/rhc/campaign/${created}`}
               className="mt-2 block font-mono text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] break-all"
             >
               prooflaunch.fun/rhc/campaign/{created}
             </a>
-            {bannerState !== 'none' && (
-              <p className="mt-3 text-[10px] font-mono uppercase tracking-widest">
-                {bannerState === 'signing' && <span className="text-[var(--accent)] animate-pulse">&gt; Sign once to attach your banner and links…</span>}
-                {bannerState === 'done' && <span className="text-[var(--success)]">✓ Banner and links attached</span>}
-                {(bannerState === 'failed' || bannerState === 'pending') && (
-                  <button type="button" onClick={() => void bindBanner(created)} className="text-[var(--accent)] underline underline-offset-4">
-                    Banner and links not attached yet — sign to attach them
-                  </button>
-                )}
-              </p>
-            )}
+            <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">Check the METADATA card on that page before you share it — everything the token will say is listed there.</p>
           </div>
         </div>
       </div>
     );
   }
 
+  const payoutName = payoutIdx === 0 ? 'ETH (backers may still pick a stock at claim)' : `${EQUITY_ASSETS[payoutIdx - 1].symbol} · ${EQUITY_ASSETS[payoutIdx - 1].label} (ETH always available)`;
+  const presetName = (() => { const b = activeStack.find((x) => x.kind === 'burn')?.pct ?? ''; const hit = STACK_PRESETS.find((ps) => ps.burn === b); return hit ? hit.label : 'Custom'; })();
+  const reviewRows: [string, string, boolean?][] = [
+    ['name / symbol', `${f.name.trim()} · $${f.symbol.trim().toUpperCase()}`],
+    ['logo', imageFile ? imageFile.name : 'none', !imageFile],
+    ['banner', bannerFile ? `${bannerFile.name} (attached after creation, 1 signature)` : 'none', !bannerFile],
+    ['description', f.description.trim().slice(0, 90) + (f.description.trim().length > 90 ? '…' : '')],
+    ['links', ['twitter', 'telegram', 'discord', 'website', 'farcaster', 'github'].filter((k) => (f as Record<string, string>)[k].trim()).map((k) => `${k}: ${normUrl((f as Record<string, string>)[k])}`).join('  ·  ') || 'none', !['twitter', 'telegram', 'discord', 'website', 'farcaster', 'github'].some((k) => (f as Record<string, string>)[k].trim())],
+    ['raise', raiseStyle === 'seats' ? `${seatCount} seats × ${seatPrice} ${unitSym} = ${effGoalEth} ${unitSym}${reservedN ? ` · ${reservedN} team seats (${allowlist.length} allowlisted), ${seatCount - reservedN} public` : ''}` : `open · goal ${f.goal} ${unitSym} · min ${f.min} · max ${f.max === '0' ? 'none' : f.max}`],
+    ['creator tax', `${taxPct}% · traders pay ${(Number(taxPct) + 1).toFixed(Number(taxPct) % 1 ? 1 : 0)}% with pons' 1%`],
+    ['fee payout', payoutName],
+    ['fee stack', `${presetName} · bots ${botsPct}% · backers ${backerPct}% · fixed legs ${FIXED_LEGS_PCT.total}%`],
+    ['deadline', `${f.days} days`],
+  ];
+
   return (
     <div className="max-w-6xl mx-auto pb-8">
+      <Modal open={review} onClose={() => setReview(false)} label="REVIEW YOUR LAUNCH" wide>
+        <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">
+          Read it once. Name, symbol, logo, links, tax, payout, fee stack and the raise terms become <span className="text-[var(--foreground)]">immutable</span> the moment you confirm in your wallet. Banner, GitHub and the description override can be edited later; nothing else can.
+        </p>
+        <dl className="mt-3 grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5 text-xs font-mono">
+          {reviewRows.map(([k, v, warn]) => (
+            <div key={k} className="contents">
+              <dt className="text-[10px] uppercase tracking-widest text-[var(--muted)] pt-0.5">{k}</dt>
+              <dd className={warn ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--foreground)]'}>{v}{warn ? ' — ok?' : ''}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={() => { setReview(false); void submit(); }} className="btn-primary">Looks right — create it</button>
+          <button onClick={() => setReview(false)} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)]">Go back and change something</button>
+        </div>
+      </Modal>
       {/* Header — kept compact, same shell as the SOL submit page */}
       <div className="border border-[var(--border)] bg-[var(--card)] mb-5">
         <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
@@ -1324,11 +1372,11 @@ export default function CreateCampaignPage() {
                 </button>
               ) : (
                 <button
-                  onClick={submit}
+                  onClick={() => setReview(true)}
                   disabled={isPending || uploading || grinding || !f.name || !f.symbol || !f.description || effGoalEth <= 0 || effGoalEth > betaCap || overBudget || !stackValid || !taxValid || !allowlistValid || !gateValid}
                   className="btn-primary"
                 >
-                  {uploading ? 'Uploading Image…' : grinding ? `Grinding 0x…${SIGNATURE_SUFFIX.toUpperCase()} address…` : isPending ? 'Confirm in Wallet…' : 'Create Campaign'}
+                  {uploading ? 'Uploading Image…' : grinding ? `Grinding 0x…${SIGNATURE_SUFFIX.toUpperCase()} address…` : isPending ? 'Confirm in Wallet…' : 'Review & Create'}
                 </button>
               )}
             </div>

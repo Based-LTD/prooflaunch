@@ -11,7 +11,8 @@ import {
   rhcPublicClient, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl, lockMultiplier,
   RHC_WETH, robinhoodChain, QUOTE_ASSETS,
 } from '@/lib/rhc';
-import { RhcHeader, StatusPill } from '../../components';
+import { RhcHeader, StatusPill, Modal } from '../../components';
+import { MetadataCard } from '../../MetadataCard';
 import { ClaimAsPicker } from '../../ClaimAsPicker';
 import { EQUITY_ROUTER_LIVE, EQUITY_ASSETS, poolKeyFor, fmtShares, quoteEquityOut, minOutFrom, type EquityAsset } from '@/lib/rhcEquity';
 import { WpPanel } from '../../walletproof';
@@ -49,6 +50,7 @@ interface State {
   gasPrice: bigint;
   v7: V7 | null; // null for v1–v6 campaigns; this page serves every generation
   v8: { myLockUntil: number; myLockDays: number; maxLockDays: number } | null; // pre-launch lock (CampaignV4)
+  creatorTaxBps: number; // pons V2 tax dial, 0 on pre-v4 campaigns
   splitterV4: boolean; // FeeSplitterV4: hold-weighted fees
   myHeldBps: number;   // 10000 = fully held (only meaningful when splitterV4)
 }
@@ -116,6 +118,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   // A lock is irreversible: the deposit waits behind one explicit confirm
   // that repeats the date in words (punch list: fat-finger 2-year lock).
   const [lockConfirm, setLockConfirm] = useState<bigint | null>(null); // units awaiting confirm
+  // Creator tools open in modals — a click away, never sprawled on the page.
+  const [tool, setTool] = useState<null | 'meta' | 'banner' | 'cancel'>(null);
   const media = useCampaignMedia(addr, bannerKey);
   const banner = media.banner_url;
   const { isSuccess: txConfirmed, data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
@@ -183,6 +187,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         isV4 = true;
       } catch { /* pre-v4 campaign */ }
       const feeAsset = (isV4 ? zero : RHC_WETH) as `0x${string}`;
+      const creatorTaxBps = isV4 ? Number(await rhcPublicClient.readContract({ ...c, functionName: 'creatorTaxBps' }).catch(() => 0)) : 0;
       // What pons already owes this campaign but nobody has pulled down yet.
       // Without this the page shows a zero fee share while real fees sit one
       // hop upstream, and the user has no idea Collect is the next step.
@@ -322,7 +327,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       setS({ meta, creator, goal, minDeposit, maxDeposit, maxBackers, deadline, totalRaised,
         backerCount, launched, cancelled, refundable, token, feeSplitter, tokensAtLaunch,
         totalRaisedAtLaunch, myContribution, myTokensClaimed, myFeeEntitlement, myFeesClaimed, myTokenBalance, isV4,
-        curve, curveGraduated, myCurveAllowance, ponsOwed, backerBps, projectedShare, projectedShares: null, myEth, gasPrice, v7, v8, splitterV4, myHeldBps });
+        curve, curveGraduated, myCurveAllowance, ponsOwed, backerBps, projectedShare, projectedShares: null, myEth, gasPrice, v7, v8, creatorTaxBps, splitterV4, myHeldBps });
       // Quote the projection in the creator's pick, off the critical path.
       if (v7 && me && projectedShare > 0n && v7.payoutAsset !== zero && EQUITY_ROUTER_LIVE) {
         const asset = EQUITY_ASSETS.find((a) => a.address.toLowerCase() === v7!.payoutAsset.toLowerCase());
@@ -738,7 +743,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
 
           {isConnected && iAmCreator && !s.launched && !s.cancelled && (
             <button
-              onClick={() => act('cancel')}
+              onClick={() => setTool('cancel')}
               disabled={isPending}
               className="mt-4 ml-3 px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted-soft)] hover:border-[var(--error)] hover:text-[var(--error)] transition-colors"
             >
@@ -782,6 +787,16 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             address={addr} launched={s.launched} me={me} symbol={s.meta.symbol}
             quoteSymbol={qSym} quoteDecimals={qDec} isErc20Quote={isErc20Quote}
             refreshKey={lastReceipt?.hash ?? ''}
+          />
+          <MetadataCard
+            meta={s.meta} media={media}
+            terms={{
+              tax: s.creatorTaxBps,
+              payoutAsset: v7?.payoutAsset ?? ZERO_ADDR, quote: qSym, launched: s.launched,
+              seats: Number(s.maxBackers), reserved: v7?.reservedSeats ?? 0,
+              seatPrice: q(s.minDeposit), minDeposit: q(s.minDeposit), maxDeposit: s.maxDeposit === 0n ? '0' : q(s.maxDeposit),
+              deadline: s.deadline, legs: `backers ${(s.backerBps / 100).toFixed(0)}% · fixed legs + bots ${(100 - s.backerBps / 100).toFixed(0)}% (see BOTS)`,
+            }}
           />
           <BotLegsPanel splitter={s.feeSplitter} feeAsset={s.isV4 ? ZERO_ADDR : RHC_WETH} symbol={s.meta.symbol} launched={s.launched} refreshKey={lastReceipt?.hash ?? ''} />
           <CreatorLaunches creator={s.creator} exclude={addr} />
@@ -1064,29 +1079,70 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           page post-launch. Today: the banner. */}
       {isConnected && iAmCreator && (
         <DashboardCard label="CREATOR CONTROLS" className="mt-3">
-          <div className="space-y-5">
-            {v8 && !s.launched && !s.cancelled && (
-              <div className="border-b border-[var(--border)] pb-4">
-                <OnChainMetaEditor campaign={addr} onSent={() => { void startAction('other', { label: 'Metadata updated on-chain — what launches is what you see now' }); }}
-                  current={{ name: s.meta.name, symbol: s.meta.symbol, logo: s.meta.logo, description: s.meta.description,
-                    socials: { twitter: s.meta.socials?.twitter ?? '', telegram: s.meta.socials?.telegram ?? '', discord: s.meta.socials?.discord ?? '', website: s.meta.socials?.website ?? '', farcaster: s.meta.socials?.farcaster ?? '' } }} />
-              </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setTool('meta')} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">
+              [✎] Edit metadata
+            </button>
+            <button onClick={() => setTool('banner')} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">
+              [▭] {banner ? 'Change banner' : 'Add banner'}
+            </button>
+            {!s.launched && !s.cancelled && (
+              <button onClick={() => setTool('cancel')} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted-soft)] hover:border-[var(--error)] hover:text-[var(--error)] transition-colors">
+                [✕] Cancel campaign
+              </button>
             )}
-            <BannerManager campaign={addr} current={banner} onChanged={() => setBannerKey(String(Date.now()))} />
-            <div className="border-t border-[var(--border)] pt-4">
-              <SoftMetaEditor campaign={addr} current={media} onSaved={() => setBannerKey(String(Date.now()))} />
-            </div>
           </div>
+          <p className="mt-2 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
+            {v8 && !s.launched ? 'Before launch: name, symbol, logo and links change on-chain (one transaction). ' : 'Name, symbol and logo are what pons minted. '}
+            Description, links and banner are yours to edit any time (one signature).
+          </p>
         </DashboardCard>
       )}
 
-      <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] break-all">
-        Campaign{' '}
-        <a href={explorerUrl(addr)} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--muted)]">{addr}</a>
-        {' '}· Splitter{' '}
-        <a href={explorerUrl(s.feeSplitter)} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--muted)]">{s.feeSplitter.slice(0, 10)}…</a>
-        {' '}· Ownerless contracts — verify everything yourself
-      </p>
+      <Modal open={tool === 'meta'} onClose={() => setTool(null)} label="EDIT METADATA" wide>
+        <div className="space-y-5">
+          {v8 && !s.launched && !s.cancelled && (
+            <div className="border-b border-[var(--border)] pb-4">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">On-chain · what pons will mint</div>
+              <OnChainMetaEditor campaign={addr} onSent={() => { setTool(null); void startAction('other', { label: 'Metadata updated on-chain — what launches is what you see now' }); }}
+                current={{ name: s.meta.name, symbol: s.meta.symbol, logo: s.meta.logo, description: s.meta.description,
+                  socials: { twitter: s.meta.socials?.twitter ?? '', telegram: s.meta.socials?.telegram ?? '', discord: s.meta.socials?.discord ?? '', website: s.meta.socials?.website ?? '', farcaster: s.meta.socials?.farcaster ?? '' } }} />
+            </div>
+          )}
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] mb-2">Off-chain · shown on this page</div>
+            <SoftMetaEditor campaign={addr} current={media} onSaved={() => { setBannerKey(String(Date.now())); setTool(null); }} />
+          </div>
+        </div>
+      </Modal>
+      <Modal open={tool === 'banner'} onClose={() => setTool(null)} label="BANNER">
+        <BannerManager campaign={addr} current={banner} onChanged={() => { setBannerKey(String(Date.now())); setTool(null); }} />
+      </Modal>
+      <Modal open={tool === 'cancel'} onClose={() => setTool(null)} label="CANCEL CAMPAIGN">
+        <p className="text-xs font-mono text-[var(--foreground)]/85 leading-relaxed">
+          This ends the raise. Every backer&apos;s deposit becomes refundable in full, the campaign leaves the board, and it cannot be reopened. The 0.001 ETH creation fee is not returned.
+        </p>
+        <div className="mt-4 flex gap-2">
+          <button onClick={() => { setTool(null); act('cancel'); }} disabled={isPending} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--error)] text-[var(--error)] hover:bg-[var(--error)] hover:text-black transition-colors">Yes, cancel it</button>
+          <button onClick={() => setTool(null)} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)]">Keep it</button>
+        </div>
+      </Modal>
+
+      {/* Contract addresses appear at launch. Before it, nothing on this page
+          points at a contract a sniper could watch (founder, 2026-09-24). */}
+      {s.launched ? (
+        <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] break-all">
+          Campaign{' '}
+          <a href={explorerUrl(addr)} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--muted)]">{addr}</a>
+          {' '}· Splitter{' '}
+          <a href={explorerUrl(s.feeSplitter)} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--muted)]">{s.feeSplitter.slice(0, 10)}…</a>
+          {' '}· Ownerless contracts — verify everything yourself
+        </p>
+      ) : (
+        <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
+          Ownerless contracts · addresses are published the moment the token launches
+        </p>
+      )}
     </>
   );
 }

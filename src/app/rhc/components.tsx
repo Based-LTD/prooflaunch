@@ -3,7 +3,7 @@
 // Shared RHC UI — the SOL design system verbatim: same variables, card
 // shells, chip and label conventions. Same site, different chain.
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { WpBadge } from './walletproof';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
@@ -367,5 +367,30 @@ export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.Rea
         </div>
       </div>
     </Link>
+  );
+}
+
+/// House-style modal: dark backdrop, bordered card, "// LABEL" header, X
+/// and Escape to close. Used for creator tools and the pre-submit review,
+/// so forms are a click away instead of always open on the page.
+export function Modal({ open, onClose, label, children, wide = false }: { open: boolean; onClose: () => void; label: string; children: React.ReactNode; wide?: boolean }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow; document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4" onClick={onClose} role="dialog" aria-modal="true">
+      <div className={`w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-xl'} max-h-[92vh] overflow-y-auto border border-[var(--border)] bg-[var(--card)]`} onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--card)] px-3 py-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">{'// '}{label}</span>
+          <button onClick={onClose} aria-label="Close" className="text-[var(--muted)] hover:text-[var(--foreground)] text-sm leading-none px-1">✕</button>
+        </div>
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
   );
 }
