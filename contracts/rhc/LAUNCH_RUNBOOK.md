@@ -4,11 +4,15 @@ Everything up to step 1 is already on prod and dark behind env flags.
 The order is forced by immutables: the burner needs the token's campaign,
 the factory needs the burner. Nothing here can be reordered.
 
-Decisions on record (2026-09-22): ticker **$PROOF**; **open raise**, goal
-at the 2 ETH beta cap if the REKT crew is in; 30% PROOF burn / 10%
-platform, fixed; backers get the rest; locking pays (×1.25 at 180d, ×1.5
-at 365d); zero dev allocation; founder takes ONE public seat; payout asset
-SpaceX. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
+Decisions on record (2026-09-24): ticker **$PLAUNCH** (a PROOF already
+exists on RHC — proofon.co); **seat round: 20 seats × 0.05 ETH = 1 ETH**
+(≈36% of supply to the seats on the live pons curve, 1.8% per seat, ≈$135
+at ETH $2,700); **5 reserved TEAM seats** on the allowlist (named founder
+wallets, tagged TEAM on the roster, disclosed in the post as held — v7 has
+no on-chain lock, so it is a promise the roster lets everyone watch), 15
+public; 30% PROOF burn / 10% platform fixed on every launch after this one
+(this one is v7: 7/3); creator tax 5%; payout asset SpaceX; Burn Heavy
+preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 
 ## Rehearsed 2026-09-22
 
@@ -31,8 +35,9 @@ SpaceX. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 ## 0. Before the day
 
 - [ ] Ticker, name, logo (square), banner (3:1), description, socials.
-- [ ] Open raise. Goal 2 ETH (the beta cap; raise it only if external
-      review has lifted the cap). Min per backer 0.05, max 0.
+- [ ] Seat round: 20 seats × 0.05 ETH (goal 1 ETH). Team round with
+      reservedSeats = 5 and the allowlist = the five team wallets, each
+      funded with 0.05 ETH + gas from a DISCLOSED source. Public seats 15.
 - [ ] Creator tax for $PROOF itself: **5%** is my recommendation — high
       enough that its own burn leg is visible, low enough to trade.
 - [ ] Deployer wallet `0xC571…c58A` funded. The factory + two satellites
@@ -42,7 +47,7 @@ SpaceX. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
       EQUITY_ROUTER, LEG_DEPLOYER, PLATFORM_BPS=1000, PROOF_BURN_BPS=3000).
 - [ ] The post is drafted and NOT sent (Thread F/G in docs/x-launch-threads.md).
 
-## 1. Launch $PROOF on v7 (the live factory) — from the website
+## 1. Launch $PLAUNCH on v7 (the live factory) — from the website
 
 1. prooflaunch.fun/rhc/create, connected as a **fresh launcher wallet**
    (gas only, never trades). Axiom and friends tag the wallet that signs
@@ -54,9 +59,11 @@ SpaceX. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
    burns $PROOF itself from the first trade — the flywheel starts before
    v8 exists. (Fixed legs on v7 are 7% platform + 3% holder-rewards → the
    two founder wallets; that is documented on the audit page.)
-3. FEE PAYOUT: SpaceX. Tax: 5%. Team round if you want a reserved seat.
-4. Create (launcher wallet). Take ONE seat from the KNOWN founder wallet
-   `0xD533…` — it shows on the roster as a backer, not as the dev.
+3. FEE PAYOUT: SpaceX. Tax: 5%. RAISE STYLE: seats, 20 × 0.05 ETH,
+   reserved seats 5, allowlist = the five team wallets.
+4. Create (launcher wallet). Take the five TEAM seats from the five
+   allowlisted wallets (one is the known `0xD533…`); they show on the
+   roster tagged TEAM. Fifteen public seats fill from the room.
    v7 campaigns have no lock, so the founder seat's "locked a year" is a
    public commitment (say it in the post) enforced by not claiming; v8
    campaigns enforce it on-chain.
