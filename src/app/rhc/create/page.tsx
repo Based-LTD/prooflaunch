@@ -133,17 +133,28 @@ export default function CreateCampaignPage() {
   const quote = QUOTE_ASSETS[quoteIdx];
   const isNativeQuote = quote.address === '0x0000000000000000000000000000000000000000';
   const [reservedSeats, setReservedSeats] = useState('0');
-  const [allowlistText, setAllowlistText] = useState('');
+  // One slot per reserved seat. A free-text blob made it too easy to ship a
+  // short or duplicated list; numbered slots make the count self-evident.
+  const [teamWallets, setTeamWallets] = useState<string[]>([]);
   const [gateAddr, setGateAddr] = useState('');
   const [gateMin, setGateMin] = useState('');
   const [vanity, setVanity] = useState<{ address: string; attempts: number; ms: number } | null>(null);
   const [grinding, setGrinding] = useState(false);
 
-  const allowlist = allowlistText
-    .split(/[\s,]+/)
-    .map((w) => w.trim())
-    .filter((w) => w.length > 0);
-  const allowlistValid = allowlist.every((w) => isAddress(w));
+  const setTeamWallet = (i: number, v: string) =>
+    setTeamWallets((prev) => {
+      const next = prev.slice();
+      while (next.length <= i) next.push('');
+      // A paste of several addresses fills this slot and the ones after it.
+      const parts = v.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+      if (parts.length > 1) parts.forEach((pt, k) => { while (next.length <= i + k) next.push(''); next[i + k] = pt; });
+      else next[i] = v.trim();
+      return next;
+    });
+  const allowlist = teamWallets.map((w) => w.trim()).filter(Boolean);
+  const allowlistValid =
+    allowlist.every((w) => isAddress(w)) &&
+    new Set(allowlist.map((w) => w.toLowerCase())).size === allowlist.length;
   const gateValid = !gateAddr.trim() || isAddress(gateAddr.trim());
   // Default 2%: 0% makes the flywheel a lie, 5%+ loses listings to raw pons.
   const [taxPct, setTaxPct] = useState('2');
@@ -416,7 +427,7 @@ export default function CreateCampaignPage() {
     ['banner', bannerFile ? `${bannerFile.name} (attached after creation, 1 signature)` : 'none', !bannerFile],
     ['description', f.description.trim().slice(0, 90) + (f.description.trim().length > 90 ? '…' : '')],
     ['links', ['twitter', 'telegram', 'discord', 'website', 'farcaster', 'github'].filter((k) => (f as Record<string, string>)[k].trim()).map((k) => `${k}: ${normUrl((f as Record<string, string>)[k])}`).join('  ·  ') || 'none', !['twitter', 'telegram', 'discord', 'website', 'farcaster', 'github'].some((k) => (f as Record<string, string>)[k].trim())],
-    ['raise', raiseStyle === 'seats' ? `${seatCount} seats × ${seatPrice} ${unitSym} = ${effGoalEth} ${unitSym}${reservedN ? ` · ${reservedN} team seats (${allowlist.length} allowlisted), ${seatCount - reservedN} public` : ''}` : `open · goal ${f.goal} ${unitSym} · min ${f.min} · max ${f.max === '0' ? 'none' : f.max}`],
+    ['raise', raiseStyle === 'seats' ? `${seatCount} seats × ${seatPrice} ${unitSym} = ${effGoalEth} ${unitSym}${reservedN ? ` · ${reservedN} team seats → ${allowlist.map((w) => `${w.slice(0, 6)}…${w.slice(-4)}`).join(', ') || 'NONE NAMED'}, ${seatCount - reservedN} public` : ''}` : `open · goal ${f.goal} ${unitSym} · min ${f.min} · max ${f.max === '0' ? 'none' : f.max}`],
     ['creator tax', `${taxPct}% · traders pay ${(Number(taxPct) + 1).toFixed(Number(taxPct) % 1 ? 1 : 0)}% with pons' 1%`],
     ['fee payout', payoutName],
     ['fee stack', `${presetName} · bots ${botsPct}% · backers ${backerPct}% · fixed legs ${FIXED_LEGS_PCT.total}%`],
@@ -996,29 +1007,48 @@ export default function CreateCampaignPage() {
                               ))}
                             </select>
                           </div>
-                          <div>
-                            <label className={labelClass}>
-                              Allowlist {allowlist.length > 0 && `(${allowlist.length})`}
-                            </label>
-                            <textarea
-                              value={allowlistText}
-                              onChange={(e) => setAllowlistText(e.target.value)}
-                              placeholder="0xabc…  0xdef…  (one per line)"
-                              rows={3}
-                              className={`${inputClass(!allowlistValid)} resize-none normal-case tracking-normal`}
-                            />
+                          <div className="self-end text-[11px] font-mono text-[var(--muted)] leading-relaxed">
+                            {reservedN === 0
+                              ? 'Pick a number above to name the wallets.'
+                              : `Name the ${reservedN} wallet${reservedN === 1 ? '' : 's'} below. Only these can take a reserved seat.`}
                           </div>
                         </div>
-                        {!allowlistValid && (
-                          <p className="text-xs font-mono text-[var(--error)]">
-                            One of those is not a valid address.
-                          </p>
+                        {reservedN > 0 && (
+                          <div className="space-y-1.5">
+                            {Array.from({ length: reservedN }).map((_, i) => {
+                              const v = (teamWallets[i] ?? '').trim();
+                              const ok = isAddress(v);
+                              const dupe = ok && allowlist.filter((w) => w.toLowerCase() === v.toLowerCase()).length > 1;
+                              return (
+                                <div key={i} className="flex items-center gap-2">
+                                  <span className="w-16 shrink-0 text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
+                                    Seat {String(i + 1).padStart(2, '0')}
+                                  </span>
+                                  <input
+                                    value={teamWallets[i] ?? ''}
+                                    onChange={(e) => setTeamWallet(i, e.target.value)}
+                                    placeholder="0x…"
+                                    spellCheck={false}
+                                    className={`${inputClass(v.length > 0 && (!ok || dupe))} flex-1 normal-case tracking-normal`}
+                                  />
+                                  <span className="w-20 shrink-0 text-[10px] font-mono uppercase tracking-widest text-right">
+                                    {!v ? <span className="text-[var(--muted-soft)]">empty</span>
+                                      : dupe ? <span className="text-[var(--error)]">duplicate</span>
+                                      : ok ? <span className="text-[var(--success)]">✓ valid</span>
+                                      : <span className="text-[var(--error)]">bad address</span>}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
+                              Paste several at once into any slot and they fill downward.
+                            </p>
+                          </div>
                         )}
                         {reservedN > 0 && allowlist.length < reservedN && (
                           <p className="text-[10px] font-mono text-[var(--warning)] uppercase tracking-widest">
-                            {reservedN} seats reserved but only {allowlist.length} wallet
-                            {allowlist.length === 1 ? '' : 's'} allowlisted — the rest would sit
-                            unclaimable until the deadline.
+                            {reservedN - allowlist.length} slot{reservedN - allowlist.length === 1 ? '' : 's'} still
+                            empty — those seats would sit unclaimable until the deadline.
                           </p>
                         )}
                       </div>
