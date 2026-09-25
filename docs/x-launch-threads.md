@@ -1,6 +1,6 @@
 # ProofLaunch on RHC — X post series
 
-> **2026-09-23:** Threads A–E and the standalones predate the rev flywheel. Any line that says 90% to backers is STALE — the split is now 30% $PROOF burn / 10% platform / the rest to backers (50% default). Threads F and G are current.
+> **2026-09-23, updated 2026-09-25:** Threads A–E and the standalones predate the rev flywheel. Any line that says 90% to backers is STALE. The flywheel split (30% $PLAUNCH burn / 10% platform / the rest to backers) is the v8 factory, which is BUILT BUT NOT DEPLOYED — write it in future tense until `flip-v8.mjs` has run. Today's live v7 factory fixes only 7% platform + 3% (a retired leg that pays holders nothing) and the rest is the creator's budget. Threads F and G are current.
 
 
 Audience: crypto X. Goal: introduce the pooled-launch model on Robinhood
@@ -239,8 +239,10 @@ EVERY campaign flows to holders; (2) creation fees waived for holders
 creators can token-gate seats on their raises. [Mechanism copy pends
 the rewards-vault build; keep "earn the fee stream" framing.]
 
-**E4** [Ticker + whether the RHC token is $PROOF-branded / what SOL
-$PROOF holders receive — STILL OPEN with founder.]
+**E4** [RESOLVED 2026-09-24: the RHC platform token is **$PLAUNCH** (a
+different, unrelated $PROOF already trades on RHC — proofon.co). Solana
+$PROOF is a separate token on a separate chain and receives nothing from
+the RHC flywheel; do not imply otherwise.]
 
 **E5** WalletProof will be pointed at our own launch, live. Judge us
 with the same lens we built for everyone else.
@@ -258,7 +260,7 @@ ProofLaunch is live on Robinhood Chain.
 
 Pooled token launches on pons. The community funds the launch, one
 transaction creates the token and buys with the whole pool, and the
-backers keep most of the creator tax. 30% of it buys and burns $PROOF.
+backers keep most of the creator tax. 30% of it buys and burns $PLAUNCH.
 Enforced by contracts with no admin key. Not by us.
 
 prooflaunch.fun

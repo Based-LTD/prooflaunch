@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAccount, useWriteContract } from 'wagmi';
-import { proofBurnerAbi, PROOF_BURNER, PROOF_BURNER_LIVE, fmtEth, explorerUrl, robinhoodChain } from '@/lib/rhc';
+import { proofBurnerAbi, PROOF_BURNER, PROOF_BURNER_LIVE, V8_LIVE, fmtEth, explorerUrl, robinhoodChain } from '@/lib/rhc';
 import type { FlywheelFeed } from '../api/rhc/flywheel/route';
 
 const CAP = 200_000_000_000_000_000n; // 0.2 ETH per crank
@@ -130,7 +130,7 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
               <span><span className="text-[var(--foreground)] tabular-nums">{PROOF_BURNER_LIVE && f ? eth(spentA) : '0'}</span> ETH burned</span>
               <span><span className="text-[var(--success)] tabular-nums">{PROOF_BURNER_LIVE && f ? eth(pendingA) : '0'}</span> ETH waiting</span>
               <span><span className="text-[var(--foreground)] tabular-nums">{PROOF_BURNER_LIVE && f ? (f.burns?.length ?? 0) : 0}</span> burns</span>
-              <span><span className="text-[var(--accent-gold)]">30%</span> of every launch&apos;s tax</span>
+              <span><span className="text-[var(--accent-gold)]">30%</span> of every launch&apos;s tax{!PROOF_BURNER_LIVE && ', once the flywheel factory ships'}</span>
             </div>
           </div>
           <div className="flex md:flex-col items-center md:items-end gap-2 shrink-0">
@@ -188,7 +188,9 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
             ['ETH burned into $PLAUNCH', PROOF_BURNER_LIVE && f ? `${eth(spentA)} ETH` : '— ETH', 'var(--foreground)', 'spent'],
             ['Collected from campaigns', PROOF_BURNER_LIVE && f ? `${eth(pulledA)} ETH` : '— ETH', 'var(--muted)', 'pulled'],
             ['Waiting to burn', PROOF_BURNER_LIVE && f ? `${eth(pendingA)} ETH` : '— ETH', 'var(--success)', 'pending'],
-            ['Fixed legs, every launch', '30% burn · 10% platform', 'var(--accent-gold)', 'legs'],
+            // Gated: this renders on live campaign pages, and no live
+            // campaign has these legs — v7 fixes 7% platform + 3% retired.
+            ['Fixed legs, every launch', V8_LIVE ? '30% burn · 10% platform' : '7% platform · 3% retired', 'var(--accent-gold)', 'legs'],
           ].map(([k, v, c, id]) => (
             <div key={id} className="border border-[var(--border)] bg-[var(--background)] px-3 py-2">
               <div className="font-mono text-sm tabular-nums" style={{ color: c }}>{v}</div>
@@ -220,7 +222,7 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
 
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {PROOF_BURNER_LIVE ? 'Ownerless. Anyone can crank it; nobody can stop it or point it anywhere else.' : 'Every launch through this site feeds it. Backers keep the majority; sellers forfeit into it.'}
+            {PROOF_BURNER_LIVE ? 'Ownerless. Anyone can crank it; nobody can stop it or point it anywhere else.' : 'Once it ships, every launch through this site will feed it. Backers keep the majority; sellers forfeit into it.'}
           </p>
           {PROOF_BURNER_LIVE && isConnected && pendingWei > 0n && (
             <button onClick={() => writeContract({ address: PROOF_BURNER, abi: proofBurnerAbi, functionName: 'crank', chainId: robinhoodChain.id })} disabled={isPending}

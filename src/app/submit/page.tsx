@@ -983,7 +983,7 @@ function SubmitPageInner() {
                 {'// LAUNCH_PLATFORM'}
               </span>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                3 LIVE
+                4 LIVE
               </span>
             </div>
             <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1056,7 +1056,7 @@ function SubmitPageInner() {
                 {'// QUOTE_CURRENCY'}
               </span>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                {formData.quoteCurrency === 'usdc' ? 'METEORA ONLY' : '3 LAUNCHPADS'}
+                {formData.quoteCurrency === 'usdc' ? 'METEORA ONLY' : '4 LAUNCHPADS'}
               </span>
             </div>
             <div className="p-3 grid grid-cols-2 gap-2">
@@ -1762,7 +1762,7 @@ function SubmitPageInner() {
             <div className="space-y-1">
               <h3 className="text-sm font-semibold uppercase tracking-wide">Trading Fees</h3>
               <p className="text-xs text-[var(--muted)]">
-                Standard split: <span className="text-[var(--foreground)]">90% to backers · 10% platform</span>.
+                Standard split: <span className="text-[var(--foreground)]">90% to backers · 5% to $PROOF holders · 5% platform</span>.
                 Enable the buyback bot below to delegate part of the backer pool to automatic buy + burn / hold.
               </p>
             </div>

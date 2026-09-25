@@ -13,7 +13,6 @@ import {
 const SHIPPED = [
   { icon: Rocket, title: 'Trustless pooled launches on pons', desc: 'The Campaign contract IS the token\'s creator. Backers pool ETH; one transaction creates the token and buys with the entire pool — snipe-exempt, on the launch block, identical price for everyone. No admin keys, no pause switch, no upgrade path: the platform cannot touch backer funds, by construction.' },
   { icon: Users, title: 'Two raise styles — Open Raise & Seat Round', desc: '⚡ Open Raise: ETH goal, unlimited backers (pull-based claims make the count truly unbounded), optional whale cap. 🎟 Seat Round: N identical seats at a fixed price — equal entry enforced by contract, and the last seat filling IS the launch trigger.' },
-  { icon: Coins, title: 'Backers keep most of the creator tax; 30% burns $PLAUNCH', desc: 'The immutable FeeSplitter routes every launch\u2019s creator tax: 30% buys and burns $PLAUNCH, 10% platform, the rest to backers pro-rata (50% on the default preset, 60% with no coin burn). Sellers forfeit their share into the burn. Pull-based: your share waits in the contract with your name on it; no operator has to be alive for anyone to get paid.' },
   { icon: Coins, title: 'Adjustable creator tax — earned by your backers', desc: 'The pons V2 tax dial (0–10% of every trade, locked at launch, can never be raised) — pointed at your campaign\'s FeeSplitter instead of one wallet. Community takeover as a cash flow, not a vibe.' },
   { icon: Bot, title: 'Trustless launch bots on Uniswap v4', desc: '🔥 BURN buys the token (on the bonding curve pre-graduation, directly against the v4 PoolManager after) and sends it to the dead address. 🌊 POOL FEEDER mints full-range liquidity and compounds its own fees — the contract has NO withdraw function. Anyone can crank them; nobody, including us, can stop them.' },
   { icon: Bot, title: 'Vault legs + holder airdrops', desc: '🏦 Any wallet the creator names becomes an immutable fee leg (marketing, DAO, treasury). 📸 Opt-in holder snapshot airdrops run by the platform — the same machinery as our Solana launches, honestly labeled as the one non-trustless bot.' },
@@ -21,10 +20,11 @@ const SHIPPED = [
 ];
 
 const BUILDING = [
+  { icon: Coins, title: 'The flywheel split \u2014 30% of every creator tax burns $PLAUNCH', desc: 'Built and fork-tested against live pons, NOT yet deployed. The next factory will fix two legs in every campaign it creates: 30% buys and burns $PLAUNCH, 10% platform, the rest to backers pro-rata (50% on the default preset, 60% with no coin burn), and sellers will forfeit their share into the burn. Today\u2019s live factory fixes 7% platform + a retired 3% leg instead, and the rest is the creator\u2019s budget. Pull-based either way: your share waits in the contract with your name on it.' },
   { icon: Search, title: 'WalletProof — who is really buying', desc: 'Every trade on the chain\'s launchpad, replayed on-chain: independent buyers vs crew volume vs one-shot wallets vs launch bots, plus each deployer\'s full history. Counts only, no wallet doxxing. The engine runs today; the public reveal ships as part of the launch sequence.' },
   { icon: Shield, title: 'Signature addresses — 0x…5EED', desc: 'Every campaign (and eventually every token) deployed to an address ending in 5EED — "seed," because every launch here is seeded by its community. CREATE2 salt-grinding, done invisibly at submit. On Solana it was "…pooL"; here, if the address doesn\'t end in 5EED, it didn\'t come from us.' },
-  { icon: Shield, title: 'External contract review → lift the beta cap', desc: 'The contracts passed 26/26 tests including live-pool fork verification of every money path. An independent review is the gate for removing the 2 ETH beta goal cap and opening full-size raises.' },
-  { icon: Rocket, title: 'Platform token, launched through our own contracts', desc: 'Same factory, same terms every creator gets — eat your own cooking or don\'t cook. The 3% holder-rewards leg already accrues from every campaign as the flywheel feed.' },
+  { icon: Shield, title: 'External contract review → lift the beta cap', desc: 'The contracts pass their full suite, including live-pool fork verification of every money path. An independent review is the gate for removing the 2 ETH beta goal cap and opening full-size raises.' },
+  { icon: Rocket, title: 'Platform token, launched through our own contracts', desc: 'Same factory, same terms every creator gets — eat your own cooking or don\'t cook. Today\u2019s factory carries a fixed 3% leg that is retired and pays holders nothing; the flywheel factory replaces it with the burn leg.' },
   { icon: DollarSign, title: 'Stable-denominated raises (USDG)', desc: 'pons V2 already approves Global Dollar as a pair token. A vNext factory lets backers pool USDG instead of ETH — stable-quoted curves, stable-denominated fee streams, same trustless spine.' },
   { icon: Users, title: 'Team rounds — reserved seats, contract-enforced', desc: 'The SOL reserved-slots model, upgraded to trustless: creators name allowlisted wallets at creation, reserve N of the seats for them, and the CONTRACT enforces who can take a reserved seat — no server checking a list. Public always sees the raise and keeps its guaranteed open seats; fully-reserved rounds get the TEAM ROUND label. Ships in the next factory generation alongside the 0x…5EED signatures and the holder fee waiver.' },
   { icon: Layers, title: 'Campaign indexer', desc: 'The board currently reads every factory generation straight from the chain — perfect for trust, fine at beta scale. An event indexer keeps it instant as campaign count grows, without ever becoming the source of truth.' },
@@ -76,7 +76,7 @@ export default function RoadmapPage() {
         </div>
         <p className="text-[var(--foreground)]/80 leading-relaxed">
           What&apos;s live, what&apos;s being built, and what&apos;s being weighed — for ProofLaunch on Robinhood Chain
-          on Robinhood Chain, where all new development happens. No dates: this is a direction,
+          where all new development happens. No dates: this is a direction,
           not a contract. Reality changes the order more often than calendars do.
         </p>
         <div className="border-l-4 border-[var(--accent-gold)] bg-[var(--background)] p-4">
@@ -174,7 +174,7 @@ export default function RoadmapPage() {
           We read every suggestion. Not every one becomes a feature — but every one shapes how we think.
         </p>
         <p className="text-xs font-mono uppercase tracking-widest text-[var(--muted)]">
-          &gt; The community has shipped more roadmap items here than any single product manager could.
+          &gt; Community suggestions have shaped more of this roadmap than anything else.
         </p>
       </section>
     </div>

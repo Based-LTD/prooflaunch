@@ -1,5 +1,15 @@
 # PoolLaunch on Robinhood Chain — Design Spec (Decision Document)
 
+> **SUPERSEDED IN PART, 2026-09-25.** This is the original design spec.
+> The "holder-rewards leg" and the SOL-side bridging question below were
+> never built: on the live v7 factory that 3% leg pays a plain wallet and
+> nothing reaches any token holder, and the rewards-vault / staking design
+> it assumed has been retired in favour of the v8 buy-and-burn flywheel
+> (30% burns $PLAUNCH, 10% platform, the rest to backers — built, not yet
+> deployed). Solana $PROOF is a separate token on a separate chain and
+> receives nothing from RHC. See `docs/rhc-receipts.md` for what is
+> actually deployed.
+
 Status: DRAFT for build/pass decision · 2026-09-07
 Author: research + design pass, no code written, nothing deployed.
 

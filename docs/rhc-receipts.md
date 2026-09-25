@@ -179,8 +179,9 @@ What *is* ours, and **not yet deployed**: pooled community raises (pons
 is single-creator), and letting the *claimer* choose the asset their
 ETH entitlement arrives as — at every claim surface: a campaign's
 backers and legs (`FeeSplitterV3.claimBackerAs` / `claimLegAs`, with a
-creator-set default that never locks anyone in) and $PROOF stakers
-(`RewardsVault.claimAs`). `EquityRouter` + both surfaces: 19/19 on a
+creator-set default that never locks anyone in) and, in the retired
+staking design, vault stakers (`RewardsVault.claimAs` — the vault was
+dropped for the buy-and-burn flywheel and will not ship). `EquityRouter` + both surfaces: 19/19 on a
 live fork against the real pools. Measured all-in routing
 cost at ~$122: SPCX 0.5%, MSFT 1%, META 5%, LLY 6%. Pool keys and fee
 tiers: `contracts/rhc/RWA_POOLS.md`. The protocol only ever owes ETH;

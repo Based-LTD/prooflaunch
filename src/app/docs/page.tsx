@@ -159,7 +159,7 @@ export default function DocsPage() {
                 {[
                   { num: '1', title: 'Back the Pool', desc: 'Send at least the creator\'s minimum to claim one of 2–24 slots. Your SOL goes to the token\'s transparent pool wallet — publicly visible on-chain.' },
                   { num: '2', title: 'Pool Locked Until Launch', desc: 'The pool simply holds the backers\' SOL until all slots fill. Nothing can be done with it but launch or refund.' },
-                  { num: '3', title: 'One Atomic Launch', desc: 'When slots fill, the creator launches: ONE transaction creates the token and the pool buys it in the same block. No sniper gap. Dev holds 0%. The contract address ends in “pooL” so anyone can verify it\'s a real Proof launch.' },
+                  { num: '3', title: 'One Atomic Launch', desc: 'When slots fill, the creator launches: ONE transaction creates the token and the pool buys it in the same block. No sniper gap. Dev holds 0%. Most Proof mints end in “pooL” — a provenance signal, not a guarantee.' },
                   { num: '4', title: 'Proportional Distribution', desc: 'Tokens are sent to every backer\'s own wallet, proportional to their backing. Same price for everyone — no slot is favored.' },
                 ].map((step) => (
                   <div key={step.num} className="flex items-start gap-4 p-4 bg-[var(--background)] border-l-4 border-[var(--warning)]">
@@ -179,8 +179,8 @@ export default function DocsPage() {
                   <li>· <strong className="text-[var(--accent-gold)]">Same price for all:</strong> one atomic pool buy — no backer is front-run or favored</li>
                   <li>· <strong className="text-[var(--accent)]">Dev holds 0%:</strong> the creator never holds the bag — nothing to rug</li>
                   <li>· <strong>No sniper gap:</strong> create + buy land in the same transaction</li>
-                  <li>· <strong>Verifiable:</strong> the “…pooL” contract address marks every genuine Proof launch</li>
-                  <li>· <strong>No max per wallet:</strong> back as much as you want (just meet the minimum)</li>
+                  <li>· <strong>Recognizable:</strong> most Proof mints end in “…pooL” — a provenance signal, not proof on its own</li>
+                  <li>· <strong>No platform max:</strong> back as much as you want above the minimum \u2014 though a creator may set their own per-wallet cap, shown on the token page</li>
                 </ul>
               </div>
             </section>
@@ -198,7 +198,7 @@ export default function DocsPage() {
                 The same pooled-launch model runs on <strong>Robinhood Chain</strong> as{' '}
                 <strong>ProofLaunch on Robinhood Chain</strong> — with the promises enforced by <strong>ownerless
                 smart contracts</strong> instead of platform operations: backers keep most of the creator
-                tax and 30% of it burns $PLAUNCH, trustless burn and pool-feeder bots, no custodial wallets anywhere.
+                tax (today\u2019s factory fixes 7% platform + a retired 3% leg; the 30% $PLAUNCH burn is built and ships with the next one), trustless burn and pool-feeder bots, no custodial wallets anywhere.
                 Toggle <strong>SOL | RHC</strong> in the navbar, or read the{' '}
                 <Link href="/rhc/docs" className="text-[var(--accent-gold)] hover:underline font-bold">
                   Robinhood Chain docs →
@@ -371,7 +371,7 @@ export default function DocsPage() {
                 backers. Stack any combination you want, up to a 90% fee-budget cap.
               </p>
               <div className="bg-[var(--background)] border border-[var(--accent)]/40 p-4 text-sm leading-relaxed text-[var(--muted)]">
-                <strong className="text-[var(--accent)]">No other Pump.fun, Meteora, or LaunchLab launcher does this.</strong>{' '}
+                <strong className="text-[var(--accent)]">Most bonding-curve launches give creators no programmable fee layer at all.</strong>{' '}
                 Every bonding-curve trade has always been &quot;buy the curve and hope.&quot; Proof gives
                 creators a real programmable layer — burn, treasury, holder distribution,
                 backer rebate — automated, every block, every trade, auditable forever.
@@ -436,7 +436,7 @@ export default function DocsPage() {
                 you want via a signed message from your creator wallet.
               </p>
               <ul className="text-sm text-[var(--muted)] space-y-1.5 pl-4">
-                <li>· Withdrawals require an Ed25519 signature from the meme&apos;s creator wallet. No platform admin can drain your vault.</li>
+                <li>· Withdrawals require an Ed25519 signature from the token&apos;s creator wallet. No platform admin can drain your vault.</li>
                 <li>· Every withdrawal is recorded in <code className="text-[var(--accent)]">meme_bot_withdrawals</code> — public-read, immutable audit trail.</li>
                 <li>· Single-use nonces + ±5min replay window prevent any replayed withdrawal request.</li>
                 <li>· Operational bots (BURN, distribute_*) are sealed — only VAULT bots can be withdrawn from. This prevents racing the bot mid-cycle.</li>
@@ -630,7 +630,7 @@ export default function DocsPage() {
                   Solana Security Standard Compliance
                 </h3>
                 <p className="text-sm text-[var(--muted)]">
-                  Proof Launch is the first integrator project at 100% compliance with the three
+                  Proof Launch is at 100% compliance with the three
                   integrator-side rules in the Jelleo Solana Security Standard:
                 </p>
                 <ul className="text-sm text-[var(--muted)] space-y-1">
@@ -715,7 +715,7 @@ export default function DocsPage() {
                 { q: 'Can I back multiple times?', a: 'Currently one backing per wallet per token. Withdraw first if you want to change your backing amount.' },
                 { q: 'What\'s the minimum/maximum backing?', a: 'The creator sets a minimum (at least 0.1 SOL). There is NO maximum — back as much as you want! Your token share is proportional to your contribution.' },
                 { q: 'Where does my backed SOL go?', a: 'Into the token\'s transparent on-chain pool wallet (publicly viewable). It can only launch (one atomic create+buy) or refund — it never sits with the creator.' },
-                { q: 'Why does the contract address end in "pooL"?', a: 'Every genuine Proof Launch token\'s contract address ends in “pooL”. It\'s a verifiable on-chain signature that the token was launched fairly through Proof — dev holds 0%, atomic pooled buy, proportional distribution.' },
+                { q: 'Why does the contract address end in "pooL"?', a: 'Most of them do: we mint from a pre-ground pool of “pooL” addresses so a Proof launch is recognizable at a glance. It is a provenance signal, not a guarantee — if the vanity pool runs empty a launch still goes out on a standard mint, and Bags launches always use one. Verify any token on its Proof page, not by its address alone.' },
                 { q: 'How is this rug-resistant?', a: 'The creator never holds the supply (dev = 0%). The pool buys atomically with token creation — no sniper gap — and tokens go straight to backers. There is no concentrated dev bag to dump.' },
               ].map((faq, i) => (
                 <div key={i} className="bg-[var(--background)] border-2 border-[var(--border)] p-4 hover:border-[var(--accent)] transition-colors">

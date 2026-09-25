@@ -1,4 +1,4 @@
-# $PROOF launch + v8 runbook
+# $PLAUNCH launch + v8 runbook
 
 Everything up to step 1 is already on prod and dark behind env flags.
 The order is forced by immutables: the burner needs the token's campaign,
@@ -18,10 +18,10 @@ preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 ## Rehearsed 2026-09-22
 
 - `test/ForkV8Lifecycle.t.sol`: the whole day against live pons on a mainnet
-  fork — $PROOF on the live v7, burner, v8 factory, a v8 campaign with a
+  fork — $PLAUNCH on the live v7, burner, v8 factory, a v8 campaign with a
   locked seat, real trades, sweep, harvest at 30/10, a seller's forfeit,
   the 1.5× lock weight, claim-as-SPCX through the live router, pull, crank,
-  $PROOF at 0x…dEaD, lock released on schedule. PASS.
+  $PLAUNCH at 0x…dEaD, lock released on schedule. PASS.
 - `deploy-v8.sh` executed for real against an anvil fork (RWA TEST as the
   stand-in campaign, impersonated deployer): both scripts ran, the burner
   address fed forward, the factory read the token from the burner,
@@ -89,7 +89,7 @@ Step 1 below is kept as the record of how it was done.
    launcher reads as: dev holds 0, dev never sold. The founder's known
    wallet takes its seat as a backer in step 4.
 2. Preset **Burn Heavy** (coin burn 30%). On v7 that BURN leg buys and
-   burns $PROOF itself from the first trade — the flywheel starts before
+   burns $PLAUNCH itself from the first trade — the flywheel starts before
    v8 exists. (Fixed legs on v7 are 7% platform + 3% holder-rewards → the
    two founder wallets; that is documented on the audit page.)
 3. FEE PAYOUT: SpaceX. Tax: 3%. RAISE STYLE: seats, 20 × 0.05 ETH,
@@ -114,15 +114,15 @@ Step 1 below is kept as the record of how it was done.
 cd contracts/rhc && bash deploy-v8.sh "--keystore ~/.rhc-deployer/<keystore file>"
 ```
 Deploys ProofBurner against `PROOF_CAMPAIGN`, feeds its address into the
-factory deploy (the factory also reads the $PROOF token from the burner
+factory deploy (the factory also reads the $PLAUNCH token from the burner
 for the hold-to-launch-free hook; `FEE_WAIVER_THRESHOLD` env, 0 = dormant),
 and writes `v8.addresses.json`. The burner constructor reverts
-`NotLaunched` if $PROOF hasn't launched — it cannot be run early.
+`NotLaunched` if $PLAUNCH hasn't launched — it cannot be run early.
 
 ## 4. Verify (Sourcify; Blockscout imports it)
 
 Add to `verify.sh`: ProofBurner, CampaignFactoryV6, CampaignDeployerV4,
-SplitterDeployerV4, the $PROOF CampaignV3 + FeeSplitterV3 instances. Run
+SplitterDeployerV4, the $PLAUNCH CampaignV3 + FeeSplitterV3 instances. Run
 `bash verify.sh`. All must be `exact_match`. Then update `DEPLOYMENTS.md`.
 
 ## 5. Flip the UI — one command
@@ -131,14 +131,14 @@ SplitterDeployerV4, the $PROOF CampaignV3 + FeeSplitterV3 instances. Run
 node tools/flip-v8.mjs          # add --check to only verify
 ```
 Reads `v8.addresses.json`, verifies every address against the chain
-(factory → burner → $PROOF token, bps, satellite; refuses on any mismatch),
+(factory → burner → $PLAUNCH token, bps, satellite; refuses on any mismatch),
 sets the three Vercel production env values, and runs the prod deploy with
-them. The $PROOF CA is never typed by hand: the UI reads it from the burner.
+them. The $PLAUNCH CA is never typed by hand: the UI reads it from the burner.
 What lights up, all probe-gated today:
 - board: the FLYWHEEL panel (burned / spent / collected / next up, crank button)
 - create page: targets v8; budget bar shows PROOF burn 30 / platform 10
 - campaign pages: lock picker with ×1.25 / ×1.5, roster lock tags, hold-aware
-  fee card, "forfeits burn $PROOF", flywheel panel in the rail on v8 splitters
+  fee card, "forfeits burn $PLAUNCH", flywheel panel in the rail on v8 splitters
 - audit page: v8 + burner rows
 
 Smoke: create a tiny v8 campaign, take a locked seat, launch, trade once,
@@ -147,9 +147,9 @@ counters moving. That screenshot is the post.
 
 ## 6. After
 
-- $PROOF's own campaign is v7, so its splitter has the old 7/3 legs (both
+- $PLAUNCH's own campaign is v7, so its splitter has the old 7/3 legs (both
   founder wallets) instead of 30/10. It is the one campaign that predates
-  the flywheel; its 30% coin-burn leg burns $PROOF anyway. Disclosed on the
+  the flywheel; its 30% coin-burn leg burns $PLAUNCH anyway. Disclosed on the
   audit page.
 - GitHub support purge of the orphaned commit (from the 09-21 comb).
 - External review of ProofBurner — the brief already has the questions.
