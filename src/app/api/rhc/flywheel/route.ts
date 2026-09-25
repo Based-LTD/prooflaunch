@@ -31,8 +31,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
   return out;
 }
 
-export interface FlywheelBurn { tx: `0x${string}`; from: `0x${string}` | null; ethIn: string; tokens: string; ts: number | null; viaCurve: boolean }
-  source?: 'flywheel' | 'coinLeg';                                  // which burner emitted it
+export interface FlywheelBurn { tx: `0x${string; source?: 'flywheel' | 'coinLeg' }`; from: `0x${string}` | null; ethIn: string; tokens: string; ts: number | null; viaCurve: boolean }
 export interface FlywheelFeed {
   live: boolean;
   burner?: `0x${string}`; token?: `0x${string}`;
