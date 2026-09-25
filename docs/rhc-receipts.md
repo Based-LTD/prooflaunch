@@ -284,6 +284,20 @@ launch's tax rather than a seed.
 
 ---
 
+**~22:10 UTC — the campaign's own coin-burn leg.** $PLAUNCH's v7 splitter
+had already harvested 0.242293 ETH of creator tax (≈8 ETH of volume at
+3%): backers 0.145376, coin-burn leg 0.072688, platform 0.016960, retired
+0.007269. The coin-burn leg (`BurnLegV3`
+`0xc7366c28cD1Cdbf37796f619b644E793ABd8C08A`) had never been cranked.
+Crank (`0x94341c693b50503da08bab8ae7091e15b92d441bc236b33eec43c85a49fb46ff`,
+from the deployer, permissionless): 0.072688 ETH → **6,813,925 $PLAUNCH
+burned (0.6814% of supply)**. Total at 0x…dEaD after all three burns:
+**7,831,173 $PLAUNCH, 0.7831% of supply**. The flywheel page's "dead"
+counter includes it; its "burned by flywheel" counter (1,017,248) counts
+only the ProofBurner, which is the v8 flywheel proper.
+
+---
+
 ## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;
