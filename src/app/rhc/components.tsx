@@ -54,8 +54,20 @@ export function ConnectButton() {
     // wrong one and looked like a dead button (founder, 2026-09-20, mid
     // test). Offer the discovered wallets by name; fall back to injected
     // only when nothing announced itself. And always SHOW the error.
+    // Phantom's EVM side ships a fixed chain list and has no way to add a
+    // custom network, so it can announce itself, connect, and then fail on
+    // every signature — which is exactly what a backer hit on 2026-09-25.
+    // Say so in the menu instead of letting it look like our bug.
+    const unsupported = (c: { id: string; name: string }) =>
+      /phantom/i.test(c.id) || /phantom/i.test(c.name);
     const named = connectors.filter((c) => c.id !== 'injected');
-    const choices = named.length > 0 ? named : connectors;
+    const choices = (named.length > 0 ? named : connectors)
+      .slice()
+      .sort((a, b) => Number(unsupported(a)) - Number(unsupported(b)));
+    // Never auto-connect, even to a lone wallet: with one extension
+    // installed the button used to fire straight into it, which reads as
+    // the site choosing a wallet for you.
+    const mustPick = choices.length > 0;
     const stale = (e: unknown) => {
       const m = e instanceof Error ? `${e.name} ${e.message}` : String(e);
       return /AlreadyConnected|already connected/i.test(m);
@@ -90,10 +102,10 @@ export function ConnectButton() {
     return (
       <div className="relative">
         <button
-          onClick={() => (choices.length > 1 ? setPick((v) => !v) : choices[0] ? go(choices[0]) : undefined)}
+          onClick={() => (mustPick ? setPick((v) => !v) : undefined)}
           disabled={isPending || choices.length === 0}
-          aria-haspopup={choices.length > 1 ? 'menu' : undefined}
-          aria-expanded={choices.length > 1 ? pick : undefined}
+          aria-haspopup={mustPick ? 'menu' : undefined}
+          aria-expanded={mustPick ? pick : undefined}
           title={choices.length === 0 ? 'No wallet extension detected in this browser' : undefined}
           // Compact on phones: at 390px the full-width button pushed the
           // hamburger off-screen and stretched the document sideways.
@@ -102,27 +114,38 @@ export function ConnectButton() {
           {label ?? (
             <>
               <span className="sm:hidden">Connect</span>
-              <span className="hidden sm:inline">Connect Wallet{choices.length > 1 ? ' ▾' : ''}</span>
+              <span className="hidden sm:inline">Connect Wallet{mustPick ? ' \u25be' : ''}</span>
             </>
           )}
         </button>
 
-        {pick && choices.length > 1 && (
-          <div role="menu" className="absolute right-0 top-full mt-1 min-w-[12rem] border border-[var(--border)] bg-[var(--background)] shadow-lg z-50">
+        {pick && mustPick && (
+          <div role="menu" className="absolute right-0 top-full mt-1 min-w-[15rem] border border-[var(--border)] bg-[var(--background)] shadow-lg z-50">
             {choices.map((c) => (
               <button
                 key={c.uid}
                 role="menuitem"
                 onClick={() => go(c)}
-                className="flex items-center gap-2 w-full px-3 py-2 text-left text-xs font-mono text-[var(--foreground)] hover:bg-[var(--card)] transition-colors"
+                className="flex items-start gap-2 w-full px-3 py-2 text-left text-xs font-mono text-[var(--foreground)] hover:bg-[var(--card)] transition-colors"
               >
                 {c.icon && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.icon} alt="" className="w-4 h-4" />
+                  <img src={c.icon} alt="" className="w-4 h-4 mt-0.5 shrink-0" />
                 )}
-                {c.name}
+                <span className="min-w-0">
+                  {c.name}
+                  {unsupported(c) && (
+                    <span className="block text-[9px] uppercase tracking-widest text-[var(--warning,#c9a227)] leading-tight mt-0.5">
+                      cannot add Robinhood Chain
+                    </span>
+                  )}
+                </span>
               </button>
             ))}
+            <div className="border-t border-[var(--border)] px-3 py-2 text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)] leading-relaxed">
+              Robinhood Wallet is a phone app. Pick WalletConnect and scan, or
+              use a desktop wallet that allows custom networks.
+            </div>
           </div>
         )}
 
