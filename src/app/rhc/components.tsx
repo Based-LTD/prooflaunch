@@ -159,7 +159,14 @@ export function ConnectButton() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={c.icon} alt="" className="w-4 h-4 mt-0.5 shrink-0" />
                 )}
-                <span className="min-w-0">{c.name}</span>
+                <span className="min-w-0">
+                  {c.name}
+                  {c.id === 'walletConnect' && (
+                    <span className="block text-[9px] uppercase tracking-widest text-[var(--muted-soft)] leading-tight mt-0.5">
+                      scan with Robinhood Wallet or any phone wallet
+                    </span>
+                  )}
+                </span>
               </button>
             ))}
             <div className="border-t border-[var(--border)] px-3 py-2 text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)] leading-relaxed">
