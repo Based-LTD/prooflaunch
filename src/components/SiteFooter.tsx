@@ -37,7 +37,7 @@ export function SiteFooter() {
           Proof Launch is an experimental, community-driven protocol. Nothing here is
           investment advice, a securities offering, or a solicitation. Tokens and
           on-chain activity carry substantial risk including total loss; you should
-          have no expectation of profit from holding $PROOF, backing a launch, or
+          have no expectation of profit from holding any platform token, backing a launch, or
           participating in any program. Distributions are discretionary and may
           change or end at any time. You are responsible for compliance with the
           laws of your jurisdiction.{' '}
