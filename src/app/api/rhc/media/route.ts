@@ -12,7 +12,9 @@ import { rhcPublicClient, campaignAbi } from '@/lib/rhc';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const MAX_SIG_AGE_MS = 5 * 60 * 1000;
+// 15 min: the creator signs BEFORE the create tx, so this has to cover
+// grinding + wallet confirmation + block inclusion, not just a click.
+const MAX_SIG_AGE_MS = 15 * 60 * 1000;
 const BANNER_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/token-assets/banners/`;
 
 function tableMissing(e: { code?: string; message?: string } | null): boolean {

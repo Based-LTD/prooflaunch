@@ -183,12 +183,18 @@ export default function CreateCampaignPage() {
   const { signMessageAsync } = useSignMessage();
   // Banner + GitHub live off-chain (pons' meta has neither); one signature
   // binds both to the new campaign right after it exists.
+  // Signature taken before the create tx, keyed to the predicted address.
+  const preSigRef = useRef<{ campaign: string; message: string; signature: `0x${string}` } | null>(null);
   const bindBanner = async (campaign: string) => {
     const gh = f.github.trim();
     if ((!bannerUrlRef.current && !gh) || !address) return;
     setBannerState('signing');
-    try { await attachBanner(campaign as `0x${string}`, address, bannerUrlRef.current, signMessageAsync, gh ? { github: gh } : {}); setBannerState('done'); }
-    catch { setBannerState('failed'); }
+    const pre = preSigRef.current;
+    const usable = pre && pre.campaign === campaign.toLowerCase() ? pre : undefined;
+    try {
+      await attachBanner(campaign as `0x${string}`, address, bannerUrlRef.current, signMessageAsync, gh ? { github: gh } : {}, usable);
+      setBannerState('done');
+    } catch { setBannerState('failed'); }
   };
 
   const activeStack = botsEnabled ? stack : [];
@@ -317,6 +323,7 @@ export default function CreateCampaignPage() {
       // local keccak loop. Missing it is cosmetic — if anything here
       // fails we still create at a perfectly good address.
       let salt = ('0x' + Math.floor(Math.random() * 1e15).toString(16).padStart(64, '0')) as `0x${string}`;
+      let predicted: string | null = null;
       try {
         setGrinding(true);
         const [deployerAddr, legDeployerAddr] = await Promise.all([
@@ -333,9 +340,28 @@ export default function CreateCampaignPage() {
         });
         const g = grindVanitySalt({ deployer: deployerAddr, initCodeHash });
         salt = g.salt;
+        predicted = g.address;
         if (g.found) setVanity({ address: g.address, attempts: g.attempts, ms: g.ms });
       } catch { /* no signature this time; the raise is unaffected */ }
       setGrinding(false);
+
+      // Banner and GitHub live off-chain, so the server needs proof it is
+      // talking to the creator. CREATE2 means we already know the campaign
+      // address, so take that signature HERE — before the tx, while the
+      // creator is still in approve-things mode — and abort the whole
+      // launch if it is declined. A prompt after the tx got missed three
+      // times running and each miss cost a cancelled campaign.
+      preSigRef.current = null;
+      if ((bannerUrlRef.current || L.github.trim()) && predicted && address) {
+        try {
+          const message = `rhc-banner:${predicted.toLowerCase()}:${address.toLowerCase()}:${Date.now()}`;
+          const signature = await signMessageAsync({ message });
+          preSigRef.current = { campaign: predicted.toLowerCase(), message, signature };
+        } catch {
+          setBannerError('Signature declined — nothing was created. Submit again and approve both prompts, or clear the banner and GitHub fields first.');
+          return;
+        }
+      }
 
       // ERC20-quoted raises escrow the pons launch fee (native ETH) at
       // creation; it comes back via refundLaunchFee if the raise dies.
@@ -420,6 +446,7 @@ export default function CreateCampaignPage() {
   }
 
   const payoutName = payoutIdx === 0 ? 'ETH (backers may still pick a stock at claim)' : `${EQUITY_ASSETS[payoutIdx - 1].symbol} · ${EQUITY_ASSETS[payoutIdx - 1].label} (ETH always available)`;
+  const burnPct = Number(activeStack.find((x) => x.kind === 'burn')?.pct ?? '') || 0;
   const presetName = (() => { const b = activeStack.find((x) => x.kind === 'burn')?.pct ?? ''; const hit = STACK_PRESETS.find((ps) => ps.burn === b); return hit ? hit.label : 'Custom'; })();
   const reviewRows: [string, string, boolean?][] = [
     ['name / symbol', `${f.name.trim()} · $${f.symbol.trim().toUpperCase()}`],
@@ -430,7 +457,8 @@ export default function CreateCampaignPage() {
     ['raise', raiseStyle === 'seats' ? `${seatCount} seats × ${seatPrice} ${unitSym} = ${effGoalEth} ${unitSym}${reservedN ? ` · ${reservedN} team seats → ${allowlist.map((w) => `${w.slice(0, 6)}…${w.slice(-4)}`).join(', ') || 'NONE NAMED'}, ${seatCount - reservedN} public` : ''}` : `open · goal ${f.goal} ${unitSym} · min ${f.min} · max ${f.max === '0' ? 'none' : f.max}`],
     ['creator tax', `${taxPct}% · traders pay ${(Number(taxPct) + 1).toFixed(Number(taxPct) % 1 ? 1 : 0)}% with pons' 1%`],
     ['fee payout', payoutName],
-    ['fee stack', `${presetName} · bots ${botsPct}% · backers ${backerPct}% · fixed legs ${FIXED_LEGS_PCT.total}%`],
+    ['coin burn', `${burnPct}% of the fee stream buys and burns $${f.symbol.trim().toUpperCase() || 'YOUR TOKEN'}${presetName === 'Custom' ? '' : ` — the ${presetName} preset`}`, burnPct === 0],
+    ['rest of stack', `${botsPct - burnPct}% other bots · ${backerPct}% backers · ${FIXED_LEGS_PCT.total}% fixed (${FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn}% $PROOF burn + ${FIXED_LEGS_PCT.platform}% platform` : `${FIXED_LEGS_PCT.platform}% platform + ${FIXED_LEGS_PCT.rewards}% retired`})`],
     ['deadline', `${f.days} days`],
   ];
 
@@ -1199,7 +1227,11 @@ export default function CreateCampaignPage() {
                     Pick a preset. Tune it under Advanced if you care.
                   </div>
                   <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
-                    Two legs are fixed and never move: <span className="text-[var(--accent-gold)]">{FIXED_LEGS_PCT.burn}% buys and burns $PROOF</span>, {FIXED_LEGS_PCT.platform}% platform.
+                    {FIXED_LEGS_PCT.burn > 0 ? (
+                      <>Two legs are fixed and never move: <span className="text-[var(--accent-gold)]">{FIXED_LEGS_PCT.burn}% buys and burns $PROOF</span>, {FIXED_LEGS_PCT.platform}% platform. </>
+                    ) : (
+                      <>{FIXED_LEGS_PCT.total}% is fixed and never moves: {FIXED_LEGS_PCT.platform}% platform, {FIXED_LEGS_PCT.rewards}% retired holder-rewards. </>
+                    )}
                     The other {100 - FIXED_LEGS_PCT.total}% is yours to split between backers and ownerless bots — burn, locked liquidity, named vaults —
                     immutable from creation, pull-based forever. Anyone can crank the bots; nobody can stop or change them.
                   </p>
@@ -1221,9 +1253,13 @@ export default function CreateCampaignPage() {
                         <span className="text-[var(--muted)]">/</span>
                         <span className="text-[var(--foreground)]">Backers {backerPct}%</span>
                         <span className="text-[var(--muted)]">/</span>
-                        <span className="text-[var(--accent-gold)]">$PROOF burn {FIXED_LEGS_PCT.burn}%</span>
-                        <span className="text-[var(--muted)]">/</span>
-                        <span className="text-[var(--muted)]">Platform {FIXED_LEGS_PCT.platform}%</span>
+                        {FIXED_LEGS_PCT.burn > 0 && (
+                          <>
+                            <span className="text-[var(--accent-gold)]">$PROOF burn {FIXED_LEGS_PCT.burn}%</span>
+                            <span className="text-[var(--muted)]">/</span>
+                          </>
+                        )}
+                        <span className="text-[var(--muted)]">Fixed {FIXED_LEGS_PCT.total}%</span>
                       </div>
                       <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : botsPct >= budget ? 'text-red-400' : 'text-[var(--success)]'}`}>
                         {overBudget ? `over by ${botsPct - budget}% — bots can take at most ${budget}%` : botsPct >= budget ? 'backers get nothing — lower a bot' : `backers keep ${backerPct}%`}
@@ -1232,8 +1268,8 @@ export default function CreateCampaignPage() {
                     <div className="flex h-1.5 mt-1.5 border border-[var(--border)] overflow-hidden">
                       <div className="bg-[var(--accent)]" style={{ width: `${Math.min(botsPct, budget)}%` }} title={`Bots ${botsPct}%`} />
                       <div className="bg-[var(--success)]/70" style={{ width: `${backerPct}%` }} title={`Backers ${backerPct}%`} />
-                      <div className="bg-[var(--accent-gold)]/80" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} title={`$PROOF burn ${FIXED_LEGS_PCT.burn}%`} />
-                      <div className="bg-[var(--muted)]/60" style={{ width: `${FIXED_LEGS_PCT.platform}%` }} title={`Platform ${FIXED_LEGS_PCT.platform}%`} />
+                      {FIXED_LEGS_PCT.burn > 0 && <div className="bg-[var(--accent-gold)]/80" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} title={`$PROOF burn ${FIXED_LEGS_PCT.burn}%`} />}
+                      <div className="bg-[var(--muted)]/60" style={{ width: `${FIXED_LEGS_PCT.total - FIXED_LEGS_PCT.burn}%` }} title={`Fixed ${FIXED_LEGS_PCT.total - FIXED_LEGS_PCT.burn}%`} />
                     </div>
                   </div>
 
@@ -1547,8 +1583,8 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
           <div className="flex h-2 border border-[var(--border)] overflow-hidden">
             <div className="bg-[var(--accent)]" style={{ width: `${Math.min(botTotal, 100 - FIXED_LEGS_PCT.total)}%` }} />
             <div className="bg-[var(--success)]/70" style={{ width: `${backerPct}%` }} />
-            <div className="bg-[var(--accent-gold)]/80" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} />
-            <div className="bg-[var(--muted)]/60" style={{ width: `${FIXED_LEGS_PCT.platform}%` }} />
+            {FIXED_LEGS_PCT.burn > 0 && <div className="bg-[var(--accent-gold)]/80" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} />}
+            <div className="bg-[var(--muted)]/60" style={{ width: `${FIXED_LEGS_PCT.total - FIXED_LEGS_PCT.burn}%` }} />
           </div>
           <div className="grid grid-cols-3 gap-1 text-[9px] font-mono uppercase tracking-widest text-center">
             <div>
@@ -1560,8 +1596,8 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
               <div className="text-[var(--foreground)]">{backerPct}%</div>
             </div>
             <div>
-              <div className="text-[var(--muted)]">$PROOF burn + Platform</div>
-              <div className="text-[var(--foreground)]">{FIXED_LEGS_PCT.burn} + {FIXED_LEGS_PCT.platform}%</div>
+              <div className="text-[var(--muted)]">{FIXED_LEGS_PCT.burn > 0 ? '$PROOF burn + Platform' : 'Platform + retired'}</div>
+              <div className="text-[var(--foreground)]">{FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn} + ${FIXED_LEGS_PCT.platform}` : `${FIXED_LEGS_PCT.platform} + ${FIXED_LEGS_PCT.rewards}`}%</div>
             </div>
           </div>
         </div>

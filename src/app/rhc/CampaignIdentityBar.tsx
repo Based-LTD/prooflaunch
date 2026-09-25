@@ -6,6 +6,7 @@
 import { type ReactNode, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { explorerUrl } from '@/lib/rhc';
+import { SocialRow } from '@/components/SocialIcons';
 
 interface Socials { twitter?: string; telegram?: string; discord?: string; website?: string; farcaster?: string; github?: string }
 
@@ -18,9 +19,6 @@ export function CampaignIdentityBar({ logo, name, symbol, creator, status, metri
 }) {
   const [copied, setCopied] = useState(false);
   const copy = (t: string) => { try { void navigator.clipboard.writeText(t); } catch { /* no clipboard */ } setCopied(true); setTimeout(() => setCopied(false), 1500); };
-  const pills: [string, string | undefined][] = [
-    ['X', socials?.twitter], ['TG', socials?.telegram], ['DC', socials?.discord], ['WEB', socials?.website], ['FC', socials?.farcaster], ['GH', socials?.github],
-  ];
   return (
     <div className="border border-[var(--border)] bg-[var(--card)] p-3">
       <div className="flex items-center gap-3 min-w-0">
@@ -61,15 +59,9 @@ export function CampaignIdentityBar({ logo, name, symbol, creator, status, metri
             </div>
           ))}
         </div>
-        <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
-          {pills.filter(([, h]) => !!h).map(([l, h]) => (
-            <a key={l} href={h} target="_blank" rel="noopener noreferrer" title={l}
-              className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)] transition-colors px-1.5 py-1 border border-[var(--border)] hover:border-[var(--accent)]">
-              {l}
-            </a>
-          ))}
-        </div>
+        {socials && <SocialRow links={socials} className="hidden sm:flex flex-shrink-0" />}
       </div>
+      {socials && <SocialRow links={socials} className="sm:hidden mt-2" />}
       {/* Metrics re-surface on small screens, under the strip. */}
       <div className="md:hidden mt-2 grid grid-cols-3 gap-2">
         {metrics.map((m) => (

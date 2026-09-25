@@ -90,9 +90,13 @@ export async function attachBanner(
   campaign: `0x${string}`, wallet: `0x${string}`, bannerUrl: string | null,
   signMessageAsync: (a: { message: string }) => Promise<`0x${string}`>,
   extra: Partial<Omit<CampaignMedia, 'banner_url'>> = {},
+  // A signature taken BEFORE the create tx (the campaign address is known
+  // ahead of time — CREATE2). Saves a second prompt at the moment attention
+  // is lowest, which is where three launches in a row lost their banner.
+  prepared?: { message: string; signature: `0x${string}` },
 ): Promise<void> {
-  const message = `rhc-banner:${campaign.toLowerCase()}:${wallet.toLowerCase()}:${Date.now()}`;
-  const signature = await signMessageAsync({ message });
+  const message = prepared ? prepared.message : `rhc-banner:${campaign.toLowerCase()}:${wallet.toLowerCase()}:${Date.now()}`;
+  const signature = prepared ? prepared.signature : await signMessageAsync({ message });
   const r = await fetch('/api/rhc/media', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ campaign, wallet, banner_url: bannerUrl, ...extra, auth_message: message, auth_signature: signature }),
