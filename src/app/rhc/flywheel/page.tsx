@@ -46,8 +46,9 @@ export default function FlywheelPage() {
   let cum = 0;
   const cumulative = (f?.daily ?? []).map((d) => { cum += n(d.tokens); return { x: 0, y: cum, label: day(d.day), sub: `${d.count} burn${d.count === 1 ? '' : 's'}` }; });
   const perDay = (f?.daily ?? []).map((d) => ({ x: 0, y: n(d.eth), label: day(d.day), sub: `${tok(n(d.tokens))} $PLAUNCH` }));
-  const sources = [{ label: 'campaign fee legs + forfeits', value: pulled, color: SERIES }, { label: 'creation fees', value: fees, color: SERIES_2 }, ...(direct > 0 ? [{ label: 'sent directly (seeds, forwarded legs)', value: direct, color: 'var(--muted)' }] : [])];
-  const srcTotal = Math.max(1e-12, pulled + fees);
+  const sources = [{ label: 'campaign fee legs + forfeits', value: pulled, color: SERIES }, { label: 'creation fees', value: fees, color: SERIES_2 }, ...(direct > 0 ? [{ label: 'sent directly', value: direct, color: 'var(--muted)' }] : [])];
+  // Every source, or the percentages don't sum to 100 (a backer caught 890%).
+  const srcTotal = Math.max(1e-12, pulled + fees + direct);
   const myCranks = me && f?.crankers ? (f.crankers.find((c) => c.wallet.toLowerCase() === me.toLowerCase())?.cranks ?? 0) : 0;
 
   const live = PROOF_BURNER_LIVE && !!f;
@@ -134,13 +135,17 @@ export default function FlywheelPage() {
               <div className="flex h-3 gap-[2px] overflow-hidden">
                 {sources.map((s) => <div key={s.label} style={{ width: `${(s.value / srcTotal) * 100}%`, background: s.color }} title={s.label} />)}
               </div>
-              {sources.map((s) => (
-                <div key={s.label} className="flex items-center justify-between text-[10px] font-mono">
-                  <span className="flex items-center gap-2"><span className="inline-block w-2.5 h-2.5" style={{ background: s.color }} /><span className="text-[var(--foreground)]">{s.label}</span></span>
-                  <span className="text-[var(--muted)] tabular-nums">{s.value.toFixed(4)} ETH · {((s.value / srcTotal) * 100).toFixed(0)}%</span>
-                </div>
-              ))}
-              <p className="text-[10px] font-mono text-[var(--muted-soft)]">Forfeits arrive through the same leg as the fixed 30%, so they are counted together.</p>
+              {/* Fixed columns so the numbers line up and never wrap. */}
+              <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1 text-[10px] font-mono">
+                {sources.map((s) => (
+                  <div key={s.label} className="contents">
+                    <span className="flex items-center gap-2 min-w-0"><span className="inline-block w-2.5 h-2.5 shrink-0" style={{ background: s.color }} /><span className="text-[var(--foreground)] truncate">{s.label}</span></span>
+                    <span className="text-[var(--muted)] tabular-nums text-right whitespace-nowrap">{s.value.toFixed(4)} ETH</span>
+                    <span className="text-[var(--muted)] tabular-nums text-right whitespace-nowrap w-10">{((s.value / srcTotal) * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] font-mono text-[var(--muted-soft)]">Forfeits arrive through the same leg as the fixed 30%, so they are counted together. \u201cSent directly\u201d is ETH anyone transferred to the burner: launch-day seeds, forwarded legs.</p>
             </div>
           ) : <div className="h-24 flex items-center justify-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">—</div>}
         </DashboardCard>
