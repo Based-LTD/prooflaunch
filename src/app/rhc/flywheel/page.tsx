@@ -93,8 +93,8 @@ export default function FlywheelPage() {
         </div>
         <div className="px-4 sm:px-6 pb-4 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-mono text-[var(--muted)] max-w-2xl leading-relaxed">
-            Every launch on this site carries a fixed <span className="text-[var(--accent-gold)]">30% $PLAUNCH burn leg</span> on its creator tax. Every creation fee and every share a seller forfeits burns too.
-            An ownerless contract does the buying: pons curve before graduation, Uniswap v4 after, 0.2 ETH per crank, one crank per block. Anyone can crank it; nobody can stop it or point it anywhere else.
+            {live ? 'Every launch on this site carries' : 'From the flywheel factory onward, every launch on this site will carry'} a fixed <span className="text-[var(--accent-gold)]">30% $PLAUNCH burn leg</span> on its creator tax. Every creation fee and every share a seller forfeits burns too.
+            {live ? 'An ownerless contract does the buying:' : 'An ownerless contract will do the buying:'} pons curve before graduation, Uniswap v4 after, 0.2 ETH per crank, one crank per block. Anyone can crank it; nobody can stop it or point it anywhere else.
           </p>
           {live && isConnected && pendingWei > 0n && (
             <button onClick={() => writeContract({ address: PROOF_BURNER, abi: proofBurnerAbi, functionName: 'crank', chainId: robinhoodChain.id })} disabled={isPending}
@@ -177,7 +177,7 @@ export default function FlywheelPage() {
       </div>
 
       <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
-        Every number on this page is read from the chain. Burner counters, the dead address balance, and the burner&apos;s own events. <Link href="/rhc/audit" className="underline hover:text-[var(--muted)]">Audit →</Link>
+        {live ? 'Every number on this page is read from the chain.' : 'Once the burner is live, every number on this page is read from the chain.'} Burner counters, the dead address balance, and the burner&apos;s own events. <Link href="/rhc/audit" className="underline hover:text-[var(--muted)]">Audit →</Link>
       </p>
     </div>
   );
