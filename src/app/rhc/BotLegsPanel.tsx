@@ -19,12 +19,12 @@ const legAbi = [
   { type: 'function', name: 'crank', stateMutability: 'nonpayable', inputs: [], outputs: [] },
 ] as const;
 
-type Kind = 'burn' | 'feeder' | 'proofburn' | 'platform' | 'vault';
+type Kind = 'burn' | 'feeder' | 'proofburn' | 'platform' | 'vault' | 'creator';
 interface Leg { addr: `0x${string}`; bps: number; kind: Kind; owed: bigint; ethSpent?: bigint; burned?: bigint; adds?: bigint; deployed?: bigint; ethBal: bigint }
 
-const LABEL: Record<Kind, string> = { burn: '🔥 BURN', feeder: '🌊 POOL FEEDER', proofburn: '🔥 $PLAUNCH BURN', platform: 'PLATFORM', vault: '🏦 VAULT' };
+const LABEL: Record<Kind, string> = { burn: '🔥 BURN', feeder: '🌊 POOL FEEDER', proofburn: '🔥 $PLAUNCH BURN', platform: 'PLATFORM', vault: '🏦 VAULT', creator: '👤 CREATOR FEE' };
 
-export function BotLegsPanel({ splitter, feeAsset, symbol, launched, refreshKey }: { splitter: `0x${string}`; feeAsset: `0x${string}`; symbol: string; launched: boolean; refreshKey: string }) {
+export function BotLegsPanel({ splitter, feeAsset, symbol, launched, refreshKey, creator }: { splitter: `0x${string}`; feeAsset: `0x${string}`; symbol: string; launched: boolean; refreshKey: string; creator?: `0x${string}` }) {
   const [legs, setLegs] = useState<Leg[] | null>(null);
   const { isConnected } = useAccount();
   const { writeContract, isPending } = useWriteContract();
@@ -62,15 +62,19 @@ export function BotLegsPanel({ splitter, feeAsset, symbol, launched, refreshKey 
         const out: Leg[] = addrs.map((l, i) => {
           const owed = pick(i, 0) ?? 0n, ethSpent = pick(i, 1), burned = pick(i, 2), adds = pick(i, 3), deployed = pick(i, 4);
           const low = l.addr.toLowerCase();
+          // A plain wallet leg paid to the campaign's own creator is a
+          // creator fee, whoever set it and whatever they called it. Naming
+          // it beats letting it sit among the anonymous treasury addresses.
           const kind: Kind = PROOF_BURNER_LIVE && low === PROOF_BURNER.toLowerCase() ? 'proofburn'
-            : adds !== undefined ? 'feeder' : burned !== undefined ? 'burn' : PLATFORM_LEGS.has(low) ? 'platform' : 'vault';
+            : adds !== undefined ? 'feeder' : burned !== undefined ? 'burn' : PLATFORM_LEGS.has(low) ? 'platform'
+            : creator && low === creator.toLowerCase() ? 'creator' : 'vault';
           return { addr: l.addr, bps: l.bps, kind, owed, ethSpent, burned, adds, deployed, ethBal: bals[i] };
         });
         if (live) setLegs(out);
       } catch { if (live) setLegs([]); }
     })();
     return () => { live = false; };
-  }, [splitter, feeAsset, refreshKey]);
+  }, [splitter, feeAsset, refreshKey, creator]);
 
   const bots = (legs ?? []).filter((l) => l.kind !== 'platform');
   if (!legs || bots.length === 0) return null;

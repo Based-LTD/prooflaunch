@@ -47,7 +47,12 @@ const labelClass =
 // burn / feed_lp run as ownerless contracts (trustless — first on RHC);
 // vault legs are named wallets; the holder airdrop is a vault leg
 // pointed at the platform operator (platform-run, honestly labeled).
-type BotKind = 'burn' | 'feed_lp' | 'vault' | 'airdrop';
+type BotKind = 'burn' | 'feed_lp' | 'vault' | 'airdrop' | 'creator';
+// A creator fee is already possible today as a VAULT leg pointed at your
+// own wallet — which renders as an anonymous treasury address. Making it
+// a named leg is a transparency change, not a new capability: backers see
+// CREATOR and a percentage instead of a wallet they have to go look up.
+const CREATOR_MAX_PCT = 20;
 interface BotItem { kind: BotKind; pct: string; addr?: string }
 
 // The full stack on pons V2: the trustless Burn and Pool Feeder run as
@@ -60,10 +65,11 @@ const BOT_ACTIONS: { kind: BotKind; label: string; tag: string; emoji: string; d
   { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'Liquidity · Trustless',    emoji: '🌊', desc: 'Ownerless contract mints full-range liquidity on the graduated v4 pool and compounds the position\'s own trading fees. It has NO withdraw function — protocol-owned liquidity locked by construction, not by promise.' },
   { kind: 'vault',   label: 'VAULT',          tag: 'Treasury',                 emoji: '🏦', desc: 'A wallet you name (marketing / DAO / treasury) becomes a fee leg and pulls its share anytime. Address locked at creation — can never be changed.' },
   { kind: 'airdrop', label: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run',   emoji: '📸', desc: 'ProofLaunch snapshots your token\'s holders and airdrops this leg\'s fees pro-rata — the same machinery as our Solana launches. Platform-operated and labeled so; 🔥 BURN is the trustless holder reward.' },
+  { kind: 'creator', label: 'CREATOR FEE',    tag: `Your wallet · max ${CREATOR_MAX_PCT}%`, emoji: '👤', desc: 'Pay yourself a fixed share of the fee stream, locked at creation and pointed at your connected wallet. It comes straight out of what backers keep, and your campaign page shows it as CREATOR with the percentage, so everyone funding you sees the trade before they do.' },
 ];
-const SINGLE_KINDS = new Set<string>(['burn', 'feed_lp', 'airdrop']);
-const BOT_EMOJI: Record<BotKind, string> = { burn: '🔥', feed_lp: '🌊', vault: '🏦', airdrop: '📸' };
-const BOT_SHORT: Record<BotKind, string> = { burn: 'BURN', feed_lp: 'POOL FEED', vault: 'VAULT', airdrop: 'AIRDROP' };
+const SINGLE_KINDS = new Set<string>(['burn', 'feed_lp', 'airdrop', 'creator']);
+const BOT_EMOJI: Record<BotKind, string> = { burn: '🔥', feed_lp: '🌊', vault: '🏦', airdrop: '📸', creator: '👤' };
+const BOT_SHORT: Record<BotKind, string> = { burn: 'BURN', feed_lp: 'POOL FEED', vault: 'VAULT', airdrop: 'AIRDROP', creator: 'CREATOR' };
 // One-tap fee presets on each bot card — most creators think in these.
 const PCT_PRESETS = ['5', '10', '20', '30'];
 
@@ -203,6 +209,11 @@ export default function CreateCampaignPage() {
   const budget = 100 - FIXED_LEGS_PCT.total;
   const backerPct = Math.max(0, budget - botsPct);
   const overBudget = botsPct > budget;
+  const creatorPct = Number(activeStack.find((b) => b.kind === 'creator')?.pct) || 0;
+  // Two guards, both deliberate. The cap keeps "backers keep most of the
+  // creator tax" true by construction, and the second stops a stack where
+  // the creator out-earns the people who funded them.
+  const creatorValid = creatorPct <= CREATOR_MAX_PCT && creatorPct <= backerPct;
   const vaultCount = activeStack.filter((b) => b.kind === 'vault' || b.kind === 'airdrop').length;
   const stackValid = activeStack.every((b) => {
     const p = Number(b.pct) || 0;
@@ -277,7 +288,7 @@ export default function CreateCampaignPage() {
     }
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(f.days) * 86400);
     const pctOf = (k: BotKind) => Math.round((Number(activeStack.find((b) => b.kind === k)?.pct) || 0) * 100);
-    const vaultLegs = activeStack.filter((b) => (b.kind === 'vault' || b.kind === 'airdrop') && Number(b.pct) > 0);
+    const vaultLegs = activeStack.filter((b) => (b.kind === 'vault' || b.kind === 'airdrop' || b.kind === 'creator') && Number(b.pct) > 0);
     // Amounts are parsed against the QUOTE asset's decimals, never a
     // hardcoded 18 — USDG is 6. On the v6 path the quote is always ETH,
     // so this reduces to exactly the previous parseEther behavior.
@@ -294,7 +305,7 @@ export default function CreateCampaignPage() {
       socials: { twitter: L.twitter, telegram: L.telegram, discord: L.discord, website: L.website, farcaster: L.farcaster },
       feeWallet: '0x0000000000000000000000000000000000000000' as `0x${string}`, // unused on V2 — the contract sets creatorFeeRecipient = FeeSplitter
     };
-    const vaultAddrs = vaultLegs.map((b) => (b.kind === 'airdrop' ? AIRDROP_OPERATOR : (b.addr as `0x${string}`)));
+    const vaultAddrs = vaultLegs.map((b) => (b.kind === 'airdrop' ? AIRDROP_OPERATOR : b.kind === 'creator' ? (address as `0x${string}`) : (b.addr as `0x${string}`)));
     const vaultBpsArr = vaultLegs.map((b) => Math.round(Number(b.pct) * 100));
 
     if (V7_LIVE) {
@@ -458,7 +469,8 @@ export default function CreateCampaignPage() {
     ['creator tax', `${taxPct}% · traders pay ${(Number(taxPct) + 1).toFixed(Number(taxPct) % 1 ? 1 : 0)}% with pons' 1%`],
     ['fee payout', payoutName],
     ['coin burn', `${burnPct}% of the fee stream buys and burns $${f.symbol.trim().toUpperCase() || 'YOUR TOKEN'}${presetName === 'Custom' ? '' : ` — the ${presetName} preset`}`, burnPct === 0],
-    ['rest of stack', `${botsPct - burnPct}% other bots · ${backerPct}% backers · ${FIXED_LEGS_PCT.total}% fixed (${FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn}% $PLAUNCH burn + ${FIXED_LEGS_PCT.platform}% platform` : `${FIXED_LEGS_PCT.platform}% platform + ${FIXED_LEGS_PCT.rewards}% retired`})`],
+    ...(creatorPct > 0 ? [['creator fee', `${creatorPct}% of the fee stream to YOUR wallet (${address?.slice(0, 6)}…${address?.slice(-4)}), shown as CREATOR on your campaign page`, true] as [string, string, boolean]] : []),
+    ['rest of stack', `${botsPct - burnPct - creatorPct}% other bots · ${backerPct}% backers · ${FIXED_LEGS_PCT.total}% fixed (${FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn}% $PLAUNCH burn + ${FIXED_LEGS_PCT.platform}% platform` : `${FIXED_LEGS_PCT.platform}% platform + ${FIXED_LEGS_PCT.rewards}% retired`})`],
     ['deadline', `${f.days} days`],
   ];
 
@@ -1264,6 +1276,18 @@ export default function CreateCampaignPage() {
                       <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : botsPct >= budget ? 'text-red-400' : 'text-[var(--success)]'}`}>
                         {overBudget ? `over by ${botsPct - budget}% — bots can take at most ${budget}%` : botsPct >= budget ? 'backers get nothing — lower a bot' : `backers keep ${backerPct}%`}
                       </div>
+                    {creatorPct > 0 && !creatorValid && (
+                      <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-red-400 leading-relaxed">
+                        {creatorPct > CREATOR_MAX_PCT
+                          ? `Creator fee is capped at ${CREATOR_MAX_PCT}% — backers keep most of the stream here, by design.`
+                          : `Creator fee (${creatorPct}%) cannot exceed what backers keep (${backerPct}%).`}
+                      </p>
+                    )}
+                    {creatorPct > 0 && creatorValid && (
+                      <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-[var(--warning,#c9a227)] leading-relaxed">
+                        You take {creatorPct}% · backers keep {backerPct}% · your campaign page shows this as CREATOR FEE
+                      </p>
+                    )}
                     </div>
                     <div className="flex h-1.5 mt-1.5 border border-[var(--border)] overflow-hidden">
                       <div className="bg-[var(--accent)]" style={{ width: `${Math.min(botsPct, budget)}%` }} title={`Bots ${botsPct}%`} />
@@ -1439,7 +1463,7 @@ export default function CreateCampaignPage() {
               ) : (
                 <button
                   onClick={() => setReview(true)}
-                  disabled={isPending || uploading || grinding || !f.name || !f.symbol || !f.description || effGoalEth <= 0 || effGoalEth > betaCap || overBudget || !stackValid || !taxValid || !allowlistValid || !gateValid}
+                  disabled={isPending || uploading || grinding || !f.name || !f.symbol || !f.description || effGoalEth <= 0 || effGoalEth > betaCap || overBudget || !stackValid || !taxValid || !allowlistValid || !gateValid || !creatorValid}
                   className="btn-primary"
                 >
                   {uploading ? 'Uploading Image…' : grinding ? `Grinding 0x…${SIGNATURE_SUFFIX.toUpperCase()} address…` : isPending ? 'Confirm in Wallet…' : 'Review & Create'}

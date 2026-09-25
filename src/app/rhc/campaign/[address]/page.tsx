@@ -839,7 +839,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               deadline: s.deadline, legs: `backers ${(s.backerBps / 100).toFixed(0)}% · fixed legs + bots ${(100 - s.backerBps / 100).toFixed(0)}% (see BOTS)`,
             }}
           />
-          <BotLegsPanel splitter={s.feeSplitter} feeAsset={s.isV4 ? ZERO_ADDR : RHC_WETH} symbol={s.meta.symbol} launched={s.launched} refreshKey={lastReceipt?.hash ?? ''} />
+          <BotLegsPanel splitter={s.feeSplitter} feeAsset={s.isV4 ? ZERO_ADDR : RHC_WETH} symbol={s.meta.symbol} launched={s.launched} refreshKey={lastReceipt?.hash ?? ''} creator={s.creator} />
           <CreatorLaunches creator={s.creator} exclude={addr} />
         </div>
         <div className="space-y-3">
