@@ -342,8 +342,8 @@ export default function RhcDocsPage() {
                 <TrendingUp className="w-5 h-5 text-[var(--accent)]" /> Stacking + budget
               </h3>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Bots are carved from the backer share. The fixed legs (today: platform 7% + holder
-                rewards 3%; on the flywheel factory: $PLAUNCH burn 30% + platform 10%) never move; you design the rest:
+                Bots are carved from the backer share. The fixed legs (today: platform 7% + a retired 3% leg
+                that pays nobody; on the flywheel factory: $PLAUNCH burn 30% + platform 10%) never move; you design the rest:
               </p>
               <div className="bg-[var(--background)] border border-[var(--border)] p-4 font-mono text-xs space-y-1">
                 <div>BURN ............ 20%</div>
@@ -351,7 +351,7 @@ export default function RhcDocsPage() {
                 <div>VAULT (Marketing) 10%</div>
                 <div className="border-t border-[var(--border)] pt-1 mt-1">Total bots ...... 40%</div>
                 <div className="text-[var(--accent)]">Backers ......... 50%</div>
-                <div className="text-[var(--muted)]">Platform ........ 7% · Holder rewards 3%</div>
+                <div className="text-[var(--muted)]">Platform ........ 7% · Retired leg 3% (pays nobody)</div>
               </div>
               <ul className="text-sm text-[var(--muted)] space-y-1 pl-4 pt-2">
                 <li>· One BURN + one POOL FEEDER per campaign; up to 3 vault-type legs.</li>
@@ -456,8 +456,8 @@ export default function RhcDocsPage() {
                     <span className="font-bold">pull anytime</span>
                   </div>
                   <div className="flex justify-between p-2 bg-[var(--muted)]/10">
-                    <span className="text-[var(--muted)]">Holder rewards (3%) — retired with v8</span>
-                    <span className="font-bold">pull anytime</span>
+                    <span className="text-[var(--muted)]">Retired leg (3%) — a plain wallet, pays no holders</span>
+                    <span className="font-bold">nothing to claim</span>
                   </div>
                 </div>
                 <p className="text-xs text-[var(--muted)] mt-3 uppercase tracking-wide leading-relaxed">
