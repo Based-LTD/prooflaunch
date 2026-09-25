@@ -103,6 +103,11 @@ export function CurveStats({ curve, token, symbol, taxBps, graduated }: {
       )}
 
       <div className="flex flex-wrap gap-2">
+        {/* pons is the venue people already trust — it gets the primary
+            button. The box below exists so no launch depends on it. */}
+        <a href={`https://www.ponsfamily.com/launchpad/${token.toLowerCase()}`} target="_blank" rel="noopener noreferrer" className="btn-primary !px-3 !py-1.5 !text-[10px]">
+          Trade on pons ↗
+        </a>
         <a href={`https://axiom.trade/meme/${token}`} target="_blank" rel="noopener noreferrer"
           className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">
           Trade on Axiom ↗
@@ -114,7 +119,7 @@ export function CurveStats({ curve, token, symbol, taxBps, graduated }: {
           </a>
         )}
         <span className="self-center text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
-          {graduated ? '' : `${symbol} · same curve, same numbers, wherever you trade it`}
+          {graduated ? '' : `${symbol} · same curve, same numbers, wherever you trade it · or trade below without leaving`}
         </span>
       </div>
     </div>
