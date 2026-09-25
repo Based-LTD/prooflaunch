@@ -95,7 +95,7 @@ export default function FlywheelPage() {
         <div className="px-4 sm:px-6 pb-4 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-mono text-[var(--muted)] max-w-2xl leading-relaxed">
             {live ? 'Every launch on this site carries' : 'From the flywheel factory onward, every launch on this site will carry'} a fixed <span className="text-[var(--accent-gold)]">30% $PLAUNCH burn leg</span> on its creator tax. Every creation fee and every share a seller forfeits burns too.
-            {live ? 'An ownerless contract does the buying:' : 'An ownerless contract will do the buying:'} pons curve before graduation, Uniswap v4 after, 0.2 ETH per crank, one crank per block. Anyone can crank it; nobody can stop it or point it anywhere else.
+            {live ? 'An ownerless contract does the buying:' : 'An ownerless contract will do the buying:'} pons curve before graduation, Uniswap v4 after, at most 0.2 ETH spent per crank and one crank per block so a big pile burns gradually. Cranking costs the cranker only gas, and pays them 1% of what they burn. Anyone can crank it; nobody can stop it or point it anywhere else.
           </p>
           {live && isConnected && pendingWei > 0n && (
             <button onClick={() => writeContract({ address: PROOF_BURNER, abi: proofBurnerAbi, functionName: 'crank', chainId: robinhoodChain.id })} disabled={isPending}
