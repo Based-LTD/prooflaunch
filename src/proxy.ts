@@ -20,7 +20,7 @@ const SHARED = /^\/(api|_next|images|favicon\.ico|robots\.txt|sitemap\.xml|legal
 // Armed by SPLIT_HOSTS=1 in the Vercel project env. Deployed inert on
 // purpose: flipping it before sol.prooflaunch.fun resolves would bounce
 // every Solana visitor to a dead hostname.
-const ARMED = process.env.SPLIT_HOSTS === '1';
+const ARMED = (process.env.SPLIT_HOSTS ?? '').trim() === '1';
 
 export function proxy(req: NextRequest) {
   if (!ARMED) return NextResponse.next();
