@@ -298,6 +298,15 @@ only the ProofBurner, which is the v8 flywheel proper.
 
 ---
 
+**~22:35 UTC — coin-burn leg cranked again** (`0x47fb5839cf3f50bfa074ab2b4408c0ba0d4d1b79e5a07791ae795537a94300a1`):
+0.022126 ETH → 2,373,388 more $PLAUNCH burned. Coin-burn leg totals:
+0.094814 ETH spent, 9,187,313 burned. **Total at 0x…dEaD: 10,204,561
+$PLAUNCH, 1.020% of supply**, ~100 minutes after launch. Trading has not
+stopped; the leg refills as pons sweeps the curve, and it burns nothing
+until someone cranks it.
+
+---
+
 ## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;
