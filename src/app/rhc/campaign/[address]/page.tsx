@@ -13,6 +13,7 @@ import {
 } from '@/lib/rhc';
 import { RhcHeader, StatusPill, Modal } from '../../components';
 import { MetadataCard } from '../../MetadataCard';
+import { CurveStats } from '../../CurveStats';
 import { ClaimAsPicker } from '../../ClaimAsPicker';
 import { EQUITY_ROUTER_LIVE, EQUITY_ASSETS, poolKeyFor, fmtShares, quoteEquityOut, minOutFrom, type EquityAsset } from '@/lib/rhcEquity';
 import { WpPanel } from '../../walletproof';
@@ -846,6 +847,9 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           {s.launched && (
             <DashboardCard label="TRADE" meta={s.curveGraduated ? 'GRADUATED' : 'LIVE'}>
               <div className="space-y-3">
+              {s.launched && s.curve && (
+                <CurveStats curve={s.curve} token={s.token} symbol={s.meta.symbol} taxBps={s.creatorTaxBps ?? 0} graduated={!!s.curveGraduated} />
+              )}
 
               <div>
                 <span className={label}>Token</span>
@@ -899,7 +903,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   buy/sell are public curve functions, so we call them. ── */}
               {s.launched && s.curve && !s.curveGraduated && (
                 <div>
-                  <p className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">pons bonding curve, direct · your wallet signs, no middleman</p>
+                  <p className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">your wallet signs · the curve fills · ETH from sells lands instantly</p>
                   <div className="grid grid-cols-1 gap-3">
                     <div className="space-y-2">
                       <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] block">Buy with ETH</span>
