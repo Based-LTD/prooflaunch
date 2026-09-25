@@ -1037,12 +1037,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                           <>
                             <div className="font-mono">
                               <span className="text-[10px] uppercase tracking-widest text-[var(--muted)]">You&apos;ve earned </span>
-                              <span className="text-lg text-[var(--foreground)]">
-                                {payout && (s.projectedShares || feesOwed > 0n)
-                                  ? <>~{s.projectedShares && feesOwed === 0n ? fmtShares(s.projectedShares, payout.decimals) : '…'} {payout.symbol}</>
-                                  : <>{fmtEth(earned, 6)} ETH</>}
-                              </span>
-                              {payout && <span className="text-xs text-[var(--muted)]"> ≈ {fmtEth(earned, 6)} ETH · paid in {payout.symbol}, the creator&apos;s pick</span>}
+                              <span className="text-lg text-[var(--foreground)]">{fmtEth(earned, 6)} ETH</span>
                             </div>
                             {gasNote}
                             {feesOwed > 0n && !waiting ? (
@@ -1069,19 +1064,21 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                               <div className="flex flex-wrap items-center gap-2">
                                 {payout && canRoute ? (
                                   <>
-                                    <button onClick={() => collect({ claimAs: payout })} disabled={isPending || lowGas} className="btn-primary !px-3 !py-1.5 !text-[10px]">
-                                      Claim as {payout.symbol} · 2 signatures
+                                    <button onClick={() => collect({ claimAs: payout })} disabled={isPending || lowGas} className="btn-primary !px-3 !py-2 !text-[10px]"
+                                      title={`Paid as ${payout.symbol}, the creator's pick. Two wallet prompts: the first pulls your fees from pons, the second pays you.`}>
+                                      Take {payout.symbol}
                                     </button>
-                                    <button onClick={() => collect({ claimEth: true })} disabled={isPending || lowGas} className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] underline underline-offset-4 hover:text-[var(--foreground)] disabled:opacity-40">
-                                      take ETH instead
+                                    <button onClick={() => collect({ claimEth: true })} disabled={isPending || lowGas} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40 transition-colors"
+                                      title="Take your fee share as plain ETH. Two wallet prompts: the first pulls your fees from pons, the second pays you.">
+                                      Take ETH
                                     </button>
                                   </>
                                 ) : (
-                                  <button onClick={() => collect({ claimEth: true })} disabled={isPending || lowGas} className="btn-primary !px-3 !py-1.5 !text-[10px]">
-                                    Claim {fmtEth(earned, 6)} ETH · 2 signatures
+                                  <button onClick={() => collect({ claimEth: true })} disabled={isPending || lowGas} className="btn-primary !px-3 !py-2 !text-[10px]"
+                                    title="Two wallet prompts: the first pulls your fees from pons, the second pays you.">
+                                    Take {fmtEth(earned, 6)} ETH
                                   </button>
                                 )}
-                                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">first signature pulls fees from pons, second pays you</span>
                               </div>
                             )}
                           </>

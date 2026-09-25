@@ -117,7 +117,7 @@ export function CampaignChat({ campaign, roster }: { campaign: `0x${string}`; ro
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
               maxLength={500}
               disabled={sending}
-              placeholder={auth.current ? 'Message…' : 'Message… (first post asks for one signature)'}
+              placeholder="Message…" title={auth.current ? undefined : 'Your first message asks for one wallet signature'}
               className="flex-1 min-w-0 bg-[var(--background)] border border-[var(--border)] px-3 py-2 text-xs font-mono focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
             />
             <button onClick={() => void send()} disabled={sending || !text.trim()} className="btn-primary px-4">

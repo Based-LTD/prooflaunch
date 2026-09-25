@@ -32,6 +32,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 export interface FlywheelBurn { tx: `0x${string}`; from: `0x${string}` | null; ethIn: string; tokens: string; ts: number | null; viaCurve: boolean }
+  source?: 'flywheel' | 'coinLeg';                                  // which burner emitted it
 export interface FlywheelFeed {
   live: boolean;
   burner?: `0x${string}`; token?: `0x${string}`;
@@ -41,6 +42,8 @@ export interface FlywheelFeed {
   direct?: string;                                                   // other ETH sent straight to the burner (seeds, forwarded legs)
   coinBurnSpent?: string;                                            // ETH $PLAUNCH's OWN campaign coin-burn leg has spent buying+burning $PLAUNCH
   coinBurnOwed?: string;                                             // ETH owed to that leg, uncranked — will burn $PLAUNCH on the next crank
+  burnedByCoinLeg?: string;                                          // $PLAUNCH burned by that leg (the rest of `dead` beyond the flywheel)
+  coinLeg?: `0x${string}`;                                           // its address
   daily?: { day: string; eth: string; tokens: string; count: number }[];
   feeders?: { splitter: `0x${string}`; campaign: `0x${string}`; symbol: string; name: string; eth: string; pulls: number }[];
   crankers?: { wallet: `0x${string}`; cranks: number }[];
@@ -63,7 +66,7 @@ export async function GET() {
     // too, outside the ProofBurner. The hero counts burned tokens from the
     // dead address (everything), so its ETH figures must include this leg
     // or the two tiles disagree by 7x. Found from the burner's campaign.
-    let coinBurnSpent = 0n, coinBurnOwed = 0n;
+    let coinBurnSpent = 0n, coinBurnOwed = 0n, burnedByCoinLeg = 0n; let coinLeg: `0x${string}` | null = null;
     try {
       const legAbi = parseAbi(['function campaign() view returns (address)', 'function feeSplitter() view returns (address)', 'function legCount() view returns (uint256)', 'function legRecipients(uint256) view returns (address)', 'function legOwed(address,address) view returns (uint256)', 'function totalEthSpent() view returns (uint256)', 'function totalTokensBurned() view returns (uint256)']);
       const camp = await rhcPublicClient.readContract({ address: PROOF_BURNER, abi: legAbi, functionName: 'campaign' });
@@ -76,6 +79,7 @@ export async function GET() {
           const burnedByLeg = await rhcPublicClient.readContract({ address: leg, abi: legAbi, functionName: 'totalTokensBurned' });
           void burnedByLeg; // a BurnLeg answers this; wallets and the platform leg revert
           coinBurnSpent = await rhcPublicClient.readContract({ address: leg, abi: legAbi, functionName: 'totalEthSpent' });
+          burnedByCoinLeg = burnedByLeg; coinLeg = leg;
           coinBurnOwed = await rhcPublicClient.readContract({ address: splitter, abi: legAbi, functionName: 'legOwed', args: [leg, '0x0000000000000000000000000000000000000000'] });
           break;
         } catch { /* not a burn leg */ }
@@ -87,11 +91,16 @@ export async function GET() {
       allowFailure: false,
     }) as [bigint, bigint];
 
-    const [burnLogs, pullLogs] = await Promise.all([
+    // The token's own coin-burn leg emits the identical Burned event, so its
+    // burns join every chart and list here; each row remembers its source.
+    const [burnLogs, pullLogs, legLogs] = await Promise.all([
       logClient.getLogs({ address: PROOF_BURNER, event: burnedEvent, fromBlock: 0n, toBlock: 'latest' }).catch(() => []),
       logClient.getLogs({ address: PROOF_BURNER, event: pulledEvent, fromBlock: 0n, toBlock: 'latest' }).catch(() => []),
+      coinLeg ? logClient.getLogs({ address: coinLeg, event: burnedEvent, fromBlock: 0n, toBlock: 'latest' }).catch(() => []) : Promise.resolve([]),
     ]);
-    const real = burnLogs.filter((l) => (l.args.tokensBurned ?? 0n) > 0n);
+    const real = [...burnLogs, ...legLogs]
+      .filter((l) => (l.args.tokensBurned ?? 0n) > 0n)
+      .sort((a, b) => (a.blockNumber === b.blockNumber ? a.logIndex - b.logIndex : Number(a.blockNumber - b.blockNumber)));
 
     // timestamps (cached)
     const blocks = [...new Set(real.map((l) => l.blockNumber).filter((b) => !tsCache.has(b)))];
@@ -136,6 +145,7 @@ export async function GET() {
       tx: l.transactionHash, from: fromCache.get(l.transactionHash) ?? null,
       ethIn: (l.args.ethIn ?? 0n).toString(), tokens: (l.args.tokensBurned ?? 0n).toString(),
       ts: tsCache.get(l.blockNumber) ?? null, viaCurve: !!l.args.viaCurve,
+      source: l.address.toLowerCase() === PROOF_BURNER.toLowerCase() ? 'flywheel' : 'coinLeg',
     }));
 
     // Creation fees are counted, not inferred: v8 campaigns created × the
@@ -154,7 +164,7 @@ export async function GET() {
     const body: FlywheelFeed = {
       live: true, burner: PROOF_BURNER, token,
       pulled: pulled.toString(), spent: spent.toString(), burnedByFlywheel: burned.toString(), pending: pending.toString(),
-      supply: supply.toString(), dead: dead.toString(), creationFees: creationFees.toString(), direct: direct.toString(), coinBurnSpent: coinBurnSpent.toString(), coinBurnOwed: coinBurnOwed.toString(),
+      supply: supply.toString(), dead: dead.toString(), creationFees: creationFees.toString(), direct: direct.toString(), coinBurnSpent: coinBurnSpent.toString(), coinBurnOwed: coinBurnOwed.toString(), burnedByCoinLeg: burnedByCoinLeg.toString(), coinLeg: coinLeg ?? undefined,
       daily, feeders, crankers, burns, totalBurns: real.length,
     };
     return NextResponse.json(body, { headers: { 'cache-control': 'public, s-maxage=15, stale-while-revalidate=60' } });

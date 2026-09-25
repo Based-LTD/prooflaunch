@@ -93,21 +93,21 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
               className="btn-primary flex-1"
               disabled={busy || !preferredReady}
               onClick={() => preferredReady && onClaimAs(preferredAsset, minOutFrom(pq as bigint))}
-              title={preferredReady ? undefined : pq === null ? `${preferredAsset.symbol} can't be quoted right now — claim ETH instead` : 'Quoting…'}
+              title={preferredReady ? `${preferredAsset.symbol} is the creator's pick. Your ETH is swapped for shares in the same transaction; we never hold them.` : pq === null ? `${preferredAsset.symbol} can't be quoted right now — take ETH` : 'Quoting…'}
             >
               {pq === 'loading' || pq === undefined
-                ? `Claim as ${preferredAsset.symbol} · quoting…`
+                ? `Take ${preferredAsset.symbol} · quoting…`
                 : preferredReady
-                  ? `Claim as ${preferredAsset.symbol} · ~${fmtShares(pq as bigint, preferredAsset.decimals)}`
-                  : `${preferredAsset.symbol} unavailable — claim ETH`}
+                  ? `Take ${preferredAsset.symbol} · ~${fmtShares(pq as bigint, preferredAsset.decimals)}`
+                  : `${preferredAsset.symbol} unavailable`}
             </button>
             <button
-              className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] underline underline-offset-4 hover:text-[var(--foreground)] disabled:opacity-40"
+              className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40 transition-colors"
               disabled={busy}
               onClick={onClaimEth}
-              title="Safety hatch: take your fee share as plain ETH instead"
+              title="Take your fee share as plain ETH instead."
             >
-              take {fmtEth(owed)} ETH instead
+              Take {fmtEth(owed)} ETH
             </button>
           </>
         ) : (
@@ -116,7 +116,7 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
             disabled={busy || nothing}
             onClick={onClaimEth}
           >
-            {nothing ? 'Nothing to claim' : `Claim ${fmtEth(owed)} ETH`}
+            {nothing ? 'Nothing to claim' : `Take ${fmtEth(owed)} ETH`}
           </button>
         )}
 

@@ -38,7 +38,7 @@ export default function FlywheelPage() {
   }, []);
 
   const n = (s?: string) => (s ? Number(s) / 1e18 : 0);
-  const dead = n(f?.dead), supply = n(f?.supply), spent = n(f?.spent), pulled = n(f?.pulled), pending = n(f?.pending), fees = n(f?.creationFees), direct = n(f?.direct);
+  const dead = n(f?.dead), supply = n(f?.supply), spent = n(f?.spent) + n(f?.coinBurnSpent), pulled = n(f?.pulled), pending = n(f?.pending) + n(f?.coinBurnOwed), fees = n(f?.creationFees), direct = n(f?.direct);
   const pct = supply > 0 ? (dead / supply) * 100 : 0;
   const pendingWei = f?.pending ? BigInt(f.pending) : 0n;
 
@@ -120,7 +120,7 @@ export default function FlywheelPage() {
       )}
 
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DashboardCard label="$PLAUNCH BURNED, CUMULATIVE" meta={live ? `${tok(n(f?.burnedByFlywheel))} via the flywheel` : undefined}>
+        <DashboardCard label="$PLAUNCH BURNED, CUMULATIVE" meta={live ? `${tok(n(f?.burnedByFlywheel))} via the v8 burner · ${tok(n(f?.burnedByCoinLeg))} via the token's own burn leg` : undefined}>
           {live ? <AreaChart pts={cumulative} unit="$PLAUNCH" /> : <div className="h-40 flex items-center justify-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">fills in from the first burn</div>}
         </DashboardCard>
         <DashboardCard label="ETH BURNED PER DAY" meta={live ? `${(f?.daily ?? []).length} days` : undefined}>
@@ -161,13 +161,14 @@ export default function FlywheelPage() {
         <DashboardCard label="EVERY BURN" meta={live ? `last ${(f?.burns ?? []).length}` : undefined} noBodyPadding>
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono">
-              <thead><tr className="border-b border-[var(--border)]">{['when', 'ETH in', '$PLAUNCH burned', 'route', 'cranked by', 'tx'].map((h) => <th key={h} className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-[var(--muted)]">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-[var(--border)]">{['when', 'ETH in', '$PLAUNCH burned', 'burner', 'route', 'cranked by', 'tx'].map((h) => <th key={h} className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-[var(--muted)]">{h}</th>)}</tr></thead>
               <tbody>
                 {live && (f?.burns ?? []).length ? (f!.burns!.map((b) => (
                   <tr key={b.tx} className="border-b border-[var(--border)]/50">
                     <td className="py-2 px-3 text-[var(--muted)]">{ago(b.ts)}</td>
                     <td className="py-2 px-3 tabular-nums">{n(b.ethIn).toFixed(4)}</td>
                     <td className="py-2 px-3 tabular-nums text-[var(--accent-gold)]">{tok(n(b.tokens))}</td>
+                    <td className="py-2 px-3 text-[var(--muted)]">{b.source === 'coinLeg' ? 'token\u2019s own leg' : 'v8 flywheel'}</td>
                     <td className="py-2 px-3 text-[var(--muted)]">{b.viaCurve ? 'curve' : 'v4 pool'}</td>
                     <td className="py-2 px-3">{b.from ? <a href={explorerUrl(b.from)} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent)]">{short(b.from)}</a> : '—'}</td>
                     <td className="py-2 px-3"><a href={`https://robinhoodchain.blockscout.com/tx/${b.tx}`} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">{b.tx.slice(0, 10)}…</a></td>
