@@ -200,7 +200,49 @@ run with `--threads 1`.
 
 ---
 
-## 7. Things we have gotten wrong and corrected (so you don't have to find them)
+## 7. $PLAUNCH — the platform token's raise (live 2026-09-25)
+
+The seat round for the platform token, created from a fresh launcher
+wallet that only holds gas (trackers tag whoever signs `launch()` as the
+dev, not pons' deployer). Read every number here off the chain, not off
+this file.
+
+| | |
+|---|---|
+| campaign | `0xc2C9F89553DF78DCd830f6254717460247575eeD` |
+| splitter | `0x95e3610E13cdaC46116E63e593893e9778fF5dCA` |
+| creator (launcher) | `0x04F2c8D303Fc0A3Df778212c1468e26281194140` |
+| factory | v7 `0x6928C1Ace232124641e9cfFEfD16D82E1B9c531B` |
+| raise | 20 seats x 0.05 ETH = 1 ETH, 5 reserved (team, tagged on the roster) |
+| creator tax | 300 bps; traders pay 4% with pons' 1% |
+| payout asset | SPCX `0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa` |
+| deadline | 2026-09-30 00:40 UTC |
+
+Fee legs on its splitter, which is a v7 splitter and so predates the
+flywheel:
+
+| leg | bps | recipient |
+|---|---|---|
+| coin burn (chosen) | 3000 | `0xc7366c28cD1Cdbf37796f619b644E793ABd8C08A` |
+| platform (fixed) | 700 | `0xD994AE0945c787A487c6dbd5188512E358986E29` |
+| retired rewards (fixed) | 300 | `0x6ca08565CAf4f5CaAfB4BfeeCEcE6E0Ea3c65dcB` |
+| backers | 6000 | the 20 seats |
+
+30/7/3/60 on v7 is numerically the same split v8 fixes for every launch
+(30 burn / 10 platform / 60 backers), so one set of numbers describes
+both. The 30% here is a creator-chosen coin-burn leg, NOT a fixed factory
+leg — say "every launch after this one" when describing the fixed 30%.
+
+Three earlier attempts were created and cancelled the same night
+(`0x5aDc…5EED`, `0xc152…5eEd`, `0xB4f1…5EED`) while the submit flow was
+fixed; each cost a 0.001 ETH creation fee, all of which went to the
+platform leg. Banner and GitHub for the live one were bound directly
+(`tools/_bind-plaunch-media.mjs`) after a cached bundle skipped the
+pre-transaction signature.
+
+---
+
+## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;
   it was v6. Fixed.

@@ -66,6 +66,20 @@ preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
       EQUITY_ROUTER, LEG_DEPLOYER, PLATFORM_BPS=1000, PROOF_BURN_BPS=3000).
 - [ ] The post is drafted and NOT sent (Thread F/G in docs/x-launch-threads.md).
 
+## STATUS: step 1 is DONE — the raise is live
+
+Campaign `0xc2C9F89553DF78DCd830f6254717460247575eeD`, created
+2026-09-25 00:40 UTC from launcher `0x04F2…4140`. Terms verified on
+chain: 20 x 0.05 ETH, 5 reserved, tax 300 bps, payout SPCX, burn 3000
+bps, backerBps 6000. Deadline 2026-09-30 00:40 UTC. Full receipt in
+`docs/rhc-receipts.md` section 7.
+
+When the last seat fills: launch from the launcher wallet, then set
+`PROOF_CAMPAIGN=0xc2C9F89553DF78DCd830f6254717460247575eeD` in
+`contracts/rhc/.env` and continue at step 2.
+
+Step 1 below is kept as the record of how it was done.
+
 ## 1. Launch $PLAUNCH on v7 (the live factory) — from the website
 
 1. prooflaunch.fun/rhc/create, connected as a **fresh launcher wallet**
