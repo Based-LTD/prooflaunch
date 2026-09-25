@@ -71,6 +71,8 @@ Deployer `0xC571bf9770c147c7643f87366B2e6D99f736c58A`, via `forge create` (forge
 
 Immutables read back and matched: proofBurner, platformBps 1000, proofBurnBps 3000, platformFeeRecipient `0xD994…6E29`, legDeployer `0x518B…63AB`, feeWaiverToken = $PLAUNCH, feeWaiverThreshold 0 (dormant), equityRouter `0x0A56…2943`, creationFee 0.001 ETH, ponsFactory `0x7eD5…EC7e`. `tools/flip-v8.mjs --check` 6/6; UI flipped the same hour (`NEXT_PUBLIC_V8_LIVE=1`, factory, burner in the Vercel env). v7 factory `0x6928…531B` superseded; its campaigns, including $PLAUNCH's own, run forever on their 7/3 legs.
 
+First v8 campaign, same night: $SMOKE `0xc628EC13D9eC5E0E7dc83cEc9D8EE961Fb7f4058` (token `0xe3C6…eF14`, splitter `0x068D…F0cD`, one 180-day-locked seat, legs 30/10/10/50, forfeitTo = burner). Burner after two cranks: 0.0099 ETH spent, 1,017,248 $PLAUNCH at 0x…dEaD. `script/SmokeV8.s.sol`.
+
 ## v8 — the rev flywheel (design notes, rebuilt 2026-09-22)
 
 Founder decisions 2026-09-21/22: pivot to "rev meta". Two fixed legs on every

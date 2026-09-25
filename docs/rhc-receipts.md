@@ -260,6 +260,30 @@ burner's counters read zero until the first v8 campaign trades through it.
 
 ---
 
+**The flywheel turned the same night (~21:40 UTC).** Seed 0.005 ETH →
+burner (`0xe113e5864b1e45bc81aa52b78267f196c12810de8356f24d1a960e672afa618b`),
+crank (`0x9c4079526efbcc67516a9857cc39615b02376acb4fd17c66299c2faa123e03c3`):
+553,395 $PLAUNCH bought on its curve and sent to 0x…dEaD. Then the first
+campaign on the v8 factory, "Flywheel Smoke" $SMOKE — campaign
+`0xc628EC13D9eC5E0E7dc83cEc9D8EE961Fb7f4058`, token
+`0xe3C63FC51E5A850FD60101ea734094BD4e9CeF14`, splitter
+`0x068D1F96771ce56524C0A3E6df0626258A8aF0cD` — created
+(`0xc929…0e18`, its 0.001 ETH creation fee went to the burner), one seat
+taken by the deployer locked 180 days (`0x76cf…ef01`), launched
+(`0xbddc…ea9e`), one 0.003 ETH buy (`0x1e25…3446`), 0.004 ETH seed
+(`0x0034…4e5f`), crank (`0x3e70…d168`): 463,853 more burned. Its splitter
+carries BURNER 30% / coin burn 10% / PLATFORM 10% / backers 50%, forfeitTo
+= burner — the Flywheel preset, exactly as the factory fixes it.
+
+Totals after two cranks: 0.0099 ETH spent, **1,017,248 $PLAUNCH burned
+(0.1017% of supply)**, both cranks by the deployer (1% tip each). Both
+seeds were deployer ETH, disclosed here; $SMOKE's creator tax reaches its
+splitter only after pons's fee-sweep operator sweeps the curve, then
+`pokeHarvest` → `burner.pull` → crank — the first burn funded by a
+launch's tax rather than a seed.
+
+---
+
 ## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;
