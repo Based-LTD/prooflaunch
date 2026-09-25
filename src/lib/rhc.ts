@@ -68,17 +68,12 @@ export const PROOF_BURNER_LIVE = PROOF_BURNER !== '0x000000000000000000000000000
 /// created on v7 in that window is $PROOF's own, and the create page says
 /// so out loud (FIXED_LEGS_NOTE). Backers get the remainder after the
 /// creator's optional legs.
-/// These MUST track the factory the page is actually pointed at. v7 (live
-/// today) has no fixed burn leg: 7% platform + 3% retired holder-rewards.
-/// v8 replaces both with 30% $PROOF burn + 10% platform. Hardcoding the v8
-/// numbers while v7 was live made the submit page tell creators backers get
-/// 50% when the contract gave them 80%.
-export const FIXED_LEGS_PCT = V8_LIVE
-  ? ({ burn: 30, platform: 10, rewards: 0, total: 40 } as const)
-  : ({ burn: 0, platform: 7, rewards: 3, total: 10 } as const);
-export const FIXED_LEGS_NOTE = V8_LIVE
-  ? ''
-  : "Today's factory carries 7% platform + 3% (retired holder-rewards) and no fixed burn — pick a coin-burn leg yourself. When $PROOF launches, the flywheel legs (30% burn + 10% platform) replace both.";
+/// Founder decision 2026-09-22: every launch pays these two before anything
+/// else, and the create page shows them as already-spent budget and says
+/// so out loud (FIXED_LEGS_NOTE). Backers get the remainder after the
+/// creator's optional legs.
+export const FIXED_LEGS_PCT = { burn: 30, platform: 10, rewards: 0, total: 40 } as const;
+export const FIXED_LEGS_NOTE = V8_LIVE ? '' : "Until $PROOF launches, today's factory still carries 7% platform + 3% (retired) instead — the flywheel legs replace them the moment it does.";
 export const ACTIVE_FACTORY = V8_LIVE ? POOLLAUNCH_FACTORY_V8 : POOLLAUNCH_FACTORY_V7;
 
 export const proofBurnerAbi = parseAbi([
