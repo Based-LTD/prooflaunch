@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createPublicClient, http, parseAbiItem } from 'viem';
+import { createPublicClient, http, parseAbi, parseAbiItem } from 'viem';
 import { rhcPublicClient, robinhoodChain, proofBurnerAbi, campaignAbi, PROOF_BURNER, PROOF_BURNER_LIVE, POOLLAUNCH_FACTORY_V8, factoryV5Abi } from '@/lib/rhc';
 
 // The flywheel feed: the burner's counters, $PROOF supply vs the dead
