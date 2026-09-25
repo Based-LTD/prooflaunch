@@ -66,7 +66,32 @@ preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
       EQUITY_ROUTER, LEG_DEPLOYER, PLATFORM_BPS=1000, PROOF_BURN_BPS=3000).
 - [ ] The post is drafted and NOT sent (Thread F/G in docs/x-launch-threads.md).
 
-## STATUS: step 1 is DONE — the raise is live
+## STATUS 2026-09-25: raise FULL (20/20, 1 ETH). Next: launch()
+
+Everything on the site is now flag-driven: every v7-vs-v8 sentence, the
+roadmap, the hero, the OG cards, the audit page and the create page all
+read `NEXT_PUBLIC_V8_LIVE` / `NEXT_PUBLIC_PROOF_BURNER`, which
+`tools/flip-v8.mjs` sets. There is no copy to hand-edit on launch day.
+The whole day is three commands:
+
+```
+1. founder   prooflaunch.fun/rhc/campaign/0xc2C9…5eeD → LAUNCH  (launcher wallet 0x04F2…4140)
+2. founder   cd contracts/rhc
+             echo "PROOF_CAMPAIGN=0xc2C9F89553DF78DCd830f6254717460247575eeD" >> .env
+             bash deploy-v8.sh "--keystore ~/.rhc-deployer/f194d8ba-de79-4d84-8486-96cd596fa42b"
+             (forge prompts for the keystore password)
+3. either    node tools/flip-v8.mjs --check     # verifies chain + addresses, changes nothing
+             node tools/flip-v8.mjs             # sets the Vercel env and deploys
+```
+
+Step 2 needs the deployer's keystore password, so the founder runs it.
+Step 3 can be run by anyone with the Vercel CLI logged in.
+
+After: `bash verify.sh` for the new contracts, burn the launcher's seat
+allocation to 0x…dEaD (visibly), record addresses in DEPLOYMENTS.md and
+docs/rhc-receipts.md.
+
+## (earlier) STATUS: step 1 is DONE — the raise is live
 
 Campaign `0xc2C9F89553DF78DCd830f6254717460247575eeD`, created
 2026-09-25 00:40 UTC from launcher `0x04F2…4140`. Terms verified on
