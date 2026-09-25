@@ -199,10 +199,14 @@ export default function DocsPage() {
                 <strong>ProofLaunch on Robinhood Chain</strong> — with the promises enforced by <strong>ownerless
                 smart contracts</strong> instead of platform operations: backers keep most of the creator
                 tax (today\u2019s factory fixes 7% platform + a retired 3% leg; the 30% $PLAUNCH burn is built and ships with the next one), trustless burn and pool-feeder bots, no custodial wallets anywhere.
-                Toggle <strong>SOL | RHC</strong> in the navbar, or read the{' '}
-                <Link href="/rhc/docs" className="text-[var(--accent-gold)] hover:underline font-bold">
+                It lives at{' '}
+                <a href="https://prooflaunch.fun/rhc" className="text-[var(--accent-gold)] hover:underline font-bold">
+                  prooflaunch.fun
+                </a>{' '}
+                with its own token, $PLAUNCH; this site and $PROOF are Solana only. Read the{' '}
+                <a href="https://prooflaunch.fun/rhc/docs" className="text-[var(--accent-gold)] hover:underline font-bold">
                   Robinhood Chain docs →
-                </Link>
+                </a>
               </p>
             </section>
 
@@ -380,9 +384,9 @@ export default function DocsPage() {
                 On Robinhood Chain the flagship bots go further: Burn and Pool Feeder run as{' '}
                 <strong className="text-[var(--foreground)]">ownerless contracts</strong> — no
                 operator, no off switch, anyone can crank them.{' '}
-                <Link href="/rhc/docs" className="text-[var(--accent)] hover:underline">
+                <a href="https://prooflaunch.fun/rhc/docs" className="text-[var(--accent)] hover:underline">
                   Robinhood Chain bot docs →
-                </Link>
+                </a>
               </p>
             </section>
 

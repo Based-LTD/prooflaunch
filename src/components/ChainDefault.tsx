@@ -11,6 +11,9 @@ import { useRouter } from 'next/navigation';
 export function ChainDefault() {
   const router = useRouter();
   useEffect(() => {
+    // On the split Solana host "/" is the Solana board, full stop. Bouncing
+    // it to /rhc would hand every visitor straight to the other domain.
+    if (typeof window !== 'undefined' && /^sol\./i.test(window.location.hostname)) return;
     try {
       if (localStorage.getItem('pl-chain') !== 'sol') router.replace('/rhc');
     } catch {

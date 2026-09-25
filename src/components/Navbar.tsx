@@ -71,7 +71,22 @@ const rhcNav: NavEntry[] = [
 
 // Persistent chain switcher: one click between worlds, remembered so the
 // landing gate on "/" stops asking once you've chosen.
-const ChainToggle: FC<{ isRhc: boolean; className?: string }> = ({ isRhc, className = '' }) => (
+// Hidden on the two split production hosts (prooflaunch.fun is RHC-only,
+// sol.prooflaunch.fun is Solana-only); the middleware makes the other
+// chain unreachable there anyway. Kept for localhost and previews.
+function useSplitHost(): boolean {
+  const [split, setSplit] = useState(false);
+  useEffect(() => {
+    const h = window.location.hostname.toLowerCase();
+    setSplit(h === 'prooflaunch.fun' || h === 'www.prooflaunch.fun' || h === 'sol.prooflaunch.fun');
+  }, []);
+  return split;
+}
+
+const ChainToggle: FC<{ isRhc: boolean; className?: string }> = ({ isRhc, className = '' }) => {
+  const split = useSplitHost();
+  if (split) return null;
+  return (
   <div className={`flex items-center border border-[var(--border)] font-mono text-[10px] uppercase tracking-widest ${className}`}>
     <Link
       href="/"
@@ -88,7 +103,8 @@ const ChainToggle: FC<{ isRhc: boolean; className?: string }> = ({ isRhc, classN
       RHC
     </Link>
   </div>
-);
+  );
+};
 
 // X · Dexscreener · GitHub. Lives inside the "More" menu and the mobile
 // panel footer — not in the bar. Three icons in the header were a third of
