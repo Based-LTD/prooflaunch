@@ -5,6 +5,7 @@
 // the trustless contracts made it the better product, so it gets the
 // roadmap. (The old SOL roadmap was retired 2026-09-15 by founder call.)
 import Link from 'next/link';
+import { V8_LIVE } from '@/lib/rhc';
 import {
   ArrowLeft, Compass, CheckCircle, Hammer, Users, Rocket, Coins, Bot,
   Shield, TrendingUp, DollarSign, Layers, Search, LucideIcon,
@@ -16,17 +17,26 @@ const SHIPPED = [
   { icon: Coins, title: 'Adjustable creator tax — earned by your backers', desc: 'The pons V2 tax dial (0–10% of every trade, locked at launch, can never be raised) — pointed at your campaign\'s FeeSplitter instead of one wallet. Community takeover as a cash flow, not a vibe.' },
   { icon: Bot, title: 'Trustless launch bots on Uniswap v4', desc: '🔥 BURN buys the token (on the bonding curve pre-graduation, directly against the v4 PoolManager after) and sends it to the dead address. 🌊 POOL FEEDER mints full-range liquidity and compounds its own fees — the contract has NO withdraw function. Anyone can crank them; nobody, including us, can stop them.' },
   { icon: Bot, title: 'Vault legs + holder airdrops', desc: '🏦 Any wallet the creator names becomes an immutable fee leg (marketing, DAO, treasury). 📸 Opt-in holder snapshot airdrops run by the platform — the same machinery as our Solana launches, honestly labeled as the one non-trustless bot.' },
+  { icon: Users, title: 'Team rounds — reserved seats, contract-enforced', desc: 'The SOL reserved-slots model, upgraded to trustless: creators name allowlisted wallets at creation, reserve N of the seats for them, and the CONTRACT enforces who can take a reserved seat — no server checking a list. Public always sees the raise and keeps its guaranteed open seats; fully-reserved rounds get the TEAM ROUND label. The $PLAUNCH raise ran this way: 5 team seats, 15 public.' },
+  { icon: Shield, title: 'Signature addresses — 0x…5EED', desc: 'Campaigns deploy to an address ending in 5EED — "seed," because every launch here is seeded by its community. CREATE2 salt-grinding, done invisibly at submit, with a short time budget, so treat it as a provenance signal rather than proof: check the campaign on this site, not the suffix alone.' },
   { icon: Shield, title: 'Refunds as code', desc: 'Goal unmet by the deadline (+3-day grace) → refunds open unconditionally. Withdraw your full deposit any time before launch. Oversized raises that cross pons graduation get the excess refunded by the curve and claimable pro-rata. No support tickets anywhere in the flow.' },
 ];
 
+// These two move from BUILDING to SHIPPED on the day the flywheel factory
+// goes live — the same flag flip-v8.mjs sets, so the roadmap flips itself.
+const FLYWHEEL = { icon: Coins, title: 'The flywheel split \u2014 30% of every creator tax burns $PLAUNCH', desc: V8_LIVE
+  ? 'Live. The factory fixes two legs in every campaign it creates: 30% buys and burns $PLAUNCH, 10% platform, the rest to backers pro-rata (50% on the default preset, 60% with no coin burn), and sellers forfeit their share into the burn. Campaigns from the previous factory keep their own fixed split. Pull-based either way: your share waits in the contract with your name on it.'
+  : 'Built and fork-tested against live pons, NOT yet deployed. The next factory will fix two legs in every campaign it creates: 30% buys and burns $PLAUNCH, 10% platform, the rest to backers pro-rata (50% on the default preset, 60% with no coin burn), and sellers will forfeit their share into the burn. Today\u2019s live factory fixes 7% platform + a retired 3% leg instead, and the rest is the creator\u2019s budget. Pull-based either way: your share waits in the contract with your name on it.' };
+const PLATFORM_TOKEN = { icon: Rocket, title: 'Platform token, launched through our own contracts', desc: V8_LIVE
+  ? '$PLAUNCH raised 1 ETH across 20 seats at one price (5 team, 15 public) and launched from the same factory every creator uses, with 0% creator fee. The burner and the flywheel factory were deployed against it the same day.'
+  : 'Same factory, same terms every creator gets — eat your own cooking or don\'t cook. Today\u2019s factory carries a fixed 3% leg that is retired and pays holders nothing; the flywheel factory replaces it with the burn leg.' };
+if (V8_LIVE) SHIPPED.unshift(FLYWHEEL, PLATFORM_TOKEN);
+
 const BUILDING = [
-  { icon: Coins, title: 'The flywheel split \u2014 30% of every creator tax burns $PLAUNCH', desc: 'Built and fork-tested against live pons, NOT yet deployed. The next factory will fix two legs in every campaign it creates: 30% buys and burns $PLAUNCH, 10% platform, the rest to backers pro-rata (50% on the default preset, 60% with no coin burn), and sellers will forfeit their share into the burn. Today\u2019s live factory fixes 7% platform + a retired 3% leg instead, and the rest is the creator\u2019s budget. Pull-based either way: your share waits in the contract with your name on it.' },
+  ...(V8_LIVE ? [] : [FLYWHEEL, PLATFORM_TOKEN]),
   { icon: Search, title: 'WalletProof — who is really buying', desc: 'Every trade on the chain\'s launchpad, replayed on-chain: independent buyers vs crew volume vs one-shot wallets vs launch bots, plus each deployer\'s full history. Counts only, no wallet doxxing. The engine runs today; the public reveal ships as part of the launch sequence.' },
-  { icon: Shield, title: 'Signature addresses — 0x…5EED', desc: 'Every campaign (and eventually every token) deployed to an address ending in 5EED — "seed," because every launch here is seeded by its community. CREATE2 salt-grinding, done invisibly at submit. On Solana it was "…pooL"; here, if the address doesn\'t end in 5EED, it didn\'t come from us.' },
   { icon: Shield, title: 'External contract review → lift the beta cap', desc: 'The contracts pass their full suite, including live-pool fork verification of every money path. An independent review is the gate for removing the 2 ETH beta goal cap and opening full-size raises.' },
-  { icon: Rocket, title: 'Platform token, launched through our own contracts', desc: 'Same factory, same terms every creator gets — eat your own cooking or don\'t cook. Today\u2019s factory carries a fixed 3% leg that is retired and pays holders nothing; the flywheel factory replaces it with the burn leg.' },
   { icon: DollarSign, title: 'Stable-denominated raises (USDG)', desc: 'pons V2 already approves Global Dollar as a pair token. A vNext factory lets backers pool USDG instead of ETH — stable-quoted curves, stable-denominated fee streams, same trustless spine.' },
-  { icon: Users, title: 'Team rounds — reserved seats, contract-enforced', desc: 'The SOL reserved-slots model, upgraded to trustless: creators name allowlisted wallets at creation, reserve N of the seats for them, and the CONTRACT enforces who can take a reserved seat — no server checking a list. Public always sees the raise and keeps its guaranteed open seats; fully-reserved rounds get the TEAM ROUND label. Ships in the next factory generation alongside the 0x…5EED signatures and the holder fee waiver.' },
   { icon: Layers, title: 'Campaign indexer', desc: 'The board currently reads every factory generation straight from the chain — perfect for trust, fine at beta scale. An event indexer keeps it instant as campaign count grows, without ever becoming the source of truth.' },
 ];
 

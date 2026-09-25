@@ -1,5 +1,7 @@
 'use client';
 
+import { V8_LIVE } from '@/lib/rhc';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import {
@@ -198,7 +200,7 @@ export default function DocsPage() {
                 The same pooled-launch model runs on <strong>Robinhood Chain</strong> as{' '}
                 <strong>ProofLaunch on Robinhood Chain</strong> — with the promises enforced by <strong>ownerless
                 smart contracts</strong> instead of platform operations: backers keep most of the creator
-                tax (today\u2019s factory fixes 7% platform + a retired 3% leg; the 30% $PLAUNCH burn is built and ships with the next one), trustless burn and pool-feeder bots, no custodial wallets anywhere.
+                tax{V8_LIVE ? ' and 30% of it burns $PLAUNCH' : ' (today\u2019s factory fixes 7% platform + a retired 3% leg; the 30% $PLAUNCH burn is built and ships with the next one)'}, trustless burn and pool-feeder bots, no custodial wallets anywhere.
                 It lives at{' '}
                 <a href="https://prooflaunch.fun/rhc" className="text-[var(--accent-gold)] hover:underline font-bold">
                   prooflaunch.fun

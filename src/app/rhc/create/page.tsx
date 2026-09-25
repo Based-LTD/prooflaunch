@@ -1444,7 +1444,7 @@ export default function CreateCampaignPage() {
             <div className="border border-[var(--border)] bg-[var(--card)]/40 p-4 sm:p-5 space-y-3">
               <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] leading-relaxed">
                 Fixed at creation, forever: {backerPct}% of creator trading fees → backers pro-rata ·
-                7% platform · 3% holder rewards{botsPct > 0 ? ` · ${botsPct}% bots` : ''}. The pooled
+                {FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn}% $PLAUNCH burn · ${FIXED_LEGS_PCT.platform}% platform` : `${FIXED_LEGS_PCT.platform}% platform · ${FIXED_LEGS_PCT.rewards}% retired leg`}{botsPct > 0 ? ` · ${botsPct}% bots` : ''}. The pooled
                 buy fires snipe-exempt on the launch block. Goal unmet by deadline → refunds open
                 automatically. No admin keys exist.
               </p>

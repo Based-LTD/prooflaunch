@@ -10,7 +10,7 @@ import {
   TrendingUp, Zap, Receipt, Key, HelpCircle, Bot, ExternalLink,
   Undo2 as Undo2Icon, Wallet as WalletIcon, Lock, MessageCircle, Eye, Landmark,
 } from 'lucide-react';
-import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, LEG_DEPLOYER_V3, PONS_FACTORY, AIRDROP_OPERATOR, explorerUrl } from '@/lib/rhc';
+import { POOLLAUNCH_FACTORY, POOLLAUNCH_FACTORY_V4, POOLLAUNCH_FACTORY_V5, POOLLAUNCH_FACTORY_V6, POOLLAUNCH_FACTORY_V7, LEG_DEPLOYER_V3, PONS_FACTORY, AIRDROP_OPERATOR, V8_LIVE, explorerUrl } from '@/lib/rhc';
 import { EQUITY_ROUTER } from '@/lib/rhcEquity';
 
 const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
@@ -190,12 +190,12 @@ export default function RhcDocsPage() {
                 { icon: Undo2Icon, color: 'text-[var(--error)]', title: 'Withdraw Anytime Pre-Launch', desc: 'Full-amount withdrawal until the moment of launch, no fee, no permission. It\'s a contract function — the platform can\'t block it.' },
                 { icon: Key, color: 'text-[var(--warning)]', title: 'Creator Holds 0%', desc: 'The Campaign contract is the pons creator. The pooled buy lands in the contract and is claimable only pro-rata by backers.' },
                 { icon: Zap, color: 'text-[var(--success)]', title: 'Same Price For Everyone', desc: 'One atomic pooled buy at launch, snipe-exempt on the launch block. Every backer enters at the identical price.' },
-                { icon: WalletIcon, color: 'text-[var(--accent-gold)]', title: 'Claim Tokens + Fees', desc: 'After launch, claim your token share once, then claim your fee share whenever you like — the backer share of the creator tax on every trade (up to 90% on today\u2019s factory and 50\u201360% on the flywheel factory, in both cases less any bot legs the creator stacked) flows to backers pro-rata, in ETH, forever. Pull-based: your money waits for you in the contract.' },
+                { icon: WalletIcon, color: 'text-[var(--accent-gold)]', title: 'Claim Tokens + Fees', desc: 'After launch, claim your token share once, then claim your fee share whenever you like — the backer share of the creator tax on every trade (' + (V8_LIVE ? 'up to 60% after the fixed 30% $PLAUNCH burn and 10% platform legs' : 'up to 90% on today\u2019s factory and 50\u201360% on the flywheel factory') + ', less any bot legs the creator stacked) flows to backers pro-rata, in ETH, forever. Pull-based: your money waits for you in the contract.' },
                 { icon: Landmark, color: 'text-[var(--accent)]', title: 'Fees in Stock, If the Creator Says So', desc: 'Creators can set the payout asset to a tokenized stock. Your ETH fee share is swapped through the Uniswap v4 pool on the way to your wallet, in the same transaction you claim — the contract never holds the shares. Plain ETH is always one click away as the safety hatch.' },
                 { icon: Eye, color: 'text-[var(--success)]', title: 'The Roster Shows Who Is Still In', desc: 'Every backer wallet, its stake, and after launch its live token balance against what it was allocated. Read from the contract, not self-reported. If a genesis wallet sold, everyone can see it.' },
                 { icon: MessageCircle, color: 'text-[var(--muted)]', title: 'Chat With the Room', desc: 'Every campaign page has a chat. One wallet signature to post; the server verifies every message came from the wallet it says.' },
-                { icon: Lock, color: 'text-[var(--accent-gold)]', title: 'Lock Your Seat, Earn More (next contract generation)', desc: 'Pick a lock when you take a seat — 3 months to 2 years after launch. Your tokens stay in the campaign contract until then, visible to every backer before launch; only ever extendable, and nobody can shorten it, including us. Locking pays: six months weights your fee share ×1.25, a year or more ×1.5, out of the same pool sellers forfeit. Tokens are not weighted, only fees. Built and tested, ships with v8.' },
-                { icon: TrendingUp, color: 'text-[var(--error)]', title: 'Sell and You Stop Earning (next contract generation)', desc: 'Your fee share follows the tokens: sell half, earn half; sell all and your share buys and burns $PLAUNCH. Locked and unclaimed tokens count as held. Built and tested, ships with v8.' },
+                { icon: Lock, color: 'text-[var(--accent-gold)]', title: 'Lock Your Seat, Earn More' + (V8_LIVE ? '' : ' (next contract generation)'), desc: 'Pick a lock when you take a seat — 3 months to 2 years after launch. Your tokens stay in the campaign contract until then, visible to every backer before launch; only ever extendable, and nobody can shorten it, including us. Locking pays: six months weights your fee share ×1.25, a year or more ×1.5, out of the same pool sellers forfeit. Tokens are not weighted, only fees.' + (V8_LIVE ? '' : ' Built and tested, ships with v8.') },
+                { icon: TrendingUp, color: 'text-[var(--error)]', title: 'Sell and You Stop Earning' + (V8_LIVE ? '' : ' (next contract generation)'), desc: 'Your fee share follows the tokens: sell half, earn half; sell all and your share buys and burns $PLAUNCH. Locked and unclaimed tokens count as held.' + (V8_LIVE ? '' : ' Built and tested, ships with v8.') },
                 { icon: TrendingUp, color: 'text-[var(--success)]', title: 'Refunds Are Automatic Law', desc: 'Goal unmet by the deadline plus a 3-day grace window → refunds open unconditionally. No support ticket, no discretion — code.' },
               ].map((item, i) => {
                 const Icon = item.icon;
@@ -342,16 +342,17 @@ export default function RhcDocsPage() {
                 <TrendingUp className="w-5 h-5 text-[var(--accent)]" /> Stacking + budget
               </h3>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                Bots are carved from the backer share. The fixed legs (today: platform 7% + a retired 3% leg
-                that pays nobody; on the flywheel factory: $PLAUNCH burn 30% + platform 10%) never move; you design the rest:
+                Bots are carved from the backer share. {V8_LIVE
+                  ? 'The fixed legs ($PLAUNCH burn 30% + platform 10%) never move; you design the rest:'
+                  : 'The fixed legs (today: platform 7% + a retired 3% leg that pays nobody; on the flywheel factory: $PLAUNCH burn 30% + platform 10%) never move; you design the rest:'}
               </p>
               <div className="bg-[var(--background)] border border-[var(--border)] p-4 font-mono text-xs space-y-1">
-                <div>BURN ............ 20%</div>
-                <div>POOL FEEDER ..... 10%</div>
-                <div>VAULT (Marketing) 10%</div>
-                <div className="border-t border-[var(--border)] pt-1 mt-1">Total bots ...... 40%</div>
-                <div className="text-[var(--accent)]">Backers ......... 50%</div>
-                <div className="text-[var(--muted)]">Platform ........ 7% · Retired leg 3% (pays nobody)</div>
+                <div>BURN ............ {V8_LIVE ? '10%' : '20%'}</div>
+                <div>POOL FEEDER ..... {V8_LIVE ? ' 5%' : '10%'}</div>
+                <div>VAULT (Marketing) {V8_LIVE ? ' 5%' : '10%'}</div>
+                <div className="border-t border-[var(--border)] pt-1 mt-1">Total bots ...... {V8_LIVE ? '20%' : '40%'}</div>
+                <div className="text-[var(--accent)]">Backers ......... {V8_LIVE ? '40%' : '50%'}</div>
+                <div className="text-[var(--muted)]">{V8_LIVE ? '$PLAUNCH burn ... 30% · Platform 10%' : 'Platform ........ 7% · Retired leg 3% (pays nobody)'}</div>
               </div>
               <ul className="text-sm text-[var(--muted)] space-y-1 pl-4 pt-2">
                 <li>· One BURN + one POOL FEEDER per campaign; up to 3 vault-type legs.</li>
@@ -418,8 +419,8 @@ export default function RhcDocsPage() {
                 campaign page&apos;s claim button does that for you as its first signature.
               </p>
               <div className="bg-[var(--background)] border-2 border-[var(--accent-gold)]/50 p-4 mt-4">
-                <h3 className="font-bold mb-1 uppercase tracking-wide text-[var(--accent-gold)]">The Flywheel Split — every launch after $PLAUNCH</h3>
-                <p className="text-xs text-[var(--muted)] mb-3">Two legs will be fixed in the factory and immutable in every campaign it creates. Backers get the rest. Shown on the Flywheel preset (10% coin burn).</p>
+                <h3 className="font-bold mb-1 uppercase tracking-wide text-[var(--accent-gold)]">The Flywheel Split — {V8_LIVE ? 'every launch' : 'every launch after $PLAUNCH'}</h3>
+                <p className="text-xs text-[var(--muted)] mb-3">{V8_LIVE ? 'Two legs are fixed in the factory and immutable in every campaign it creates.' : 'Two legs will be fixed in the factory and immutable in every campaign it creates.'} Backers get the rest. Shown on the Flywheel preset (10% coin burn).</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between p-2 bg-[var(--success)]/10">
                     <span className="text-[var(--success)] font-bold">Backers, weighted by stake and lock (50%)</span>
@@ -440,12 +441,12 @@ export default function RhcDocsPage() {
                 </div>
                 <p className="text-xs text-[var(--muted)] mt-3 leading-relaxed">
                   Backer Max preset: no coin burn, backers 60%. Burn Heavy: coin burn 30%, backers 30%.
-                  Every creation fee and every share a seller forfeits will go to the $PLAUNCH burn on top of the 30%.
+                  Every creation fee and every share a seller forfeits {V8_LIVE ? 'goes' : 'will go'} to the $PLAUNCH burn on top of the 30%.
                 </p>
               </div>
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 mt-4">
-                <h3 className="font-bold mb-1 uppercase tracking-wide">Today&apos;s factory (v7) — until $PLAUNCH launches</h3>
-                <p className="text-xs text-[var(--muted)] mb-3">Campaigns created before the flywheel factory keep these terms forever; $PLAUNCH itself launches on this one.</p>
+                <h3 className="font-bold mb-1 uppercase tracking-wide">{V8_LIVE ? 'The previous factory (v7)' : 'Today\u2019s factory (v7) — until $PLAUNCH launches'}</h3>
+                <p className="text-xs text-[var(--muted)] mb-3">Campaigns created before the flywheel factory keep these terms forever; $PLAUNCH itself {V8_LIVE ? 'launched' : 'launches'} on this one.</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between p-2 bg-[var(--success)]/10">
                     <span className="text-[var(--success)] font-bold">Backers, pro-rata to the raise (90%)</span>
@@ -489,7 +490,7 @@ export default function RhcDocsPage() {
                   <li>· <strong className="text-[var(--foreground)]">Locking pays.</strong> A seat locked six months earns fees at ×1.25, a year or more at ×1.5, out of the backer pool. Locks are measured from launch and frozen with their weight the moment the token exists.</li>
                   <li>· <strong className="text-[var(--foreground)]">Judged once.</strong> Anyone can call settle() on a wallet that sold, locking its forfeiture in. Buying back right before a claim recovers nothing that accrued while you were out. Fees judged while you held are banked and stay yours.</li>
                   <li>· <strong className="text-[var(--foreground)]">Held means held.</strong> Tokens still in the campaign, unclaimed or locked, count as held.</li>
-                  <li>· <strong className="text-[var(--foreground)]">Status:</strong> built, fork-tested against live pons, not yet deployed. The order is fixed: $PLAUNCH launches first on the current factory, then the burner (it needs the token's address), then v8.</li>
+                  <li>· <strong className="text-[var(--foreground)]">Status:</strong> {V8_LIVE ? 'live. $PLAUNCH launched on the previous factory, then the burner (it needs the token\u2019s address), then v8 — in that order, because each needs the one before it.' : 'built, fork-tested against live pons, not yet deployed. The order is fixed: $PLAUNCH launches first on the current factory, then the burner (it needs the token\u2019s address), then v8.'}</li>
                 </ul>
               </div>
             </section>
@@ -623,8 +624,8 @@ export default function RhcDocsPage() {
                 { q: 'What happens if pons rotates its factory?', a: 'Existing campaigns are unaffected — each pins the pons factory address it was created with. New campaigns launch through whatever factory the UI currently targets; a health sensor watches for rotations.' },
                 { q: 'Can I get my fees paid in stock?', a: 'Yes. If the creator set a payout asset, the claim button shows your share quoted in that stock and swaps your ETH into it in the same transaction, straight from the Uniswap v4 pool to your wallet. You can always take ETH instead. The contract never holds shares.' },
                 { q: 'What does the lock do?', a: 'A lock is a date you choose when you take a seat. Your tokens stay in the campaign contract until then and the claim function refuses to release them earlier. It is visible on the roster before launch, can only be extended, and nobody — including us — can shorten it. Locked tokens still earn your full fee share. Ships with the v8 contracts.' },
-                { q: 'Do backers who sell keep earning fees?', a: 'On the current contracts, yes — the split is fixed at launch. On v8 (built and tested, not yet deployed) the fee stream follows the tokens: sell half, earn half; sell all and your share buys and burns $PLAUNCH. The roster already shows every backer\u2019s live hold so you can see who sold.' },
-                { q: 'What does $PLAUNCH do?', a: 'Nothing is paid to holders. Supply will shrink: 30% of every campaign\u2019s creator tax, every creation fee and every seller\u2019s forfeited share will buy $PLAUNCH and send it to the dead address, through an ownerless contract anyone can crank. Holding $PLAUNCH will also waive the creation fee once that hook is armed. None of this is live yet: the burner deploys after $PLAUNCH launches, and every counter reads zero until then.' },
+                { q: 'Do backers who sell keep earning fees?', a: V8_LIVE ? 'Not on the flywheel factory. The fee stream follows the tokens: sell half, earn half; sell all and your share buys and burns $PLAUNCH. Locked and unclaimed tokens count as held. Campaigns from the previous factory keep their fixed split. The roster shows every backer\u2019s live hold.' : 'On the current contracts, yes — the split is fixed at launch. On v8 (built and tested, not yet deployed) the fee stream follows the tokens: sell half, earn half; sell all and your share buys and burns $PLAUNCH. The roster already shows every backer\u2019s live hold so you can see who sold.' },
+                { q: 'What does $PLAUNCH do?', a: V8_LIVE ? 'Nothing is paid to holders. Supply shrinks: 30% of every campaign\u2019s creator tax, every creation fee and every seller\u2019s forfeited share buys $PLAUNCH and sends it to the dead address, through an ownerless contract anyone can crank. The burn counters are on the board and on every campaign page, read live from the chain.' : 'Nothing is paid to holders. Supply will shrink: 30% of every campaign\u2019s creator tax, every creation fee and every seller\u2019s forfeited share will buy $PLAUNCH and send it to the dead address, through an ownerless contract anyone can crank. Holding $PLAUNCH will also waive the creation fee once that hook is armed. None of this is live yet: the burner deploys after $PLAUNCH launches, and every counter reads zero until then.' },
                 { q: 'Is the roster self-reported?', a: 'No. The wallet list comes from the campaign contract\u2019s deposit events and every number — stake, hold, fees claimed, fees pending — is a live read from the contract. The chat is the only thing on the page that lives off-chain, and every message is wallet-signed.' },
                 { q: 'Is this the same platform as the Solana site?', a: 'Same team, same pooled-launch model, different chain and a different token. Solana promises are kept operationally and its token is $PROOF; Robinhood Chain promises are kept by ownerless contracts and its token is $PLAUNCH. The two never share a fee stream. The Solana site is at sol.prooflaunch.fun.' },
               ].map((faq, i) => (

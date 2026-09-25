@@ -6,7 +6,7 @@
 // chain through /api/rhc/flywheel; zeros before $PLAUNCH launches.
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { PROOF_BURNER_LIVE } from '@/lib/rhc';
+import { PROOF_BURNER_LIVE, V8_LIVE } from '@/lib/rhc';
 import type { FlywheelFeed } from '../api/rhc/flywheel/route';
 
 const tok = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -45,7 +45,7 @@ export function RhcHero() {
       </h1>
       <p className="mt-5 sm:mt-6 max-w-2xl font-mono uppercase tracking-[0.15em] text-[var(--muted)]"
          style={{ fontSize: 'clamp(0.875rem, 1.4vw, 1rem)' }}>
-        Built so every trade burns <span className="text-[var(--accent-gold)]">$PLAUNCH</span>.
+        {V8_LIVE ? 'Every trade burns' : 'Built so every trade burns'} <span className="text-[var(--accent-gold)]">$PLAUNCH</span>.
       </p>
 
       {/* The flywheel, in the hero's stat tiles */}
@@ -57,7 +57,7 @@ export function RhcHero() {
           <Stat value={ready ? pending.toFixed(3) : '0'} unit="ETH" label="Waiting to burn" color="var(--success)" />
         </div>
         <div className="mt-4 text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--muted)]">
-          <span className="text-[var(--accent-gold)]">30%</span> of every launch&apos;s creator tax, from the flywheel factory onward ·{' '}
+          <span className="text-[var(--accent-gold)]">30%</span> of every launch&apos;s creator tax{!V8_LIVE && ', from the flywheel factory onward'} ·{' '}
           <Link href="/rhc/flywheel" className="text-[var(--accent)] hover:text-[var(--accent-hover)]">full flywheel →</Link>
         </div>
       </div>
