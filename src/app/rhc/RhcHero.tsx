@@ -3,7 +3,7 @@
 // The RHC hero — the SOL LandingHero's chip row, glow headline, stat
 // tiles and CTA, with the flywheel as the content. The headline is one
 // short line (no typewriter); the four tiles are the burn, read from the
-// chain through /api/rhc/flywheel; zeros before $PROOF launches.
+// chain through /api/rhc/flywheel; zeros before $PLAUNCH launches.
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PROOF_BURNER_LIVE } from '@/lib/rhc';
@@ -45,15 +45,15 @@ export function RhcHero() {
       </h1>
       <p className="mt-5 sm:mt-6 max-w-2xl font-mono uppercase tracking-[0.15em] text-[var(--muted)]"
          style={{ fontSize: 'clamp(0.875rem, 1.4vw, 1rem)' }}>
-        Every trade burns <span className="text-[var(--accent-gold)]">$PROOF</span>.
+        Every trade burns <span className="text-[var(--accent-gold)]">$PLAUNCH</span>.
       </p>
 
       {/* The flywheel, in the hero's stat tiles */}
       <div className="mt-10 sm:mt-14 w-full max-w-4xl">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-2 gap-y-6 sm:gap-x-6">
-          <Stat value={ready ? tok(dead) : '0'} unit="$PROOF" label="Burned" color="var(--accent-gold)" />
+          <Stat value={ready ? tok(dead) : '0'} unit="$PLAUNCH" label="Burned" color="var(--accent-gold)" />
           <Stat value={ready ? pct.toFixed(3) : '0.000'} unit="%" label="Of supply gone" color="var(--accent-gold)" />
-          <Stat value={ready ? spent.toFixed(3) : '0'} unit="ETH" label="Burned into $PROOF" color="var(--accent)" />
+          <Stat value={ready ? spent.toFixed(3) : '0'} unit="ETH" label="Burned into $PLAUNCH" color="var(--accent)" />
           <Stat value={ready ? pending.toFixed(3) : '0'} unit="ETH" label="Waiting to burn" color="var(--success)" />
         </div>
         <div className="mt-4 text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--muted)]">

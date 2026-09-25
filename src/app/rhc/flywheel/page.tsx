@@ -1,6 +1,6 @@
 'use client';
 
-// The $PROOF flywheel, in full. Everything here is a chain read through
+// The $PLAUNCH flywheel, in full. Everything here is a chain read through
 // /api/rhc/flywheel: the burner's counters, the dead address, every burn
 // by day, which launches fed it, who cranked it. Before the burner exists
 // the page explains the mechanism and shows the shape of what will fill
@@ -45,7 +45,7 @@ export default function FlywheelPage() {
   // series
   let cum = 0;
   const cumulative = (f?.daily ?? []).map((d) => { cum += n(d.tokens); return { x: 0, y: cum, label: day(d.day), sub: `${d.count} burn${d.count === 1 ? '' : 's'}` }; });
-  const perDay = (f?.daily ?? []).map((d) => ({ x: 0, y: n(d.eth), label: day(d.day), sub: `${tok(n(d.tokens))} $PROOF` }));
+  const perDay = (f?.daily ?? []).map((d) => ({ x: 0, y: n(d.eth), label: day(d.day), sub: `${tok(n(d.tokens))} $PLAUNCH` }));
   const sources = [{ label: 'campaign fee legs + forfeits', value: pulled, color: SERIES }, { label: 'creation fees', value: fees, color: SERIES_2 }];
   const srcTotal = Math.max(1e-12, pulled + fees);
   const myCranks = me && f?.crankers ? (f.crankers.find((c) => c.wallet.toLowerCase() === me.toLowerCase())?.cranks ?? 0) : 0;
@@ -60,14 +60,14 @@ export default function FlywheelPage() {
       {/* hero */}
       <div className="border border-[var(--accent-gold)]/60 bg-[var(--card)]">
         <div className="flex items-center justify-between border-b border-[var(--accent-gold)]/40 px-3 py-1.5">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">{'// '}THE $PROOF FLYWHEEL</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">{'// '}THE $PLAUNCH FLYWHEEL</span>
           {PROOF_BURNER_LIVE
             ? <a href={explorerUrl(PROOF_BURNER)} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)]">burner contract ↗</a>
-            : <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">begins with the $PROOF launch</span>}
+            : <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">begins with the $PLAUNCH launch</span>}
         </div>
         <div className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-6 items-center">
           <div>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">$PROOF that no longer exists</div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">$PLAUNCH that no longer exists</div>
             <div className="font-sans font-semibold text-5xl sm:text-6xl text-[var(--accent-gold)] leading-none mt-2 tabular-nums">{dash(tok(dead))}</div>
             <div className="mt-3 h-3 border border-[var(--accent-gold)]/40 bg-[var(--background)] overflow-hidden">
               <div className="h-full" style={{ width: `${Math.min(100, pct)}%`, background: SERIES, transition: 'width .9s' }} />
@@ -79,7 +79,7 @@ export default function FlywheelPage() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             {[
-              ['ETH burned into $PROOF', dash(`${spent.toFixed(4)} ETH`)],
+              ['ETH burned into $PLAUNCH', dash(`${spent.toFixed(4)} ETH`)],
               ['collected from campaigns', dash(`${pulled.toFixed(4)} ETH`)],
               ['waiting to burn', dash(`${pending.toFixed(4)} ETH`)],
               ['burns so far', dash(String(f?.totalBurns ?? 0))],
@@ -93,7 +93,7 @@ export default function FlywheelPage() {
         </div>
         <div className="px-4 sm:px-6 pb-4 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-mono text-[var(--muted)] max-w-2xl leading-relaxed">
-            Every launch on this site carries a fixed <span className="text-[var(--accent-gold)]">30% $PROOF burn leg</span> on its creator tax. Every creation fee and every share a seller forfeits burns too.
+            Every launch on this site carries a fixed <span className="text-[var(--accent-gold)]">30% $PLAUNCH burn leg</span> on its creator tax. Every creation fee and every share a seller forfeits burns too.
             An ownerless contract does the buying: pons curve before graduation, Uniswap v4 after, 0.2 ETH per crank, one crank per block. Anyone can crank it; nobody can stop it or point it anywhere else.
           </p>
           {live && isConnected && pendingWei > 0n && (
@@ -110,7 +110,7 @@ export default function FlywheelPage() {
         <div className="mt-4 border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
           <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-3">{'// '}HOW IT WILL RUN</div>
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-[10px] font-mono uppercase tracking-widest">
-            {['A trade on any ProofLaunch token', 'creator tax (0–10%, set at creation)', '30% → the burner, fixed', '$PROOF bought on-chain', 'sent to 0x…dEaD'].map((t, i) => (
+            {['A trade on any ProofLaunch token', 'creator tax (0–10%, set at creation)', '30% → the burner, fixed', '$PLAUNCH bought on-chain', 'sent to 0x…dEaD'].map((t, i) => (
               <div key={t} className="border border-[var(--border)] bg-[var(--background)] px-3 py-2 flex items-center gap-2"><span className="text-[var(--accent-gold)]">{i + 1}</span><span className="text-[var(--foreground)] normal-case tracking-normal">{t}</span></div>
             ))}
           </div>
@@ -119,8 +119,8 @@ export default function FlywheelPage() {
       )}
 
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DashboardCard label="$PROOF BURNED, CUMULATIVE" meta={live ? `${tok(n(f?.burnedByFlywheel))} via the flywheel` : undefined}>
-          {live ? <AreaChart pts={cumulative} unit="$PROOF" /> : <div className="h-40 flex items-center justify-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">fills in from the first burn</div>}
+        <DashboardCard label="$PLAUNCH BURNED, CUMULATIVE" meta={live ? `${tok(n(f?.burnedByFlywheel))} via the flywheel` : undefined}>
+          {live ? <AreaChart pts={cumulative} unit="$PLAUNCH" /> : <div className="h-40 flex items-center justify-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">fills in from the first burn</div>}
         </DashboardCard>
         <DashboardCard label="ETH BURNED PER DAY" meta={live ? `${(f?.daily ?? []).length} days` : undefined}>
           {live ? <Columns pts={perDay} unit="ETH" /> : <div className="h-40 flex items-center justify-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">fills in from the first burn</div>}
@@ -156,7 +156,7 @@ export default function FlywheelPage() {
         <DashboardCard label="EVERY BURN" meta={live ? `last ${(f?.burns ?? []).length}` : undefined} noBodyPadding>
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono">
-              <thead><tr className="border-b border-[var(--border)]">{['when', 'ETH in', '$PROOF burned', 'route', 'cranked by', 'tx'].map((h) => <th key={h} className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-[var(--muted)]">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-[var(--border)]">{['when', 'ETH in', '$PLAUNCH burned', 'route', 'cranked by', 'tx'].map((h) => <th key={h} className="text-left py-2 px-3 text-[10px] uppercase tracking-widest text-[var(--muted)]">{h}</th>)}</tr></thead>
               <tbody>
                 {live && (f?.burns ?? []).length ? (f!.burns!.map((b) => (
                   <tr key={b.tx} className="border-b border-[var(--border)]/50">

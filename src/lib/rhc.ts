@@ -65,7 +65,7 @@ export const PROOF_BURNER_LIVE = PROOF_BURNER !== '0x000000000000000000000000000
 /// The two fixed legs on every campaign's creator tax: PROOF burn 30 +
 /// platform 10 (founder, 2026-09-22). This is THE model the site shows,
 /// including in the days before v8 exists — the only campaign meant to be
-/// created on v7 in that window is $PROOF's own, and the create page says
+/// created on v7 in that window is $PLAUNCH's own, and the create page says
 /// so out loud (FIXED_LEGS_NOTE). Backers get the remainder after the
 /// creator's optional legs.
 /// Founder decision 2026-09-22: every launch pays these two before anything
@@ -73,7 +73,7 @@ export const PROOF_BURNER_LIVE = PROOF_BURNER !== '0x000000000000000000000000000
 /// so out loud (FIXED_LEGS_NOTE). Backers get the remainder after the
 /// creator's optional legs.
 export const FIXED_LEGS_PCT = { burn: 30, platform: 10, rewards: 0, total: 40 } as const;
-export const FIXED_LEGS_NOTE = V8_LIVE ? '' : "Until $PROOF launches, today's factory still carries 7% platform + 3% (retired) instead — the flywheel legs replace them the moment it does.";
+export const FIXED_LEGS_NOTE = V8_LIVE ? '' : "Until $PLAUNCH launches, today's factory still carries 7% platform + 3% (retired) instead — the flywheel legs replace them the moment it does.";
 export const ACTIVE_FACTORY = V8_LIVE ? POOLLAUNCH_FACTORY_V8 : POOLLAUNCH_FACTORY_V7;
 
 export const proofBurnerAbi = parseAbi([

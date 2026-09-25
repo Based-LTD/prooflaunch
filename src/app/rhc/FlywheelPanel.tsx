@@ -2,7 +2,7 @@
 
 // The flywheel you can watch. A spoked wheel that turns faster when ETH
 // is waiting to burn, numbers that count up when they change, a bar of
-// $PROOF supply that no longer exists, and a tape of the last burns each
+// $PLAUNCH supply that no longer exists, and a tape of the last burns each
 // linking to its transaction. Before the burner exists the tape scrolls
 // the mechanism itself so the panel is alive from day one. Every number
 // comes from /api/rhc/flywheel, which reads the chain; nothing is
@@ -72,7 +72,7 @@ function Wheel({ speed, live }: { speed: number; live: boolean }) {
 
 // One moving thing on the panel (the wheel). Everything else holds still:
 // a five-step flow strip before launch, the last three burns after.
-const FLOW = ['a trade', 'creator tax', '30% → burner', '$PROOF bought', 'burned'];
+const FLOW = ['a trade', 'creator tax', '30% → burner', '$PLAUNCH bought', 'burned'];
 
 export function FlywheelPanel({ compact = false, strip = false }: { compact?: boolean; strip?: boolean }) {
   const [f, setF] = useState<FlywheelFeed | null>(null);
@@ -121,7 +121,7 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-3 flex-wrap">
               <span className="font-mono text-3xl sm:text-4xl text-[var(--accent-gold)] leading-none tabular-nums">{PROOF_BURNER_LIVE ? (f ? tok(deadA) : '…') : '0'}</span>
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">$PROOF burned · {PROOF_BURNER_LIVE && f ? pctA.toFixed(3) : '0.000'}% of supply</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">$PLAUNCH burned · {PROOF_BURNER_LIVE && f ? pctA.toFixed(3) : '0.000'}% of supply</span>
             </div>
             <div className="mt-2 h-1.5 border border-[var(--accent-gold)]/40 bg-[var(--background)] overflow-hidden">
               <div className="h-full bg-[var(--accent-gold)] fw-bar" style={{ width: `${Math.min(100, pctA)}%` }} />
@@ -158,9 +158,9 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
   return (
     <div className={`border border-[var(--accent-gold)]/60 bg-[var(--card)] overflow-hidden ${flash ? 'fw-flash' : ''}`}>
       <div className="flex items-center justify-between border-b border-[var(--accent-gold)]/40 px-3 py-1.5">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">{'// '}FLYWHEEL — fees → burned $PROOF</span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">{'// '}FLYWHEEL — fees → burned $PLAUNCH</span>
         <span className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-          {!PROOF_BURNER_LIVE && <span>begins with the $PROOF launch</span>}
+          {!PROOF_BURNER_LIVE && <span>begins with the $PLAUNCH launch</span>}
           <Link href="/rhc/flywheel" className="text-[var(--accent)] hover:text-[var(--accent-hover)]">full flywheel →</Link>
         </span>
       </div>
@@ -169,7 +169,7 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <Wheel speed={speed} live={PROOF_BURNER_LIVE && pending > 0} />
           <div className="flex-1 min-w-0">
-            <div className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">$PROOF that no longer exists</div>
+            <div className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">$PLAUNCH that no longer exists</div>
             <div className="font-mono text-3xl sm:text-4xl text-[var(--accent-gold)] leading-none mt-1 tabular-nums">
               {PROOF_BURNER_LIVE ? (f ? tok(deadA) : '…') : '—'}
             </div>
@@ -185,7 +185,7 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
 
         <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
-            ['ETH burned into $PROOF', PROOF_BURNER_LIVE && f ? `${eth(spentA)} ETH` : '— ETH', 'var(--foreground)', 'spent'],
+            ['ETH burned into $PLAUNCH', PROOF_BURNER_LIVE && f ? `${eth(spentA)} ETH` : '— ETH', 'var(--foreground)', 'spent'],
             ['Collected from campaigns', PROOF_BURNER_LIVE && f ? `${eth(pulledA)} ETH` : '— ETH', 'var(--muted)', 'pulled'],
             ['Waiting to burn', PROOF_BURNER_LIVE && f ? `${eth(pendingA)} ETH` : '— ETH', 'var(--success)', 'pending'],
             ['Fixed legs, every launch', '30% burn · 10% platform', 'var(--accent-gold)', 'legs'],
@@ -202,7 +202,7 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
             {recent.map((b) => (
               <a key={b.tx} href={`https://robinhoodchain.blockscout.com/tx/${b.tx}`} target="_blank" rel="noopener noreferrer"
                 className="flex flex-wrap items-baseline justify-between gap-x-3 text-[10px] font-mono uppercase tracking-widest hover:text-[var(--accent)]">
-                <span><span className="text-[var(--accent-gold)]">🔥 {tok(Number(b.tokens) / 1e18)} $PROOF</span> <span className="text-[var(--muted)]">for {eth(Number(b.ethIn) / 1e18)} ETH · {b.viaCurve ? 'curve' : 'v4'}</span></span>
+                <span><span className="text-[var(--accent-gold)]">🔥 {tok(Number(b.tokens) / 1e18)} $PLAUNCH</span> <span className="text-[var(--muted)]">for {eth(Number(b.ethIn) / 1e18)} ETH · {b.viaCurve ? 'curve' : 'v4'}</span></span>
                 <span className="text-[var(--muted)]">{ago(b.ts)}</span>
               </a>
             ))}

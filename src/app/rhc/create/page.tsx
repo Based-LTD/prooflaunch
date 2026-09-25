@@ -458,7 +458,7 @@ export default function CreateCampaignPage() {
     ['creator tax', `${taxPct}% · traders pay ${(Number(taxPct) + 1).toFixed(Number(taxPct) % 1 ? 1 : 0)}% with pons' 1%`],
     ['fee payout', payoutName],
     ['coin burn', `${burnPct}% of the fee stream buys and burns $${f.symbol.trim().toUpperCase() || 'YOUR TOKEN'}${presetName === 'Custom' ? '' : ` — the ${presetName} preset`}`, burnPct === 0],
-    ['rest of stack', `${botsPct - burnPct}% other bots · ${backerPct}% backers · ${FIXED_LEGS_PCT.total}% fixed (${FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn}% $PROOF burn + ${FIXED_LEGS_PCT.platform}% platform` : `${FIXED_LEGS_PCT.platform}% platform + ${FIXED_LEGS_PCT.rewards}% retired`})`],
+    ['rest of stack', `${botsPct - burnPct}% other bots · ${backerPct}% backers · ${FIXED_LEGS_PCT.total}% fixed (${FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn}% $PLAUNCH burn + ${FIXED_LEGS_PCT.platform}% platform` : `${FIXED_LEGS_PCT.platform}% platform + ${FIXED_LEGS_PCT.rewards}% retired`})`],
     ['deadline', `${f.days} days`],
   ];
 
@@ -1228,7 +1228,7 @@ export default function CreateCampaignPage() {
                   </div>
                   <p className="text-xs font-mono text-[var(--muted)] leading-relaxed max-w-md">
                     {FIXED_LEGS_PCT.burn > 0 ? (
-                      <>Two legs are fixed and never move: <span className="text-[var(--accent-gold)]">{FIXED_LEGS_PCT.burn}% buys and burns $PROOF</span>, {FIXED_LEGS_PCT.platform}% platform. </>
+                      <>Two legs are fixed and never move: <span className="text-[var(--accent-gold)]">{FIXED_LEGS_PCT.burn}% buys and burns $PLAUNCH</span>, {FIXED_LEGS_PCT.platform}% platform. </>
                     ) : (
                       <>{FIXED_LEGS_PCT.total}% is fixed and never moves: {FIXED_LEGS_PCT.platform}% platform, {FIXED_LEGS_PCT.rewards}% retired holder-rewards. </>
                     )}
@@ -1255,7 +1255,7 @@ export default function CreateCampaignPage() {
                         <span className="text-[var(--muted)]">/</span>
                         {FIXED_LEGS_PCT.burn > 0 && (
                           <>
-                            <span className="text-[var(--accent-gold)]">$PROOF burn {FIXED_LEGS_PCT.burn}%</span>
+                            <span className="text-[var(--accent-gold)]">$PLAUNCH burn {FIXED_LEGS_PCT.burn}%</span>
                             <span className="text-[var(--muted)]">/</span>
                           </>
                         )}
@@ -1268,7 +1268,7 @@ export default function CreateCampaignPage() {
                     <div className="flex h-1.5 mt-1.5 border border-[var(--border)] overflow-hidden">
                       <div className="bg-[var(--accent)]" style={{ width: `${Math.min(botsPct, budget)}%` }} title={`Bots ${botsPct}%`} />
                       <div className="bg-[var(--success)]/70" style={{ width: `${backerPct}%` }} title={`Backers ${backerPct}%`} />
-                      {FIXED_LEGS_PCT.burn > 0 && <div className="bg-[var(--accent-gold)]/80" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} title={`$PROOF burn ${FIXED_LEGS_PCT.burn}%`} />}
+                      {FIXED_LEGS_PCT.burn > 0 && <div className="bg-[var(--accent-gold)]/80" style={{ width: `${FIXED_LEGS_PCT.burn}%` }} title={`$PLAUNCH burn ${FIXED_LEGS_PCT.burn}%`} />}
                       <div className="bg-[var(--muted)]/60" style={{ width: `${FIXED_LEGS_PCT.total - FIXED_LEGS_PCT.burn}%` }} title={`Fixed ${FIXED_LEGS_PCT.total - FIXED_LEGS_PCT.burn}%`} />
                     </div>
                   </div>
@@ -1596,7 +1596,7 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
               <div className="text-[var(--foreground)]">{backerPct}%</div>
             </div>
             <div>
-              <div className="text-[var(--muted)]">{FIXED_LEGS_PCT.burn > 0 ? '$PROOF burn + Platform' : 'Platform + retired'}</div>
+              <div className="text-[var(--muted)]">{FIXED_LEGS_PCT.burn > 0 ? '$PLAUNCH burn + Platform' : 'Platform + retired'}</div>
               <div className="text-[var(--foreground)]">{FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn} + ${FIXED_LEGS_PCT.platform}` : `${FIXED_LEGS_PCT.platform} + ${FIXED_LEGS_PCT.rewards}`}%</div>
             </div>
           </div>

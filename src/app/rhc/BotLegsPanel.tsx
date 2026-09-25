@@ -4,7 +4,7 @@
 // Chain. Every leg on the campaign's splitter is read live: what it has
 // pulled, what it has done (burned / added as liquidity), what is waiting
 // for it, and a crank button, since anyone may run them. The platform and
-// $PROOF-burn legs are named; named vault wallets show as vaults.
+// $PLAUNCH-burn legs are named; named vault wallets show as vaults.
 import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 import { rhcPublicClient, splitterAbi, fmtEth, explorerUrl, robinhoodChain, PROOF_BURNER, PROOF_BURNER_LIVE } from '@/lib/rhc';
@@ -22,7 +22,7 @@ const legAbi = [
 type Kind = 'burn' | 'feeder' | 'proofburn' | 'platform' | 'vault';
 interface Leg { addr: `0x${string}`; bps: number; kind: Kind; owed: bigint; ethSpent?: bigint; burned?: bigint; adds?: bigint; deployed?: bigint; ethBal: bigint }
 
-const LABEL: Record<Kind, string> = { burn: '🔥 BURN', feeder: '🌊 POOL FEEDER', proofburn: '🔥 $PROOF BURN', platform: 'PLATFORM', vault: '🏦 VAULT' };
+const LABEL: Record<Kind, string> = { burn: '🔥 BURN', feeder: '🌊 POOL FEEDER', proofburn: '🔥 $PLAUNCH BURN', platform: 'PLATFORM', vault: '🏦 VAULT' };
 
 export function BotLegsPanel({ splitter, feeAsset, symbol, launched, refreshKey }: { splitter: `0x${string}`; feeAsset: `0x${string}`; symbol: string; launched: boolean; refreshKey: string }) {
   const [legs, setLegs] = useState<Leg[] | null>(null);

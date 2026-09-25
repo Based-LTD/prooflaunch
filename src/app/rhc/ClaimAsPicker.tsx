@@ -34,7 +34,7 @@ interface Props {
   preferred?: `0x${string}`;
   /// Campaign pages pass false: the creator chose the payout, so the only
   /// alternative offered is ETH (the safety hatch if the pool/router can't
-  /// fill). The full pick-any-stock menu is for the $PROOF vault, where
+  /// fill). The full pick-any-stock menu is for the $PLAUNCH vault, where
   /// there is no creator to defer to.
   allowOtherAssets?: boolean;
   onClaimEth: () => void;

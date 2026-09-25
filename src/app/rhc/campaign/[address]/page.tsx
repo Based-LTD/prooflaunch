@@ -982,7 +982,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">{(s.backerBps / 100).toFixed(0)}% of every trade&apos;s creator tax goes to backers{s.splitterV4 ? ' · the fee stream follows the tokens' : ''}</p>
                     {s.splitterV4 && iBack && (
                       <p className={`text-[10px] font-mono uppercase tracking-widest mb-2 ${s.myHeldBps >= 9_000 ? 'text-[var(--success)]' : s.myHeldBps > 0 ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--error)]'}`}>
-                        {'> '}You hold {(s.myHeldBps / 100).toFixed(0)}% of your allocation{s.myHeldBps < 10_000 ? ` — you earn ${(s.myHeldBps / 100).toFixed(0)}% of your share; the rest buys and burns $PROOF` : ' — full share'}
+                        {'> '}You hold {(s.myHeldBps / 100).toFixed(0)}% of your allocation{s.myHeldBps < 10_000 ? ` — you earn ${(s.myHeldBps / 100).toFixed(0)}% of your share; the rest buys and burns $PLAUNCH` : ' — full share'}
                       </p>
                     )}
                     <div className="space-y-3">

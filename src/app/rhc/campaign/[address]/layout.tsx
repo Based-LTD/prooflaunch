@@ -4,7 +4,7 @@ import { rhcPublicClient, campaignAbi } from '@/lib/rhc';
 
 // Per-campaign link cards. The page itself is a client component, so the
 // metadata lives here: one on-chain read of the token meta, and the shared
-// link says "$PROOF — ProofLaunch on Robinhood Chain" with the campaign's
+// link says "$PLAUNCH — ProofLaunch on Robinhood Chain" with the campaign's
 // own description instead of the generic site card. Falls back to the RHC
 // card if the read fails or the address is bad.
 export async function generateMetadata({ params }: { params: Promise<{ address: string }> }): Promise<Metadata> {
