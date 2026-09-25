@@ -40,6 +40,16 @@ function timeLeft(deadline: bigint): string {
 
 export function ConnectButton() {
   const { address, isConnected, chainId } = useAccount();
+  // What window.ethereum actually is, read after mount so SSR matches.
+  const [injectedName, setInjectedName] = useState<string | null>(null);
+  useEffect(() => {
+    const p = (window as unknown as { ethereum?: Record<string, boolean> }).ethereum;
+    if (!p) return;
+    setInjectedName(
+      p.isRabby ? 'Rabby' : p.isMetaMask ? 'MetaMask' : p.isPhantom ? 'Phantom'
+        : p.isCoinbaseWallet ? 'Coinbase Wallet' : 'Browser wallet',
+    );
+  }, []);
   const { connectAsync, connectors, isPending, error, reset } = useConnect();
   const [pick, setPick] = useState(false);
   const [localErr, setLocalErr] = useState<string | null>(null);
@@ -54,8 +64,26 @@ export function ConnectButton() {
     // wrong one and looked like a dead button (founder, 2026-09-20, mid
     // test). Offer the discovered wallets by name; fall back to injected
     // only when nothing announced itself. And always SHOW the error.
+    // MetaMask does not always announce itself over EIP-6963 — on a machine
+    // with Phantom installed it may only hold window.ethereum, while Phantom
+    // announces (268 times, measured 2026-09-25). Dropping the injected
+    // connector whenever anything announced therefore hid MetaMask
+    // completely: one backer was auto-connected to an empty Phantom while
+    // his ETH sat in a MetaMask we never offered. Always keep injected,
+    // named after whatever actually holds the global, and drop it only when
+    // an announced wallet is plainly the same one.
     const named = connectors.filter((c) => c.id !== 'injected');
-    const choices = named.length > 0 ? named : connectors;
+    const injectedC = connectors.find((c) => c.id === 'injected');
+    const dupe = injectedName
+      ? named.some((c) => c.name.toLowerCase().includes(injectedName.toLowerCase()))
+      : true;
+    const choices = [
+      ...named,
+      ...(injectedC && injectedName && !dupe
+        ? [{ ...injectedC, name: `${injectedName} (browser default)` } as typeof injectedC]
+        : []),
+      ...(named.length === 0 && injectedC && !injectedName ? [injectedC] : []),
+    ];
     // Never auto-connect, even to a lone wallet: with one extension
     // installed the button used to fire straight into it, which reads as
     // the site choosing a wallet for you.
