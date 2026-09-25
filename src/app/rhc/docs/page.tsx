@@ -104,8 +104,8 @@ export default function RhcDocsPage() {
                 <strong>pons</strong> and buys it with the entire pool — snipe-exempt, on the
                 launch block. Backers claim tokens pro-rata and earn{' '}
                 <strong>the majority of the creator&apos;s trading fees, forever</strong> — up to 90% on today&apos;s
-                factory, less whatever bot legs the creator stacked; the remainder after a fixed 30% $PLAUNCH burn and 10% platform leg on the next. On Solana we
-                enforce these promises operationally. Here the contracts enforce them:
+                factory, less whatever bot legs the creator stacked; the remainder after a fixed 30% $PLAUNCH burn and 10% platform leg on the next. The contracts
+                enforce these promises, not an operator:
                 no admin keys, no pause switch, no upgrade path — <strong>the platform
                 cannot touch your funds even if it wanted to</strong>.
               </p>
@@ -216,8 +216,8 @@ export default function RhcDocsPage() {
                 Why claim instead of auto-send?
               </h3>
               <p className="text-sm text-[var(--muted)] leading-relaxed">
-                On Solana we push tokens to your wallet. Trustless EVM contracts use{' '}
-                <strong className="text-[var(--foreground)]">pull-based claims</strong> instead — the
+                Ownerless contracts use{' '}
+                <strong className="text-[var(--foreground)]">pull-based claims</strong> rather than pushing tokens to wallets — the
                 contract can&apos;t be griefed by a recipient that rejects a transfer, and your
                 entitlement can never expire or be redirected. Your tokens and fees sit in the
                 contract with your name on them until you claim. Gas on Robinhood Chain costs a
@@ -304,7 +304,7 @@ export default function RhcDocsPage() {
               <div className="bg-[var(--background)] border border-[var(--accent)]/40 p-4 text-sm leading-relaxed text-[var(--muted)]">
                 <strong className="text-[var(--accent)]">Honesty note:</strong> the Holder Airdrop
                 bot is the exception — snapshot airdrops need someone to take the snapshot, so it
-                runs platform-operated (the same machinery as our Solana launches) and is labeled
+                runs platform-operated (a snapshot needs someone to take it) and is labeled
                 that way everywhere. The trustless holder reward is BURN: supply cuts pay every
                 holder pro-rata with no snapshot authority at all.
               </div>
@@ -356,7 +356,7 @@ export default function RhcDocsPage() {
               </div>
               <ul className="text-sm text-[var(--muted)] space-y-1 pl-4 pt-2">
                 <li>· One BURN + one POOL FEEDER per campaign; up to 3 vault-type legs.</li>
-                <li>· The stack is immutable after creation — unlike Solana, not even the creator can edit it. That&apos;s the point.</li>
+                <li>· The stack is immutable after creation — not even the creator can edit it. That&apos;s the point.</li>
                 <li>· Crank any bot yourself from a block explorer — they&apos;re public functions.</li>
               </ul>
             </section>
@@ -509,7 +509,7 @@ export default function RhcDocsPage() {
                 <h2 className="text-2xl font-black uppercase tracking-tight">Security Model</h2>
               </div>
               <p className="text-[var(--foreground)]/80 leading-relaxed">
-                On Solana, ProofLaunch earns trust operationally. On Robinhood Chain, the contracts remove the need:
+                There is no operator to trust. The contracts hold every promise:
               </p>
               <div className="bg-[var(--background)] border-2 border-[var(--border)] p-4 space-y-3">
                 <h3 className="font-bold flex items-center gap-2 uppercase tracking-wide">

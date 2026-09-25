@@ -145,7 +145,7 @@ export function BannerManager({ campaign, current, onChanged }: { campaign: `0x$
   return (
     <div className="space-y-2">
       <p className="text-xs font-mono text-[var(--muted)]">
-        Banner — the wide image above the page, like the SOL side. 1500×500 (3:1), PNG/JPG/WebP, under 2 MB. One signature attaches it; only this campaign&apos;s creator can.
+        Banner — the wide image above the page. 1500×500 (3:1), PNG/JPG/WebP, under 2 MB. One signature attaches it; only this campaign&apos;s creator can.
       </p>
       {shown ? (
         <div className="relative">
