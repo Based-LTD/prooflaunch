@@ -35,7 +35,24 @@ preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
 
 ## 0. Before the day
 
-- [ ] Ticker, name, logo (square), banner (3:1), description, socials.
+- [ ] Ticker, name, logo (square), banner (3:1), description, socials. The
+      description, agreed 2026-09-24 (immutable once pons mints it):
+
+      > The platform token of ProofLaunch, the pooled launchpad on Robinhood
+      > Chain. Every launch through ProofLaunch sends 30% of its creator tax,
+      > every creation fee, and every seller's forfeited share to an ownerless
+      > contract that buys $PLAUNCH and sends it to the dead address. Nothing
+      > is paid to holders. Supply shrinks. Backers keep the rest of every fee
+      > stream. Launched through our own contracts on the same terms every
+      > creator gets: 20 seats, 5 held by the team and marked on the roster,
+      > 0% dev allocation. prooflaunch.fun/rhc/flywheel
+
+      Short form if the field is tight:
+
+      > ProofLaunch's platform token. 30% of every launch's creator tax buys
+      > $PLAUNCH and burns it, through an ownerless contract nobody can stop.
+      > Nothing paid to holders, supply just shrinks. 20 seats, 5 team, 0% dev.
+      > prooflaunch.fun/rhc/flywheel
 - [ ] Seat round: 20 seats × 0.05 ETH (goal 1 ETH). Team round with
       reservedSeats = 5 and the allowlist = the five team wallets, each
       funded with 0.05 ETH + gas from a DISCLOSED source. Public seats 15.
