@@ -5,8 +5,8 @@
 // Every action is the user's own transaction against an ownerless
 // contract — the site is a convenience view, never a custodian.
 import { use, useEffect, useState, useCallback } from 'react';
-import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
-import { parseEther, isAddress } from 'viem';
+import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useBalance } from 'wagmi';
+import { parseEther, formatEther, isAddress } from 'viem';
 import {
   rhcPublicClient, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl, lockMultiplier,
   RHC_WETH, robinhoodChain, QUOTE_ASSETS,
@@ -110,6 +110,10 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   // has no idea why (2026-09-25, a backer on Phantom still set to Ethereum).
   const { switchChain, isPending: switching } = useSwitchChain();
   const wrongChain = isConnected && walletChain !== undefined && walletChain !== robinhoodChain.id;
+  // A seat costs exactly minDeposit, so a wallet funded with exactly that
+  // cannot pay gas and the wallet reports it as a generic signing failure
+  // with no number in it (a backer, 2026-09-25). Check before they sign.
+  const { data: myBal } = useBalance({ address: me, chainId: robinhoodChain.id, query: { enabled: !!me } });
   const [s, setS] = useState<State | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [amount, setAmount] = useState('0.1');
@@ -453,6 +457,11 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   const publicSeatsLeft = publicSeats - Number(v7?.publicSeatsUsed ?? 0n);
   const takesReserved = !!v7 && v7.iAmAllowlisted && Number(v7.reservedSeatsUsed) < v7.reservedSeats;
   const publicFull = !!v7 && s.maxBackers > 0n && !takesReserved && publicSeatsLeft <= 0;
+  // Native-quote seat rounds only: an ERC20-quoted raise pays the seat in
+  // the token, so ETH only has to cover gas and this check does not apply.
+  const shortOnGas =
+    isConnected && !isErc20Quote && s.myContribution === 0n && s.minDeposit > 0n && !!myBal &&
+    myBal.value < s.minDeposit + parseEther('0.0005');
   // ── v8 lock ─────────────────────────────────────────────────────────
   const v8 = s.v8;
   // Locks are DAYS FROM LAUNCH (a year means a year of the token existing).
@@ -630,6 +639,14 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   </a>{' '}to back. You hold {fmtUnits(v7.myGateBalance, 18, 2)}.
                 </p>
               )}
+              {shortOnGas && (
+                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--error)] border border-[var(--error)]/40 bg-[var(--error)]/5 px-3 py-2 leading-relaxed">
+                  {'> '}Not enough ETH in the connected wallet. A seat costs {q(s.minDeposit)} {qSym}
+                  plus gas, and {me?.slice(0, 6)}…{me?.slice(-4)} holds{' '}
+                  {myBal ? Number(formatEther(myBal.value)).toFixed(4) : '0'} ETH.
+                  {' '}If your funds are in a different wallet, disconnect and pick that one.
+                </p>
+              )}
               {publicFull && !gateBlocked && (
                 <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] border border-[var(--border)] px-3 py-2">
                   {'> '}Open seats are full. The remaining seats are reserved for the team allowlist.
@@ -651,7 +668,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                 ) : (
                   <button
                     onClick={() => depositCall(s.minDeposit)}
-                    disabled={isPending || s.myContribution > 0n || gateBlocked || publicFull}
+                    disabled={isPending || s.myContribution > 0n || gateBlocked || publicFull || shortOnGas}
                     className="btn-primary"
                   >
                     {s.myContribution > 0n
