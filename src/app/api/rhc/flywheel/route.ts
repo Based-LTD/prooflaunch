@@ -39,6 +39,8 @@ export interface FlywheelFeed {
   supply?: string; dead?: string;
   creationFees?: string;                                             // v8 campaigns created × the factory's creation fee
   direct?: string;                                                   // other ETH sent straight to the burner (seeds, forwarded legs)
+  coinBurnSpent?: string;                                            // ETH $PLAUNCH's OWN campaign coin-burn leg has spent buying+burning $PLAUNCH
+  coinBurnOwed?: string;                                             // ETH owed to that leg, uncranked — will burn $PLAUNCH on the next crank
   daily?: { day: string; eth: string; tokens: string; count: number }[];
   feeders?: { splitter: `0x${string}`; campaign: `0x${string}`; symbol: string; name: string; eth: string; pulls: number }[];
   crankers?: { wallet: `0x${string}`; cranks: number }[];
@@ -57,6 +59,29 @@ export async function GET() {
       ],
       allowFailure: false,
     }) as unknown as [bigint, bigint, bigint, bigint, `0x${string}`];
+    // $PLAUNCH's own campaign is v7 — its 30% coin-burn leg burns $PLAUNCH
+    // too, outside the ProofBurner. The hero counts burned tokens from the
+    // dead address (everything), so its ETH figures must include this leg
+    // or the two tiles disagree by 7x. Found from the burner's campaign.
+    let coinBurnSpent = 0n, coinBurnOwed = 0n;
+    try {
+      const legAbi = parseAbi(['function campaign() view returns (address)', 'function feeSplitter() view returns (address)', 'function legCount() view returns (uint256)', 'function legRecipients(uint256) view returns (address)', 'function legOwed(address,address) view returns (uint256)', 'function totalEthSpent() view returns (uint256)', 'function totalTokensBurned() view returns (uint256)']);
+      const camp = await rhcPublicClient.readContract({ address: PROOF_BURNER, abi: legAbi, functionName: 'campaign' });
+      const splitter = await rhcPublicClient.readContract({ address: camp, abi: legAbi, functionName: 'feeSplitter' });
+      const n = Number(await rhcPublicClient.readContract({ address: splitter, abi: legAbi, functionName: 'legCount' }));
+      for (let i = 0; i < n; i++) {
+        const leg = await rhcPublicClient.readContract({ address: splitter, abi: legAbi, functionName: 'legRecipients', args: [BigInt(i)] });
+        if (leg.toLowerCase() === PROOF_BURNER.toLowerCase()) continue;
+        try {
+          const burnedByLeg = await rhcPublicClient.readContract({ address: leg, abi: legAbi, functionName: 'totalTokensBurned' });
+          void burnedByLeg; // a BurnLeg answers this; wallets and the platform leg revert
+          coinBurnSpent = await rhcPublicClient.readContract({ address: leg, abi: legAbi, functionName: 'totalEthSpent' });
+          coinBurnOwed = await rhcPublicClient.readContract({ address: splitter, abi: legAbi, functionName: 'legOwed', args: [leg, '0x0000000000000000000000000000000000000000'] });
+          break;
+        } catch { /* not a burn leg */ }
+      }
+    } catch { /* leave zeros */ }
+
     const [supply, dead] = await rhcPublicClient.multicall({
       contracts: [{ address: token, abi: erc20, functionName: 'totalSupply' }, { address: token, abi: erc20, functionName: 'balanceOf', args: [DEAD] }],
       allowFailure: false,
@@ -129,7 +154,7 @@ export async function GET() {
     const body: FlywheelFeed = {
       live: true, burner: PROOF_BURNER, token,
       pulled: pulled.toString(), spent: spent.toString(), burnedByFlywheel: burned.toString(), pending: pending.toString(),
-      supply: supply.toString(), dead: dead.toString(), creationFees: creationFees.toString(), direct: direct.toString(),
+      supply: supply.toString(), dead: dead.toString(), creationFees: creationFees.toString(), direct: direct.toString(), coinBurnSpent: coinBurnSpent.toString(), coinBurnOwed: coinBurnOwed.toString(),
       daily, feeders, crankers, burns, totalBurns: real.length,
     };
     return NextResponse.json(body, { headers: { 'cache-control': 'public, s-maxage=15, stale-while-revalidate=60' } });

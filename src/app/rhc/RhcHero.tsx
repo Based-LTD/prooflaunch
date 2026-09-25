@@ -21,7 +21,9 @@ export function RhcHero() {
     return () => { live = false; clearInterval(t); };
   }, []);
   const n = (s?: string) => (s ? Number(s) / 1e18 : 0);
-  const dead = n(f?.dead), supply = n(f?.supply), spent = n(f?.spent), pending = n(f?.pending);
+  // ETH tiles count every burn of $PLAUNCH — the v8 burner AND the token's
+  // own campaign coin-burn leg — so they agree with the dead-address count.
+  const dead = n(f?.dead), supply = n(f?.supply), spent = n(f?.spent) + n(f?.coinBurnSpent), pending = n(f?.pending) + n(f?.coinBurnOwed);
   const pct = supply > 0 ? (dead / supply) * 100 : 0;
   const ready = PROOF_BURNER_LIVE && !!f;
 
