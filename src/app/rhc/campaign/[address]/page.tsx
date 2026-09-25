@@ -10,8 +10,9 @@ import { parseEther, formatEther, isAddress } from 'viem';
 import {
   rhcPublicClient, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl, lockMultiplier,
   RHC_WETH, robinhoodChain, QUOTE_ASSETS,
+  isTestCampaign,
 } from '@/lib/rhc';
-import { RhcHeader, StatusPill, Modal } from '../../components';
+import { RhcHeader, StatusPill, Modal, TestTag } from '../../components';
 import { MetadataCard } from '../../MetadataCard';
 import { CurveStats } from '../../CurveStats';
 import { ClaimAsPicker } from '../../ClaimAsPicker';
@@ -533,8 +534,8 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           discord: media.discord ?? s.meta.socials?.discord, website: media.website ?? s.meta.socials?.website, farcaster: s.meta.socials?.farcaster,
           github: media.github ?? undefined,
         }}
-        status={<StatusPill launched={s.launched} cancelled={s.cancelled} refundable={s.refundable}
-          deadline={s.deadline} totalRaised={s.totalRaised} goal={s.goal} />}
+        status={<>{isTestCampaign(addr) && <TestTag />}<StatusPill launched={s.launched} cancelled={s.cancelled} refundable={s.refundable}
+          deadline={s.deadline} totalRaised={s.totalRaised} goal={s.goal} /></>}
         metrics={[
           { k: 'Backers', v: s.backerCount.toString() + (s.maxBackers > 0n ? ` / ${s.maxBackers}` : '') },
           { k: s.launched ? 'Raised' : 'Raised of ' + q(s.goal), v: `${q(s.launched ? s.totalRaisedAtLaunch : s.totalRaised)} ${qSym}` },

@@ -39,6 +39,18 @@ export const POOLLAUNCH_FACTORY_V2 = '0x129f7e8FaEab93C4c7E65033Be24ed383eBa6ad5
 export const POOLLAUNCH_FACTORY_V1 = '0x74Fa741f5E4F0089227cb1ce45B1d00c9698388d' as const; // legacy, read-only
 export const PONS_FACTORY = '0xF4fC0CD27fC8EcF17E55eE4c3f7201897dF3eb75' as const;
 
+// Our own smoke / rehearsal launches. They are real campaigns on real
+// factories and cannot be hidden without lying about the chain, so the
+// board and the campaign page mark them instead. Explicit by address —
+// never a name heuristic, which would tag someone else's "TEST" token.
+export const TEST_CAMPAIGNS = new Set<string>([
+  '0x78bfd61594413c4b4a846839a145122f94da5eed', // RWA TEST   (v7, 2026-09-21)
+  '0xc628ec13d9ec5e0e7dc83cec9d8ee961fb7f4058', // SMOKE      (v8 smoke, launch day)
+  '0x29aebae5aac418ddb2088df22c3f1ff68c4e2bf6', // PL TEST    (v6)
+  '0x97efa9283a805360b698868cf06d015b8b047a04', // PLSMOKE    (v1)
+]);
+export const isTestCampaign = (a: string) => TEST_CAMPAIGNS.has(a.toLowerCase());
+
 // ── v7 (CampaignFactoryV5) — LIVE since 2026-09-20 ────────────────────
 // Team rounds, token gating, ERC20/stock-quoted raises, creator-set
 // payout asset, 0x…5EED signature addresses. Constructor args verified

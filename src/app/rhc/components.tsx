@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { WpBadge } from './walletproof';
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useBalance } from 'wagmi';
-import { robinhoodChain, CampaignRow, fmtEth } from '@/lib/rhc';
+import { robinhoodChain, CampaignRow, fmtEth, isTestCampaign } from '@/lib/rhc';
 
 // Card-scale social icon — the card root is a <Link>, so open via
 // window.open + stopPropagation (nested anchors are invalid HTML).
@@ -249,6 +249,11 @@ export function RhcHeader() {
   );
 }
 
+// The red tag on our own smoke launches, shared by the board and the page.
+export function TestTag() {
+  return <span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 border border-[var(--error)] text-[var(--error)] whitespace-nowrap" title="One of our own smoke / rehearsal launches">Test token</span>;
+}
+
 export function StatusPill({ launched, cancelled, refundable, deadline, totalRaised, goal }: {
   launched: boolean; cancelled: boolean; refundable: boolean;
   deadline: bigint; totalRaised: bigint; goal: bigint;
@@ -286,6 +291,7 @@ export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.Rea
   ].filter((x) => !!x.href?.trim());
   const live = r.launched;
   const seatRound = !live && r.maxBackers > 0n && r.maxBackers <= 24n;
+  const test = isTestCampaign(r.address);
 
   const copyCA = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -298,13 +304,14 @@ export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.Rea
 
   return (
     <Link href={`/rhc/campaign/${r.address}`} className="block">
-      <div className="border border-[var(--border)] bg-[var(--card)] hover:border-[var(--accent)] transition-colors">
+      <div className={`border bg-[var(--card)] transition-colors ${test ? 'border-[var(--error)]/70 hover:border-[var(--error)]' : 'border-[var(--border)] hover:border-[var(--accent)]'}`}>
         {/* Top bar — system path + status */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5 gap-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
             {'// '}{r.symbol.slice(0, 12)}
           </span>
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {test && <TestTag />}
             {live && <WpBadge token={r.token} />}
             <StatusPill {...r} />
           </div>
