@@ -5,7 +5,7 @@
 // Every action is the user's own transaction against an ownerless
 // contract — the site is a convenience view, never a custodian.
 import { use, useEffect, useState, useCallback } from 'react';
-import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWalletClient, useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
 import { parseEther, isAddress } from 'viem';
 import {
   rhcPublicClient, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl, lockMultiplier,
@@ -103,7 +103,13 @@ const label = 'block text-[10px] font-mono uppercase tracking-widest text-[var(-
 export default function CampaignPage({ params }: { params: Promise<{ address: string }> }) {
   const { address: rawAddr } = use(params);
   const addr = (isAddress(rawAddr) ? rawAddr : '0x0000000000000000000000000000000000000000') as `0x${string}`;
-  const { address: me, isConnected } = useAccount();
+  const { address: me, isConnected, chainId: walletChain } = useAccount();
+  // The create page has always guarded this; the campaign page never did.
+  // Every write here pins chainId, so a wallet sitting on another network
+  // fails inside the wallet with a generic "error signing" and the backer
+  // has no idea why (2026-09-25, a backer on Phantom still set to Ethereum).
+  const { switchChain, isPending: switching } = useSwitchChain();
+  const wrongChain = isConnected && walletChain !== undefined && walletChain !== robinhoodChain.id;
   const [s, setS] = useState<State | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [amount, setAmount] = useState('0.1');
@@ -490,6 +496,24 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       {banner && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={banner} alt="" className="w-full block border border-[var(--border)] mb-3" style={{ aspectRatio: '3 / 1', objectFit: 'cover' }} />
+      )}
+      {wrongChain && (
+        <div className="mb-3 border border-[var(--warning,#c9a227)] bg-[var(--warning,#c9a227)]/10 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning,#c9a227)]">Wrong network</div>
+            <p className="text-xs font-mono text-[var(--muted)] mt-0.5">
+              Your wallet is not on Robinhood Chain. Backing, claiming and every other action here
+              will fail to sign until it is.
+            </p>
+          </div>
+          <button
+            onClick={() => switchChain({ chainId: robinhoodChain.id })}
+            disabled={switching}
+            className="btn-primary !px-3 !py-1.5 !text-[10px] whitespace-nowrap"
+          >
+            {switching ? 'Switching…' : 'Switch to Robinhood Chain'}
+          </button>
+        </div>
       )}
       <CampaignIdentityBar
         logo={s.meta.logo} name={s.meta.name} symbol={s.meta.symbol} creator={s.creator}

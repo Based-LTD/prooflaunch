@@ -54,16 +54,8 @@ export function ConnectButton() {
     // wrong one and looked like a dead button (founder, 2026-09-20, mid
     // test). Offer the discovered wallets by name; fall back to injected
     // only when nothing announced itself. And always SHOW the error.
-    // Phantom's EVM side ships a fixed chain list and has no way to add a
-    // custom network, so it can announce itself, connect, and then fail on
-    // every signature — which is exactly what a backer hit on 2026-09-25.
-    // Say so in the menu instead of letting it look like our bug.
-    const unsupported = (c: { id: string; name: string }) =>
-      /phantom/i.test(c.id) || /phantom/i.test(c.name);
     const named = connectors.filter((c) => c.id !== 'injected');
-    const choices = (named.length > 0 ? named : connectors)
-      .slice()
-      .sort((a, b) => Number(unsupported(a)) - Number(unsupported(b)));
+    const choices = named.length > 0 ? named : connectors;
     // Never auto-connect, even to a lone wallet: with one extension
     // installed the button used to fire straight into it, which reads as
     // the site choosing a wallet for you.
@@ -132,19 +124,12 @@ export function ConnectButton() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={c.icon} alt="" className="w-4 h-4 mt-0.5 shrink-0" />
                 )}
-                <span className="min-w-0">
-                  {c.name}
-                  {unsupported(c) && (
-                    <span className="block text-[9px] uppercase tracking-widest text-[var(--warning,#c9a227)] leading-tight mt-0.5">
-                      cannot add Robinhood Chain
-                    </span>
-                  )}
-                </span>
+                <span className="min-w-0">{c.name}</span>
               </button>
             ))}
             <div className="border-t border-[var(--border)] px-3 py-2 text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)] leading-relaxed">
-              Robinhood Wallet is a phone app. Pick WalletConnect and scan, or
-              use a desktop wallet that allows custom networks.
+              Your wallet must be on Robinhood Chain. We ask it to switch when
+              you connect; approve that prompt.
             </div>
           </div>
         )}
