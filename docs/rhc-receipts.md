@@ -243,6 +243,23 @@ pre-transaction signature.
 
 ---
 
+**Launched 2026-09-25 ~21:00 UTC** from the launcher wallet. Token
+`0x03a9667927cC3b24a8d004a5Ab1c92aA07255Db6` (deterministic — a fork
+rehearsal, `test/ForkClaims.t.sol`, predicted it and every one of the 20
+claims to the wei). Curve `0x93aF3e7E43Feb82F27D3dab0e8496d22e26F5539`.
+Pooled buy 363,520,640 tokens = 36.35% of supply, 1.82% per seat.
+
+The same hour: `ProofBurner` `0xf17D0c79F7919Bd3363bA19423D652e47610E341`
+(target read from the campaign, immutable), `SplitterDeployerV4`
+`0xB1060E520ca7edf6e6a732566F3a1272a44a0fE9`, and the v8 factory
+`CampaignFactoryV6` `0x2913c23b9ebBBbD2a863eb299F90D4fe6c0e30cb` with
+`CampaignDeployerV4` `0x3cC040a9a87db99ba3f7a31EcaE6f6027DFe2fd4`. All
+immutables read back and matched the plan; burner, splitter and factory
+are Sourcify `exact_match`. The site flipped to v8 in the same hour. The
+burner's counters read zero until the first v8 campaign trades through it.
+
+---
+
 ## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;

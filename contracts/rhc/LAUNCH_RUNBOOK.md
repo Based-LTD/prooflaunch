@@ -66,7 +66,20 @@ preset. The v7 3% holder-rewards leg is dead — no real launch ever fed it.
       EQUITY_ROUTER, LEG_DEPLOYER, PLATFORM_BPS=1000, PROOF_BURN_BPS=3000).
 - [ ] The post is drafted and NOT sent (Thread F/G in docs/x-launch-threads.md).
 
-## STATUS 2026-09-25: raise FULL (20/20, 1 ETH). Next: launch()
+## STATUS 2026-09-25 21:20 UTC: LAUNCHED, v8 DEPLOYED, UI FLIPPED
+
+Steps 1–5 are done. Addresses in `v8.addresses.json` and `DEPLOYMENTS.md`.
+Note for next time: `forge script --broadcast` (forge 1.8.1) failed while
+decoding constructor args for its own broadcast artifacts and sent
+nothing; `forge create` with explicit `--constructor-args` deployed every
+contract cleanly. Pass the keystore password as `--password-file`, never
+inline through `deploy-v8.sh` (its `$KEY_ARGS` word-splits).
+
+Still owed: the smoke campaign (first v8 launch → first burn → the
+screenshot), burn the launcher's seat allocation, external review of
+ProofBurner.
+
+## (earlier) STATUS 2026-09-25: raise FULL (20/20, 1 ETH). Next: launch()
 
 Everything on the site is now flag-driven: every v7-vs-v8 sentence, the
 roadmap, the hero, the OG cards, the audit page and the create page all

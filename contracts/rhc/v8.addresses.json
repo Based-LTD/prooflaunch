@@ -1,0 +1,11 @@
+{
+  "proofCampaign": "0xc2C9F89553DF78DCd830f6254717460247575eeD",
+  "proofToken": "0x03a9667927cC3b24a8d004a5Ab1c92aA07255Db6",
+  "proofBurner": "0xf17D0c79F7919Bd3363bA19423D652e47610E341",
+  "factoryV8": "0x2913c23b9ebBBbD2a863eb299F90D4fe6c0e30cb",
+  "campaignDeployerV4": "0x3cC040a9a87db99ba3f7a31EcaE6f6027DFe2fd4",
+  "splitterDeployerV4": "0xB1060E520ca7edf6e6a732566F3a1272a44a0fE9",
+  "platformBps": 1000,
+  "proofBurnBps": 3000,
+  "deployedAt": "2026-09-25T21:20:00Z"
+}

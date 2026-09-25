@@ -56,7 +56,22 @@ Prod built with `NEXT_PUBLIC_V7_LIVE=1` / `NEXT_PUBLIC_EQUITY_ROUTER_LIVE=1` (bu
 Deploy gotchas learned: Foundry loads `.env` from the SHELL cwd, not `--root` — run from `contracts/rhc/`. Forge resolves the script path against cwd too. Deployer `0xC571bf97…` funded 0.002768 → spent ≈0.00093 across both.
 
 
-## v8 — the rev flywheel (rebuilt 2026-09-22, NOT DEPLOYED)
+## 2026-09-25 — $PLAUNCH launched, v8 flywheel DEPLOYED (LIVE)
+
+$PLAUNCH launched from campaign `0xc2C9F89553DF78DCd830f6254717460247575eeD` (v7). Token `0x03a9667927cC3b24a8d004a5Ab1c92aA07255Db6`, curve `0x93aF3e7E43Feb82F27D3dab0e8496d22e26F5539`, splitter `0x95e3610E13cdaC46116E63e593893e9778fF5dCA`. 20 seats × 0.05 ETH; pooled buy 363,520,640 tokens (36.35% of supply).
+
+Deployer `0xC571bf9770c147c7643f87366B2e6D99f736c58A`, via `forge create` (forge script 1.8.1 failed decoding constructor args for its broadcast artifacts; nothing was broadcast by it).
+
+| contract | address | tx | verified |
+|---|---|---|---|
+| `ProofBurner` | `0xf17D0c79F7919Bd3363bA19423D652e47610E341` | `0xf31caab677f3164057653341c1242865a7bc1df3adcd6f3afbfd267c374c4fe4` | Sourcify exact_match |
+| `SplitterDeployerV4` | `0xB1060E520ca7edf6e6a732566F3a1272a44a0fE9` | `0x258ac9d45bf1216129a2ab4c69c59cc4571143494451c9b7f4b574a89ca18d06` | Sourcify exact_match |
+| `CampaignFactoryV6` (v8, ACTIVE) | `0x2913c23b9ebBBbD2a863eb299F90D4fe6c0e30cb` | `0xddd728daa78eee6d7ce47e33981671fe50509df4ba552980342391d3650e32ea` | Sourcify exact_match |
+| `CampaignDeployerV4` (by the factory ctor) | `0x3cC040a9a87db99ba3f7a31EcaE6f6027DFe2fd4` | (same tx) | Sourcify exact_match |
+
+Immutables read back and matched: proofBurner, platformBps 1000, proofBurnBps 3000, platformFeeRecipient `0xD994…6E29`, legDeployer `0x518B…63AB`, feeWaiverToken = $PLAUNCH, feeWaiverThreshold 0 (dormant), equityRouter `0x0A56…2943`, creationFee 0.001 ETH, ponsFactory `0x7eD5…EC7e`. `tools/flip-v8.mjs --check` 6/6; UI flipped the same hour (`NEXT_PUBLIC_V8_LIVE=1`, factory, burner in the Vercel env). v7 factory `0x6928…531B` superseded; its campaigns, including $PLAUNCH's own, run forever on their 7/3 legs.
+
+## v8 — the rev flywheel (design notes, rebuilt 2026-09-22)
 
 Founder decisions 2026-09-21/22: pivot to "rev meta". Two fixed legs on every
 campaign's creator tax, immutable in the factory and every splitter:

@@ -15,7 +15,8 @@ const RHC_HOST = 'prooflaunch.fun';
 const SOL_HOST = 'sol.prooflaunch.fun';
 
 // Paths that are shared infrastructure, never chain pages.
-const SHARED = /^\/(api|_next|images|favicon\.ico|robots\.txt|sitemap\.xml|legal|banner-image|opengraph-image|icon)/;
+// roadmap is cross-chain (mostly Robinhood Chain) and belongs on both hosts.
+const SHARED = /^\/(api|_next|images|favicon\.ico|robots\.txt|sitemap\.xml|legal|roadmap|banner-image|opengraph-image|icon)/;
 
 // Armed by SPLIT_HOSTS=1 in the Vercel project env. Deployed inert on
 // purpose: flipping it before sol.prooflaunch.fun resolves would bounce
