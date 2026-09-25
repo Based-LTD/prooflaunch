@@ -38,7 +38,7 @@ export default function FlywheelPage() {
   }, []);
 
   const n = (s?: string) => (s ? Number(s) / 1e18 : 0);
-  const dead = n(f?.dead), supply = n(f?.supply), spent = n(f?.spent), pulled = n(f?.pulled), pending = n(f?.pending), fees = n(f?.creationFees);
+  const dead = n(f?.dead), supply = n(f?.supply), spent = n(f?.spent), pulled = n(f?.pulled), pending = n(f?.pending), fees = n(f?.creationFees), direct = n(f?.direct);
   const pct = supply > 0 ? (dead / supply) * 100 : 0;
   const pendingWei = f?.pending ? BigInt(f.pending) : 0n;
 
@@ -46,7 +46,7 @@ export default function FlywheelPage() {
   let cum = 0;
   const cumulative = (f?.daily ?? []).map((d) => { cum += n(d.tokens); return { x: 0, y: cum, label: day(d.day), sub: `${d.count} burn${d.count === 1 ? '' : 's'}` }; });
   const perDay = (f?.daily ?? []).map((d) => ({ x: 0, y: n(d.eth), label: day(d.day), sub: `${tok(n(d.tokens))} $PLAUNCH` }));
-  const sources = [{ label: 'campaign fee legs + forfeits', value: pulled, color: SERIES }, { label: 'creation fees', value: fees, color: SERIES_2 }];
+  const sources = [{ label: 'campaign fee legs + forfeits', value: pulled, color: SERIES }, { label: 'creation fees', value: fees, color: SERIES_2 }, ...(direct > 0 ? [{ label: 'sent directly (seeds, forwarded legs)', value: direct, color: 'var(--muted)' }] : [])];
   const srcTotal = Math.max(1e-12, pulled + fees);
   const myCranks = me && f?.crankers ? (f.crankers.find((c) => c.wallet.toLowerCase() === me.toLowerCase())?.cranks ?? 0) : 0;
 

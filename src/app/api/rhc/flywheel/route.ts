@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http, parseAbiItem } from 'viem';
-import { rhcPublicClient, robinhoodChain, proofBurnerAbi, campaignAbi, PROOF_BURNER, PROOF_BURNER_LIVE } from '@/lib/rhc';
+import { rhcPublicClient, robinhoodChain, proofBurnerAbi, campaignAbi, PROOF_BURNER, PROOF_BURNER_LIVE, POOLLAUNCH_FACTORY_V8, factoryV5Abi } from '@/lib/rhc';
 
 // The flywheel feed: the burner's counters, $PROOF supply vs the dead
 // address, every burn bucketed by day, which campaigns fed it, who cranked
@@ -14,6 +14,7 @@ const DEAD = '0x000000000000000000000000000000000000dEaD' as const;
 const logClient = createPublicClient({ chain: robinhoodChain, transport: http('https://rpc.mainnet.chain.robinhood.com', { timeout: 25_000 }) });
 const burnedEvent = parseAbiItem('event Burned(uint256 ethIn, uint256 tokensBurned, bool viaCurve)');
 const pulledEvent = parseAbiItem('event Pulled(address indexed splitter, uint256 ethAmount)');
+const createdEvent = parseAbiItem('event CampaignCreated(address indexed campaign, address indexed creator, address feeSplitter, uint256 goal, uint256 deadline, string symbol)');
 const erc20 = [
   { type: 'function', name: 'totalSupply', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
@@ -36,7 +37,8 @@ export interface FlywheelFeed {
   burner?: `0x${string}`; token?: `0x${string}`;
   pulled?: string; spent?: string; burnedByFlywheel?: string; pending?: string;
   supply?: string; dead?: string;
-  creationFees?: string;                                             // ETH that arrived without a Pulled event
+  creationFees?: string;                                             // v8 campaigns created × the factory's creation fee
+  direct?: string;                                                   // other ETH sent straight to the burner (seeds, forwarded legs)
   daily?: { day: string; eth: string; tokens: string; count: number }[];
   feeders?: { splitter: `0x${string}`; campaign: `0x${string}`; symbol: string; name: string; eth: string; pulls: number }[];
   crankers?: { wallet: `0x${string}`; cranks: number }[];
@@ -111,12 +113,23 @@ export async function GET() {
       ts: tsCache.get(l.blockNumber) ?? null, viaCurve: !!l.args.viaCurve,
     }));
 
+    // Creation fees are counted, not inferred: v8 campaigns created × the
+    // factory's fee. Whatever else arrived without a Pulled event is ETH
+    // someone sent the burner directly (launch-day seeds, forwarded legs).
     const received = spent + pending;
-    const creationFees = received > pulled ? received - pulled : 0n;
+    let creationFees = 0n;
+    try {
+      const [fee, created] = await Promise.all([
+        rhcPublicClient.readContract({ address: POOLLAUNCH_FACTORY_V8, abi: factoryV5Abi, functionName: 'creationFee' }) as Promise<bigint>,
+        rhcPublicClient.getLogs({ address: POOLLAUNCH_FACTORY_V8, event: createdEvent, fromBlock: 0n, toBlock: 'latest' }),
+      ]);
+      creationFees = fee * BigInt(created.length);
+    } catch { /* leave at 0; the direct figure absorbs it */ }
+    const direct = received > pulled + creationFees ? received - pulled - creationFees : 0n;
     const body: FlywheelFeed = {
       live: true, burner: PROOF_BURNER, token,
       pulled: pulled.toString(), spent: spent.toString(), burnedByFlywheel: burned.toString(), pending: pending.toString(),
-      supply: supply.toString(), dead: dead.toString(), creationFees: creationFees.toString(),
+      supply: supply.toString(), dead: dead.toString(), creationFees: creationFees.toString(), direct: direct.toString(),
       daily, feeders, crankers, burns, totalBurns: real.length,
     };
     return NextResponse.json(body, { headers: { 'cache-control': 'public, s-maxage=15, stale-while-revalidate=60' } });
