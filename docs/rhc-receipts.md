@@ -329,6 +329,30 @@ Dexscreener.
 
 ---
 
+**2026-09-26 ~03:40 UTC — the harvest gap, and the flywheel's first full
+cycle.** Post-graduation creator tax accrues in pons's FeeEscrow and needs
+a permissionless `pokeHarvest()` before any leg can be cranked: 0.240672
+ETH had piled up there for $PLAUNCH and 0.111806 for $SMOKE with nobody
+harvesting. Harvested both (`0x2aa7e4d7…`, `0x1c6bbff0…`). Then:
+- $PLAUNCH coin-burn leg crank (`0x70a28089…`): 0.072202 ETH →
+  3,621,737 $PLAUNCH via v4.
+- `burner.pull(SMOKE splitter)` (`0x664dafde…`): 0.033542 ETH — the v8
+  burner's first pull funded by a launch's tax rather than a seed.
+- **A stranger, `0x4a00e700…7821`, cranked it** before the deployer's
+  retry could: 0.033206 ETH → 1,623,066 $PLAUNCH via v4 (block
+  72,798,800). Launch → trade → tax → harvest → pull → someone else
+  cranks: the whole loop, on mainnet, with no operator.
+- SMOKE's backer share (one seat, the deployer's) claimed to the deployer
+  (`0x8a96920a…`); platform 10% of both campaigns remains claimable by
+  `0xD994…`.
+
+**Total at 0x…dEaD: 37,729,482 $PLAUNCH, 3.77% of supply.**
+
+Lesson for the keeper: TWO permissionless steps sit idle without one —
+harvest and crank. A 0.24 ETH pile waited at pons for hours.
+
+---
+
 ## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;
