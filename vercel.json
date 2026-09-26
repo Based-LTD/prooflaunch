@@ -31,6 +31,10 @@
     {
       "path": "/api/wallet-claim/burn",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/rhc/keeper",
+      "schedule": "1-56/5 * * * *"
     }
   ]
 }
