@@ -120,7 +120,7 @@ export default function FlywheelPage() {
       )}
 
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <DashboardCard label="$PLAUNCH BURNED, CUMULATIVE" meta={live ? `${tok(n(f?.burnedByFlywheel))} via the v8 burner · ${tok(n(f?.burnedByCoinLeg))} via the token's own burn leg` : undefined}>
+        <DashboardCard label="$PLAUNCH BURNED, CUMULATIVE" meta={live ? `${tok(n(f?.burnedByFlywheel))} v8 burner · ${tok(n(f?.burnedByCoinLeg))} token's own leg${n(f?.burnedDirect) > 0 ? ` · ${tok(n(f?.burnedDirect))} sent to the dead address by holders` : ''} · ${tok(dead)} total` : undefined}>
           {live ? <AreaChart pts={cumulative} unit="$PLAUNCH" /> : <div className="h-40 flex items-center justify-center text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">fills in from the first burn</div>}
         </DashboardCard>
         <DashboardCard label="ETH BURNED PER DAY" meta={live ? `${(f?.daily ?? []).length} days` : undefined}>

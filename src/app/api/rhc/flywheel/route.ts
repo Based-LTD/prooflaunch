@@ -41,7 +41,8 @@ export interface FlywheelFeed {
   direct?: string;                                                   // other ETH sent straight to the burner (seeds, forwarded legs)
   coinBurnSpent?: string;                                            // ETH $PLAUNCH's OWN campaign coin-burn leg has spent buying+burning $PLAUNCH
   coinBurnOwed?: string;                                             // ETH owed to that leg, uncranked — will burn $PLAUNCH on the next crank
-  burnedByCoinLeg?: string;                                          // $PLAUNCH burned by that leg (the rest of `dead` beyond the flywheel)
+  burnedByCoinLeg?: string;                                          // $PLAUNCH burned by that leg
+  burnedDirect?: string;                                             // $PLAUNCH holders sent to the dead address themselves (dead − both burners)
   coinLeg?: `0x${string}`;                                           // its address
   daily?: { day: string; eth: string; tokens: string; count: number }[];
   feeders?: { splitter: `0x${string}`; campaign: `0x${string}`; symbol: string; name: string; eth: string; pulls: number }[];
@@ -163,7 +164,7 @@ export async function GET() {
     const body: FlywheelFeed = {
       live: true, burner: PROOF_BURNER, token,
       pulled: pulled.toString(), spent: spent.toString(), burnedByFlywheel: burned.toString(), pending: pending.toString(),
-      supply: supply.toString(), dead: dead.toString(), creationFees: creationFees.toString(), direct: direct.toString(), coinBurnSpent: coinBurnSpent.toString(), coinBurnOwed: coinBurnOwed.toString(), burnedByCoinLeg: burnedByCoinLeg.toString(), coinLeg: coinLeg ?? undefined,
+      supply: supply.toString(), dead: dead.toString(), creationFees: creationFees.toString(), direct: direct.toString(), coinBurnSpent: coinBurnSpent.toString(), coinBurnOwed: coinBurnOwed.toString(), burnedByCoinLeg: burnedByCoinLeg.toString(), burnedDirect: (dead > burned + burnedByCoinLeg ? dead - burned - burnedByCoinLeg : 0n).toString(), coinLeg: coinLeg ?? undefined,
       daily, feeders, crankers, burns, totalBurns: real.length,
     };
     return NextResponse.json(body, { headers: { 'cache-control': 'public, s-maxage=15, stale-while-revalidate=60' } });
