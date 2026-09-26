@@ -1,6 +1,9 @@
 // WalletProof RHC — "who is really buying" verdicts for Pons tokens. Read-only client for the private WalletProof
 // engine; the API returns counts, shares and tiers only (never wallet lists), so everything here is safe to render.
 export const WALLETPROOF_RHC_URL = (process.env.NEXT_PUBLIC_WALLETPROOF_RHC_URL || 'http://localhost:8100').replace(/\/$/, '');
+// Without a configured engine, production would ask every visitor's browser
+// for localhost:8100 (one failed request per card). Local dev keeps the default.
+export const WALLETPROOF_ENABLED = !!process.env.NEXT_PUBLIC_WALLETPROOF_RHC_URL || process.env.NODE_ENV !== 'production';
 
 export type WpTier = 'REAL' | 'THIN' | 'ELEVATED' | 'MANUFACTURED';
 export interface WpVerdict {
@@ -23,6 +26,7 @@ export const WP_TIER_COLOR: Record<WpTier, string> = {
 };
 
 async function get<T>(path: string): Promise<T | null> {
+  if (!WALLETPROOF_ENABLED) return null;
   try {
     const r = await fetch(`${WALLETPROOF_RHC_URL}${path}`, { cache: 'no-store' });
     if (!r.ok) return null;
