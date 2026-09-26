@@ -9,7 +9,7 @@
 // current token balance against the allocation the raise gave it, so a
 // visitor can see at a glance who kept their position and who sold.
 import { useEffect, useState } from 'react';
-import { fmtEth, explorerUrl, lockMultiplier } from '@/lib/rhc';
+import { fmtEth, explorerUrl, lockMultiplier, shortAddr } from '@/lib/rhc';
 import type { RosterResponse, RosterBacker } from '../api/rhc/campaign/[address]/backers/route';
 
 interface Props {
@@ -25,7 +25,7 @@ interface Props {
   refreshKey: string;
 }
 
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const short = shortAddr;
 const nowS = () => Math.floor(Date.now() / 1000);
 /// Pre-launch a lock is a promise in days; post-launch it is a date.
 const lockedNow = (b: RosterBacker) => b.lockDays > 0 && (b.lockUntil === 0 || b.lockUntil > nowS());
@@ -105,7 +105,7 @@ export function BackerRoster({ address, launched, me, symbol, quoteSymbol, quote
       <div className="p-4 space-y-3">
         <p className="text-xs font-mono text-[var(--muted)] leading-relaxed">
           {launched
-            ? `The wallets that funded this launch and received their pro-rata $${symbol} in the same transaction that created it. Hold is each wallet's live balance against that allocation — who kept their position, read from the chain.`
+            ? `Who funded the launch, and how much of their $${symbol} each still holds.`
             : 'Every wallet in this raise, read from the contract. A backer can withdraw any time before launch; the seat frees and the deposit goes back.'}
         </p>
 

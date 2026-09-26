@@ -119,7 +119,7 @@ export function CurveStats({ curve, token, symbol, taxBps, graduated }: {
           </a>
         )}
         <span className="self-center text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
-          {graduated ? '' : `${symbol} · same curve, same numbers, wherever you trade it · or trade below without leaving`}
+          {graduated ? '' : 'or trade below'}
         </span>
       </div>
     </div>

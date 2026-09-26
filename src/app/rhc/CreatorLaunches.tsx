@@ -6,7 +6,7 @@
 // their record, launched or not, one line each.
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { parseRows, fmtEth, explorerUrl, type CampaignRow } from '@/lib/rhc';
+import { parseRows, fmtEth, explorerUrl, type CampaignRow, shortAddr } from '@/lib/rhc';
 
 export function CreatorLaunches({ creator, exclude }: { creator: `0x${string}`; exclude: `0x${string}` }) {
   const [rows, setRows] = useState<CampaignRow[] | null>(null);
@@ -27,7 +27,7 @@ export function CreatorLaunches({ creator, exclude }: { creator: `0x${string}`; 
       <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">{'// '}CREATOR</span>
         <a href={explorerUrl(creator)} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono text-[var(--muted)] hover:text-[var(--accent)]">
-          {creator.slice(0, 6)}…{creator.slice(-4)} ↗
+          {shortAddr(creator)} ↗
         </a>
       </div>
       <div className="p-4">

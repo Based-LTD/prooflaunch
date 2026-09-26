@@ -7,7 +7,7 @@
 // $PLAUNCH-burn legs are named; named vault wallets show as vaults.
 import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
-import { rhcPublicClient, splitterAbi, fmtEth, explorerUrl, robinhoodChain, PROOF_BURNER, PROOF_BURNER_LIVE } from '@/lib/rhc';
+import { rhcPublicClient, splitterAbi, fmtEth, explorerUrl, robinhoodChain, PROOF_BURNER, PROOF_BURNER_LIVE, shortAddr } from '@/lib/rhc';
 
 const PLATFORM_LEGS = new Set(['0xd994ae0945c787a487c6dbd5188512e358986e29', '0x6ca08565caf4f5caafb4bfeecece6e0ea3c65dcb']);
 const legAbi = [
@@ -96,7 +96,7 @@ export function BotLegsPanel({ splitter, feeAsset, symbol, launched, refreshKey,
                 <span className="text-[10px] font-mono uppercase tracking-widest">
                   <span className="text-[var(--foreground)]">{LABEL[l.kind]}</span>
                   <span className="text-[var(--accent)] ml-2">{(l.bps / 100).toFixed(l.bps % 100 ? 1 : 0)}%</span>
-                  <a href={explorerUrl(l.addr)} target="_blank" rel="noopener noreferrer" className="ml-2 text-[var(--muted-soft)] hover:text-[var(--accent)]">{l.addr.slice(0, 6)}…{l.addr.slice(-4)} ↗</a>
+                  <a href={explorerUrl(l.addr)} target="_blank" rel="noopener noreferrer" className="ml-2 text-[var(--muted-soft)] hover:text-[var(--accent)]">{shortAddr(l.addr)} ↗</a>
                 </span>
                 {crankable && isConnected && waiting > 0n && (
                   <button onClick={() => writeContract({ address: l.addr, abi: legAbi, functionName: 'crank', chainId: robinhoodChain.id })} disabled={isPending}
@@ -116,7 +116,7 @@ export function BotLegsPanel({ splitter, feeAsset, symbol, launched, refreshKey,
           );
         })}
         <p className="text-[10px] font-mono text-[var(--muted-soft)] leading-relaxed">
-          Each leg is its own contract with no owner and no off switch. Crank runs one round: pull its share from the splitter, then do its job. Anyone may press it.
+          Ownerless contracts. Anyone can crank one.
         </p>
       </div>
     </div>

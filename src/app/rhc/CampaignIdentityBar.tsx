@@ -5,7 +5,7 @@
 // · social pills, so the dashboard grid sits high in the viewport.
 import { type ReactNode, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
-import { explorerUrl } from '@/lib/rhc';
+import { explorerUrl, shortAddr } from '@/lib/rhc';
 import { SocialRow } from '@/components/SocialIcons';
 
 interface Socials { twitter?: string; telegram?: string; discord?: string; website?: string; farcaster?: string; github?: string }
@@ -39,14 +39,14 @@ export function CampaignIdentityBar({ logo, name, symbol, creator, status, metri
           <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mt-1">
             <span>by</span>
             <a href={explorerUrl(creator)} target="_blank" rel="noopener noreferrer" className="bg-[var(--background)] border border-[var(--border)] px-1.5 py-0.5 normal-case tracking-normal hover:text-[var(--accent)]">
-              {creator.slice(0, 6)}…{creator.slice(-4)}
+              {shortAddr(creator)}
             </a>
             <button onClick={() => copy(creator)} className="hover:text-[var(--accent)] transition-colors" aria-label="Copy creator address">
               {copied ? <Check className="w-3 h-3 text-[var(--success)]" /> : <Copy className="w-3 h-3" />}
             </button>
             {token && (
               <a href={explorerUrl(token)} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent)] normal-case tracking-normal">
-                token {token.slice(0, 6)}…{token.slice(-4)} ↗
+                token {shortAddr(token)} ↗
               </a>
             )}
           </div>

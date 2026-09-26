@@ -10,8 +10,7 @@ import { parseEther, formatEther, isAddress } from 'viem';
 import {
   rhcPublicClient, campaignAbi, campaignV3Abi, campaignV4Abi, splitterAbi, curveAbi, erc20Abi, fmtEth, explorerUrl, lockMultiplier,
   RHC_WETH, robinhoodChain, QUOTE_ASSETS,
-  isTestCampaign,
-} from '@/lib/rhc';
+  isTestCampaign, shortAddr } from '@/lib/rhc';
 import { RhcHeader, StatusPill, Modal, TestTag } from '../../components';
 import { MetadataCard } from '../../MetadataCard';
 import { CurveStats } from '../../CurveStats';
@@ -644,7 +643,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               {shortOnGas && (
                 <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--error)] border border-[var(--error)]/40 bg-[var(--error)]/5 px-3 py-2 leading-relaxed">
                   {'> '}Not enough ETH in the connected wallet. A seat costs {q(s.minDeposit)} {qSym}
-                  plus gas, and {me?.slice(0, 6)}…{me?.slice(-4)} holds{' '}
+                  plus gas, and {shortAddr(me)} holds{' '}
                   {myBal ? Number(formatEther(myBal.value)).toFixed(4) : '0'} ETH.
                   {' '}If your funds are in a different wallet, disconnect and pick that one.
                 </p>
@@ -718,7 +717,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                 <div className="border border-[var(--accent-gold)]/60 bg-[var(--accent-gold)]/5 px-3 py-3 space-y-2">
                   <p className="text-xs font-mono text-[var(--foreground)]">
                     🔒 You are locking your ${s.meta.symbol} for <span className="text-[var(--accent-gold)]">{lockDays >= 365 ? `${lockDays / 365} year${lockDays > 365 ? 's' : ''}` : `${lockDays} days`} after launch</span>{lockMult > 1 ? <> and your fee share is weighted <span className="text-[var(--accent-gold)]">×{lockMult}</span></> : null}.
-                    The tokens stay in this contract until then. This cannot be shortened or undone by anyone, including us. You can still withdraw before launch, which clears the lock.
+                    Nobody can shorten it, including us. Withdrawing before launch clears it.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button onClick={() => depositCall(lockConfirm, true)} disabled={isPending} className="btn-primary !px-3 !py-1.5 !text-[10px]">
@@ -964,8 +963,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     </div>
                   </div>
                   <p className="pt-2 text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">
-                    Trades hit the pons curve directly and pay its 1% fee + this token&apos;s {'creator tax'} —
-                    which flows back to this campaign&apos;s backers. ETH from sells lands in your wallet instantly.
+                    Sells pay out to your wallet instantly.
                   </p>
                 </div>
               )}
@@ -1083,7 +1081,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                             )}
                           </>
                         ) : (
-                          <p className="text-xs font-mono text-[var(--muted)]">No fees yet — every buy and sell pays this token&apos;s creator tax to its backers. Check back after some trading.</p>
+                          <p className="text-xs font-mono text-[var(--muted)]">No fees yet. Every trade pays backers.</p>
                         )
                       ) : waiting ? (
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1163,7 +1161,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       </Modal>
       <Modal open={tool === 'cancel'} onClose={() => setTool(null)} label="CANCEL CAMPAIGN">
         <p className="text-xs font-mono text-[var(--foreground)]/85 leading-relaxed">
-          This ends the raise. Every backer&apos;s deposit becomes refundable in full, the campaign leaves the board, and it cannot be reopened. The 0.001 ETH creation fee is not returned.
+          Ends the raise for good. Every deposit becomes refundable; the 0.001 ETH creation fee is not.
         </p>
         <div className="mt-4 flex gap-2">
           <button onClick={() => { setTool(null); act('cancel'); }} disabled={isPending} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--error)] text-[var(--error)] hover:bg-[var(--error)] hover:text-black transition-colors">Yes, cancel it</button>

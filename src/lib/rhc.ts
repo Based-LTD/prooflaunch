@@ -51,6 +51,10 @@ export const TEST_CAMPAIGNS = new Set<string>([
 ]);
 export const isTestCampaign = (a: string) => TEST_CAMPAIGNS.has(a.toLowerCase());
 
+// Addresses on the RHC surface: four characters each end, no 0x. The prefix is
+// noise once every row has one — a backer said so after reading a column of them.
+export const shortAddr = (a?: string | null) => (a ? `${a.slice(2, 6)}…${a.slice(-4)}` : '');
+
 // ── v7 (CampaignFactoryV5) — LIVE since 2026-09-20 ────────────────────
 // Team rounds, token gating, ERC20/stock-quoted raises, creator-set
 // payout asset, 0x…5EED signature addresses. Constructor args verified

@@ -17,8 +17,7 @@ const normUrl = (v: string) => { const t = v.trim(); if (!t) return ''; return /
 import { AlertCircle, Upload, X } from 'lucide-react';
 import {
   POOLLAUNCH_FACTORY_V6, V7_LIVE, ACTIVE_FACTORY, FIXED_LEGS_PCT, FIXED_LEGS_NOTE, QUOTE_ASSETS, clearBoardCache,
-  AIRDROP_OPERATOR, factoryV4Abi, factoryV5Abi, robinhoodChain, rhcPublicClient,
-} from '@/lib/rhc';
+  AIRDROP_OPERATOR, factoryV4Abi, factoryV5Abi, robinhoodChain, rhcPublicClient, shortAddr } from '@/lib/rhc';
 import { EQUITY_ASSETS, PRICEY_FEE_BPS } from '@/lib/rhcEquity';
 import { grindVanitySalt, predictLegAddresses, SIGNATURE_SUFFIX } from '@/lib/rhcVanity';
 
@@ -465,7 +464,7 @@ export default function CreateCampaignPage() {
     ['banner', bannerFile ? `${bannerFile.name} (attached after creation, 1 signature)` : 'none', !bannerFile],
     ['description', f.description.trim().slice(0, 90) + (f.description.trim().length > 90 ? '…' : '')],
     ['links', ['twitter', 'telegram', 'discord', 'website', 'farcaster', 'github'].filter((k) => (f as Record<string, string>)[k].trim()).map((k) => `${k}: ${normUrl((f as Record<string, string>)[k])}`).join('  ·  ') || 'none', !['twitter', 'telegram', 'discord', 'website', 'farcaster', 'github'].some((k) => (f as Record<string, string>)[k].trim())],
-    ['raise', raiseStyle === 'seats' ? `${seatCount} seats × ${seatPrice} ${unitSym} = ${effGoalEth} ${unitSym}${reservedN ? ` · ${reservedN} team seats → ${allowlist.map((w) => `${w.slice(0, 6)}…${w.slice(-4)}`).join(', ') || 'NONE NAMED'}, ${seatCount - reservedN} public` : ''}` : `open · goal ${f.goal} ${unitSym} · min ${f.min} · max ${f.max === '0' ? 'none' : f.max}`],
+    ['raise', raiseStyle === 'seats' ? `${seatCount} seats × ${seatPrice} ${unitSym} = ${effGoalEth} ${unitSym}${reservedN ? ` · ${reservedN} team seats → ${allowlist.map((w) => `${shortAddr(w)}`).join(', ') || 'NONE NAMED'}, ${seatCount - reservedN} public` : ''}` : `open · goal ${f.goal} ${unitSym} · min ${f.min} · max ${f.max === '0' ? 'none' : f.max}`],
     ['creator tax', `${taxPct}% · traders pay ${(Number(taxPct) + 1).toFixed(Number(taxPct) % 1 ? 1 : 0)}% with pons' 1%`],
     ['fee payout', payoutName],
     ['coin burn', `${burnPct}% of the fee stream buys and burns $${f.symbol.trim().toUpperCase() || 'YOUR TOKEN'}${presetName === 'Custom' ? '' : ` — the ${presetName} preset`}`, burnPct === 0],
@@ -1534,7 +1533,7 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
             </div>
             {creatorWallet && (
               <div className="text-[10px] font-mono text-[var(--muted)] mt-0.5">
-                by {creatorWallet.slice(0, 6)}…{creatorWallet.slice(-4)}
+                by {shortAddr(creatorWallet)}
               </div>
             )}
           </div>

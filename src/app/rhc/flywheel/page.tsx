@@ -11,11 +11,11 @@ import { useAccount, useWriteContract } from 'wagmi';
 import { RhcHeader } from '../components';
 import { DashboardCard } from '@/components/meme/DashboardCard';
 import { AreaChart, Columns, HBars, SERIES, SERIES_2 } from './charts';
-import { proofBurnerAbi, PROOF_BURNER, PROOF_BURNER_LIVE, fmtEth, explorerUrl, robinhoodChain } from '@/lib/rhc';
+import { proofBurnerAbi, PROOF_BURNER, PROOF_BURNER_LIVE, fmtEth, explorerUrl, robinhoodChain, shortAddr } from '@/lib/rhc';
 import type { FlywheelFeed } from '../../api/rhc/flywheel/route';
 
 const tok = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const short = shortAddr;
 const day = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString([], { month: 'short', day: 'numeric' });
 const ago = (ts: number | null) => { if (!ts) return ''; const s = Math.max(0, Math.floor(Date.now() / 1000) - ts); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`; };
 const CAP = 200_000_000_000_000_000n;

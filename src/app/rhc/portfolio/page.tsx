@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { Copy, Check } from 'lucide-react';
 import { parseAbi } from 'viem';
-import { fetchAllCampaigns, readBoardCache, writeBoardCache, rhcPublicClient, CampaignRow, fmtEth, explorerUrl } from '@/lib/rhc';
+import { fetchAllCampaigns, readBoardCache, writeBoardCache, rhcPublicClient, CampaignRow, fmtEth, explorerUrl, shortAddr } from '@/lib/rhc';
 import { RhcHeader, CampaignCard, ConnectButton } from '../components';
 
 const balAbi = parseAbi(['function balanceOf(address) view returns (uint256)']);
@@ -52,7 +52,7 @@ function YourBag({ rows, me }: { rows: CampaignRow[]; me: `0x${string}` }) {
     <div className="border border-[var(--accent)]/40 bg-[var(--card)] mb-4">
       <div className="border-b border-[var(--border)] px-3 py-2 flex items-center justify-between">
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-          {'// '}YOUR BAG — on-chain balances at {me.slice(0, 6)}…{me.slice(-4)}
+          {'// '}YOUR BAG — on-chain balances at {shortAddr(me)}
         </span>
         <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
           read live from Robinhood Chain

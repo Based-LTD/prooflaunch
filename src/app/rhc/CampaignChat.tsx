@@ -6,14 +6,14 @@
 // server verifies every post; reading is open.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
-import { explorerUrl } from '@/lib/rhc';
+import { explorerUrl, shortAddr } from '@/lib/rhc';
 
 interface Msg { id: string; wallet: string; message: string; created_at: string }
 
 const AUTH_TTL_MS = 4 * 60 * 1000;
 // No 0x prefix, four chars each end: what a backer asked for after reading a
 // column of 0x04f2…4140 lines — the prefix is noise when every row has it.
-const short = (a: string) => `${a.slice(2, 6)}…${a.slice(-4)}`;
+const short = shortAddr;
 
 export function CampaignChat({ campaign, roster }: { campaign: `0x${string}`; roster?: Set<string> }) {
   const { address: me, isConnected } = useAccount();

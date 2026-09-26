@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { WpBadge } from './walletproof';
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useBalance } from 'wagmi';
-import { robinhoodChain, CampaignRow, fmtEth, isTestCampaign } from '@/lib/rhc';
+import { robinhoodChain, CampaignRow, fmtEth, isTestCampaign, shortAddr } from '@/lib/rhc';
 
 // Card-scale social icon — the card root is a <Link>, so open via
 // window.open + stopPropagation (nested anchors are invalid HTML).
@@ -206,7 +206,7 @@ export function ConnectButton() {
         className="px-4 py-2.5 text-xs font-mono border border-[var(--warning)]/60 text-[var(--warning)] hover:bg-[var(--warning)] hover:text-black transition-colors"
         title="Your wallet is on another network — click to hop back"
       >
-        {address?.slice(0, 6)}…{address?.slice(-4)} ⚠
+        {shortAddr(address)} ⚠
       </button>
     );
   }
@@ -222,7 +222,7 @@ export function ConnectButton() {
         ? 'This wallet holds no ETH on Robinhood Chain. If your funds are in another wallet, click to disconnect and pick that one.'
         : 'Click to disconnect'}
     >
-      {address?.slice(0, 6)}…{address?.slice(-4)}
+      {shortAddr(address)}
       {bal && (
         <span className={`ml-1.5 ${empty ? '' : 'text-[var(--muted)]'}`}>
           {(Number(bal.value) / 1e18).toFixed(empty ? 0 : 3)} ETH
@@ -430,7 +430,7 @@ export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.Rea
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-[var(--border)] px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-          <span>by {r.creator.slice(0, 6)}…{r.creator.slice(-4)}</span>
+          <span>by {shortAddr(r.creator)}</span>
           <span>&gt; OPEN</span>
         </div>
       </div>
