@@ -537,7 +537,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           deadline={s.deadline} totalRaised={s.totalRaised} goal={s.goal} /></>}
         metrics={[
           { k: 'Backers', v: s.backerCount.toString() + (s.maxBackers > 0n ? ` / ${s.maxBackers}` : '') },
-          { k: s.launched ? 'Raised' : 'Raised of ' + q(s.goal), v: `${q(s.launched ? s.totalRaisedAtLaunch : s.totalRaised)} ${qSym}` },
+          { k: s.launched ? 'Raised' : 'Raised / goal', v: s.launched ? `${q(s.totalRaisedAtLaunch)} ${qSym}` : `${q(s.totalRaised)} / ${q(s.goal)} ${qSym}` },
           ...(s.launched ? [] : [{ k: 'Ends', v: new Date(Number(s.deadline) * 1000).toLocaleDateString(), accent: true }]),
         ]}
       />
@@ -551,7 +551,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
       {/* ── RAISE — the action panel, full width, only while there is
           something to do (back, withdraw, launch, refund, cancel). */}
       {!s.launched && (
-        <DashboardCard label={s.cancelled ? 'CANCELLED' : s.refundable ? 'REFUNDS OPEN' : 'RAISE'} meta={`${Math.min(100, pct)}% funded`} className="mt-3 scroll-mt-20" >
+        <DashboardCard label={s.cancelled ? 'CANCELLED' : s.refundable ? 'REFUNDS OPEN' : 'RAISE'} meta={`${Math.min(100, pct)}% funded · goal ${q(s.goal)} ${qSym}`} className="mt-3 scroll-mt-20" >
         <div id="raise-card" />
           {/* Slot grid — the SOL detail treatment: filled blocks for
               backers in, outlined for open slots. Open raises (maxBackers
@@ -609,7 +609,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           </div>
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              [`${q(s.totalRaised)} ${qSym}`, `raised of ${q(s.goal)}`],
+              [`${q(s.totalRaised)} / ${q(s.goal)} ${qSym}`, 'raised / goal to launch'],
               [s.backerCount.toString() + (s.maxBackers > 0n ? ` / ${s.maxBackers}` : ''), 'backers'],
               [q(s.minDeposit), 'min per backer'],
               [new Date(Number(s.deadline) * 1000).toLocaleDateString(), 'deadline'],
