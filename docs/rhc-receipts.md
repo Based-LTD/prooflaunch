@@ -323,7 +323,7 @@ page now reconciles all three to the dead address.
 Uniswap v4 (pool id `0xb56ebec11deb6547812ee909324f472ca0089420807c59878be2bd1dba8170b8`).
 Dexscreener listed it automatically within 90 seconds:
 https://dexscreener.com/robinhood/0xb56ebec11deb6547812ee909324f472ca0089420807c59878be2bd1dba8170b8
-From here both burners buy on v4 (fork-tested path). The on-site trade
+From here both burners buy on v4 — confirmed live at 03:2x UTC: coin-burn leg crank `0x4acb7094e4f5…`, 0.009427 ETH → 416,307 $PLAUNCH, `viaCurve = false`. 32,484,677 at 0x…dEaD (3.25% of supply). The on-site trade
 box retires itself on graduation; the card points at pons, Axiom and
 Dexscreener.
 
