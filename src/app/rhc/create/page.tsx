@@ -468,7 +468,7 @@ export default function CreateCampaignPage() {
     ['creator tax', `${taxPct}% · traders pay ${(Number(taxPct) + 1).toFixed(Number(taxPct) % 1 ? 1 : 0)}% with pons' 1%`],
     ['fee payout', payoutName],
     ['coin burn', `${burnPct}% of the fee stream buys and burns $${f.symbol.trim().toUpperCase() || 'YOUR TOKEN'}${presetName === 'Custom' ? '' : ` — the ${presetName} preset`}`, burnPct === 0],
-    ...(creatorPct > 0 ? [['creator fee', `${creatorPct}% of the fee stream to YOUR wallet (${address?.slice(0, 6)}…${address?.slice(-4)}), shown as CREATOR on your campaign page`, true] as [string, string, boolean]] : []),
+    ...(creatorPct > 0 ? [['creator fee', `${creatorPct}% of the fee stream to YOUR wallet (${shortAddr(address)}), shown as CREATOR on your campaign page`, true] as [string, string, boolean]] : []),
     ['rest of stack', `${botsPct - burnPct - creatorPct}% other bots · ${backerPct}% backers · ${FIXED_LEGS_PCT.total}% fixed (${FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn}% $PLAUNCH burn + ${FIXED_LEGS_PCT.platform}% platform` : `${FIXED_LEGS_PCT.platform}% platform + ${FIXED_LEGS_PCT.rewards}% retired`})`],
     ['deadline', `${f.days} days`],
   ];
