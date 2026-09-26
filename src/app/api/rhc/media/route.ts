@@ -15,7 +15,18 @@ export const dynamic = 'force-dynamic';
 // 15 min: the creator signs BEFORE the create tx, so this has to cover
 // grinding + wallet confirmation + block inclusion, not just a click.
 const MAX_SIG_AGE_MS = 15 * 60 * 1000;
-const BANNER_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/token-assets/banners/`;
+// The banner must live in our own bucket. Compare host and path separately
+// rather than a string prefix: an env value with a trailing slash or a
+// stray newline turned every real upload into "must be uploaded through".
+const BANNER_PATH = '/storage/v1/object/public/token-assets/banners/';
+function isOurBanner(url: string): boolean {
+  if (url.length > 512) return false;
+  try {
+    const u = new URL(url);
+    const ours = new URL((process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim());
+    return u.protocol === 'https:' && u.host === ours.host && u.pathname.startsWith(BANNER_PATH) && u.pathname.length > BANNER_PATH.length;
+  } catch { return false; }
+}
 
 function tableMissing(e: { code?: string; message?: string } | null): boolean {
   return !!e && (e.code === '42P01' || /does not exist|schema cache/i.test(e.message ?? ''));
@@ -71,7 +82,7 @@ export async function POST(req: NextRequest) {
   const authMessage = typeof body.auth_message === 'string' ? body.auth_message : '';
   const authSignature = typeof body.auth_signature === 'string' ? body.auth_signature : '';
   if (!isAddress(campaign) || !isAddress(wallet)) return NextResponse.json({ error: 'bad address' }, { status: 400 });
-  if (bannerUrl !== null && (!bannerUrl.startsWith(BANNER_PREFIX) || bannerUrl.length > 512)) {
+  if (bannerUrl !== null && !isOurBanner(bannerUrl)) {
     return NextResponse.json({ error: 'banner must be uploaded through /api/upload/image (kind=banner)' }, { status: 400 });
   }
 
