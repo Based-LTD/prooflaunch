@@ -26,7 +26,7 @@ export const DashboardCard: React.FC<Props> = ({
     <section className={`border border-[var(--border)] bg-[var(--card)] flex flex-col ${className}`}>
       <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--border)]">
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-          // {label}
+          {label}
         </span>
         {meta != null && (
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">

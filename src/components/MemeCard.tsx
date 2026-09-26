@@ -113,7 +113,7 @@ export const MemeCard: FC<MemeCardProps> = ({ meme }) => {
         {/* Top bar — system path + status + reservation/team-round chip */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5 gap-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
-            // {symbol.slice(0, 12)}
+            {symbol.slice(0, 12)}
           </span>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {isTeamRound && (
