@@ -144,6 +144,10 @@ export async function quoteEquityOut(
       args: [poolKeyFor(asset), 0n, account, '0x'],
       value: ethIn,
       account,
+      // The real claim is paid by the splitter, not the claimer, so the
+      // sim must not depend on the claimer's own balance. Without this a
+      // wallet holding less ETH than it has earned gets "unavailable".
+      stateOverride: [{ address: account, balance: ethIn + 10n ** 18n }],
     });
     return result as bigint;
   } catch {
