@@ -25,7 +25,7 @@ export function OnChainMetaEditor({ campaign, current, onSent }: { campaign: `0x
         args: [{ name: f.name.trim(), symbol: f.symbol.trim().toUpperCase(), logo: f.logo.trim(), description: f.description.trim(), socials: f.socials, feeWallet: '0x0000000000000000000000000000000000000000' }],
       });
       onSent(hash);
-    } catch (e) { const m = e instanceof Error ? e.message : String(e); setErr(/reject|denied/i.test(m) ? 'Rejected in wallet — nothing changed' : m.split('\n')[0].slice(0, 140)); }
+    } catch (e) { const m = e instanceof Error ? e.message : String(e); setErr(/reject|denied/i.test(m) ? 'Rejected in wallet: nothing changed' : m.split('\n')[0].slice(0, 140)); }
   };
   return (
     <div className="space-y-2">

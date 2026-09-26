@@ -38,7 +38,7 @@ const lockMult = (b: RosterBacker) => lockMultiplier(b.lockDays);
 /// change that. Link goes to the campaign contract, not to us.
 const LockTag = ({ b, address }: { b: RosterBacker; address: string }) => lockedNow(b) ? (
   <a href={explorerUrl(address) + '#readContract'} target="_blank" rel="noopener noreferrer"
-    title={`lockDays(${b.wallet}) on the campaign contract — claimTokens() reverts before launch + ${b.lockDays} days; no one can shorten it. Fee weight ×${lockMult(b)}.`}
+    title={`lockDays(${b.wallet}) on the campaign contract, claimTokens() reverts before launch + ${b.lockDays} days; no one can shorten it. Fee weight ×${lockMult(b)}.`}
     className="ml-2 text-[9px] uppercase tracking-widest text-[var(--accent-gold)] border border-[var(--accent-gold)]/50 px-1 py-0.5 hover:bg-[var(--accent-gold)]/10">
     🔒 {lockLabel(b)}{lockMult(b) > 1 ? ` · ×${lockMult(b)} fees` : ''}
   </a>
@@ -95,7 +95,7 @@ export function BackerRoster({ address, launched, me, symbol, quoteSymbol, quote
     <div className="border border-[var(--border)] bg-[var(--card)]">
       <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-          {'// '}{launched ? 'GENESIS_BACKERS' : 'BACKERS'}
+          {launched ? 'GENESIS BACKERS' : 'BACKERS'}
         </span>
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
           {data ? `${backers.length} wallet${backers.length === 1 ? '' : 's'}` : '…'}
@@ -135,13 +135,13 @@ export function BackerRoster({ address, launched, me, symbol, quoteSymbol, quote
         )}
 
         {err && !data && (
-          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">roster unavailable — {err.slice(0, 80)}</p>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">roster unavailable · {err.slice(0, 80)}</p>
         )}
         {!err && !data && (
           <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] animate-pulse">reading deposits…</p>
         )}
         {data && backers.length === 0 && (
-          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">no backers yet — the first seat is open</p>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">no backers yet · the first seat is open</p>
         )}
 
         {backers.length > 0 && (

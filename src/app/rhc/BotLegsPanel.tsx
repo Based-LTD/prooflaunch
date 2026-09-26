@@ -83,7 +83,7 @@ export function BotLegsPanel({ splitter, feeAsset, symbol, launched, refreshKey,
   return (
     <div className="border border-[var(--border)] bg-[var(--card)]">
       <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">{'// '}BOTS</span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">BOTS</span>
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">{bots.length} leg{bots.length === 1 ? '' : 's'} · ownerless</span>
       </div>
       <div className="p-3 sm:p-4 space-y-2">

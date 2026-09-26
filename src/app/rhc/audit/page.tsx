@@ -13,15 +13,15 @@ const LEG_DEPLOYER = '0xA530b670762A5e82062A8f2256B0d877Afc8eBe4';
 const LEG_DEPLOYER_V2 = '0x42a2495D9426fd5d88A01e724E62275DCe02dfF4';
 
 const rows: [string, string, string][] = [
-  ...(V8_LIVE ? [['Factory v8 (ACTIVE — the flywheel)', POOLLAUNCH_FACTORY_V8, 'Every campaign it creates carries two fixed legs on the creator tax: 30% to the ProofBurner and 10% to the platform. Backers get the rest after the creator\'s optional legs. Sellers\' forfeited shares and every creation fee go to the burner. Pre-launch locks with fee weighting.'] as [string, string, string]] : []),
+  ...(V8_LIVE ? [['Factory v8 (ACTIVE: the flywheel)', POOLLAUNCH_FACTORY_V8, 'Every campaign it creates carries two fixed legs on the creator tax: 30% to the ProofBurner and 10% to the platform. Backers get the rest after the creator\'s optional legs. Sellers\' forfeited shares and every creation fee go to the burner. Pre-launch locks with fee weighting.'] as [string, string, string]] : []),
   ...(PROOF_BURNER_LIVE ? [['ProofBurner (the flywheel)', PROOF_BURNER, 'Collects the $PLAUNCH-burn leg from every campaign and can only ever buy $PLAUNCH and send it to the dead address: pons curve before graduation, Uniswap v4 directly after, spending at most 0.2 ETH per crank and one crank per block. No owner, no withdraw, no retarget. Anyone can crank; it costs them gas and pays them 1%.'] as [string, string, string]] : []),
   [V8_LIVE ? 'Factory v7 (superseded 2026-09-20 → v8; campaigns run forever)' : 'Factory v7 (ACTIVE since 2026-09-20)', POOLLAUNCH_FACTORY_V7, 'Creates every new campaign. Team rounds, token gating, ERC20/stock-quoted raises, creator-set payout asset, one-crank-per-block bot legs; every campaign it creates carries the EquityRouter immutably. Self-reviewed with published findings; no independent audit yet.'],
   ['EquityRouter (deployed 2026-09-20)', EQUITY_ROUTER, 'ETH in, any ETH-paired Uniswap v4 asset out \u2014 how a claim arrives as tokenized stock. Ownerless, holds nothing, no asset allowlist by design.'],
   ['Leg Deployer V3', LEG_DEPLOYER_V3, 'Carries the v3 bot legs (one crank per block; tick range from pool spacing). Ownerless, stateless.'],
-  ['pons Factory (target)', PONS_FACTORY, 'The launchpad our campaigns launch through. pons rotates factories — campaigns pin theirs at creation.'],
+  ['pons Factory (target)', PONS_FACTORY, 'The launchpad our campaigns launch through. pons rotates factories, campaigns pin theirs at creation.'],
   [`Platform Fee Leg (${V8_LIVE ? '10' : '7'}%)`, PLATFORM_LEG, 'Receives the platform share of every campaign\u2019s creator tax, immutably, per campaign.'],
   ['Holder Rewards Leg (3%, pre-v8 campaigns)', REWARDS_LEG, 'A plain wallet, not a distributor: nothing here is paid to token holders, and nothing meaningful has ever accrued. It is the retired third leg on every campaign created before v8; from v8 on it is replaced by the 30% $PLAUNCH burn.'],
-  ['Airdrop Operator (📸 legs)', AIRDROP_OPERATOR, 'Platform-run holder snapshot airdrops for campaigns that opted in. The one non-trustless bot — labeled so everywhere it appears.'],
+  ['Airdrop Operator (📸 legs)', AIRDROP_OPERATOR, 'Platform-run holder snapshot airdrops for campaigns that opted in. The one non-trustless bot, labeled so everywhere it appears.'],
 ];
 
 // Superseded, but every campaign they created still runs, so an audit page
@@ -42,7 +42,7 @@ export default function RhcAuditPage() {
       <div className="border border-[var(--border)] bg-[var(--card)]">
         <div className="border-b border-[var(--border)] px-3 py-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {'// '}AUDIT — CONTRACTS & WALLETS
+            AUDIT: CONTRACTS & WALLETS
           </span>
         </div>
         <div className="p-3 space-y-3">
@@ -110,7 +110,7 @@ export default function RhcAuditPage() {
           <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] leading-relaxed">
             Contracts are ownerless: no pause, no upgrade, no admin key exists. Deposits sit in each
             campaign until launch or refund; the platform never custodies funds. Source in the public
-            repo (contracts/rhc). Verify everything yourself — that&apos;s the point.
+            repo (contracts/rhc). Verify everything yourself: that&apos;s the point.
           </p>
         </div>
       </div>

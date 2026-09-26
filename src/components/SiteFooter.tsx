@@ -33,7 +33,7 @@ export function SiteFooter() {
 
 
         <div className="text-[10px] sm:text-[11px] font-mono leading-relaxed text-[var(--muted)]/85 border border-[var(--border)] bg-[var(--card)]/40 p-3">
-          <span className="text-[var(--accent-gold)] font-semibold">PARTICIPATION DISCLAIMER —</span>{' '}
+          <span className="text-[var(--accent-gold)] font-semibold">PARTICIPATION DISCLAIMER:</span>{' '}
           Proof Launch is an experimental, community-driven protocol. Nothing here is
           investment advice, a securities offering, or a solicitation. Tokens and
           on-chain activity carry substantial risk including total loss; you should

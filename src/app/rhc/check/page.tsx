@@ -20,7 +20,7 @@ function RhcCheckInner() {
       <RhcHeader />
       <div className="border border-[var(--border)] bg-[var(--card)]">
         <div className="border-b border-[var(--border)] px-3 py-2">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">{'// '}CHECK A PONS TOKEN — who is really buying?</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">CHECK A PONS TOKEN · who is really buying?</span>
         </div>
         <form onSubmit={submit} className="p-3 flex flex-col sm:flex-row gap-2">
           <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="0x… token or curve address" spellCheck={false}
@@ -28,7 +28,7 @@ function RhcCheckInner() {
           <button type="submit" className="btn-primary">Check</button>
         </form>
         <p className="px-3 pb-3 text-[10px] font-mono text-[var(--muted-soft)] leading-relaxed">
-          Every buy and sell on the curve is replayed. Buyers are sorted into independent wallets, wallets seen in synchronized dumps (8+ sellers inside 5 seconds), one-shot wallets that never bought anything else, and launch bots. No wallet is ever listed — only counts.
+          Every buy and sell on the curve is replayed. Buyers are sorted into independent wallets, wallets seen in synchronized dumps (8+ sellers inside 5 seconds), one-shot wallets that never bought anything else, and launch bots. No wallet is ever listed, only counts.
         </p>
       </div>
       {token && <WpPanel token={token} />}

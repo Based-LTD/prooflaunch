@@ -52,7 +52,7 @@ function YourBag({ rows, me }: { rows: CampaignRow[]; me: `0x${string}` }) {
     <div className="border border-[var(--accent)]/40 bg-[var(--card)] mb-4">
       <div className="border-b border-[var(--border)] px-3 py-2 flex items-center justify-between">
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-          {'// '}YOUR BAG — on-chain balances at {shortAddr(me)}
+          YOUR BAG: on-chain balances at {shortAddr(me)}
         </span>
         <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
           read live from Robinhood Chain
@@ -100,7 +100,7 @@ function YourBag({ rows, me }: { rows: CampaignRow[]; me: `0x${string}` }) {
           </div>
         ))}
         <p className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted-soft)] leading-relaxed">
-          Phantom doesn&apos;t display new Robinhood Chain tokens yet — these balances are
+          Phantom doesn&apos;t display new Robinhood Chain tokens yet, these balances are
           contract state, verifiable on the explorer, and tradable on pons regardless.
         </p>
       </div>
@@ -130,7 +130,7 @@ export default function RhcPortfolioPage() {
       <div className="border border-[var(--border)] bg-[var(--card)]">
         <div className="border-b border-[var(--border)] px-3 py-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {'// '}YOUR POSITIONS
+            YOUR POSITIONS
           </span>
         </div>
         <div className="p-3">
@@ -150,7 +150,7 @@ export default function RhcPortfolioPage() {
           )}
           {rows && rows.length === 0 && (
             <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)] py-6 text-center">
-              no positions yet — back a campaign from the board
+              no positions yet: back a campaign from the board
             </p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

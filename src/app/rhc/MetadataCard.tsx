@@ -53,7 +53,7 @@ export function MetadataCard({ meta, media, terms }: {
       </dl>
       {gaps.length > 0 && (
         <p className="mt-3 pt-3 border-t border-[var(--border)] text-[10px] font-mono uppercase tracking-widest text-[var(--warning,#c9a227)]">
-          Not set: {gaps.join(', ')} — add {gaps.length === 1 ? 'it' : 'them'} from the creator controls.
+          Not set: {gaps.join(', ')}, add {gaps.length === 1 ? 'it' : 'them'} from the creator controls.
         </p>
       )}
     </DashboardCard>

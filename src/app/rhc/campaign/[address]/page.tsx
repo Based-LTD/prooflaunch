@@ -38,16 +38,16 @@ interface State {
   tokensAtLaunch: bigint; totalRaisedAtLaunch: bigint;
   myContribution: bigint; myTokensClaimed: boolean;
   myFeeEntitlement: bigint; myFeesClaimed: bigint;
-  myTokenBalance: bigint; // live wallet balance — Phantom won't show it, we do
-  isV4: boolean; // pons V2 campaign — native-ETH fees, pokeHarvest crank
+  myTokenBalance: bigint; // live wallet balance, Phantom won't show it, we do
+  isV4: boolean; // pons V2 campaign, native-ETH fees, pokeHarvest crank
   curve: `0x${string}` | null;
   curveGraduated: boolean;
   myCurveAllowance: bigint;
   ponsOwed: bigint; // creator fees sitting in pons' escrow, owed to this splitter, not yet collected
   backerBps: number; // splitter's backer share (9000 = 90%), for projecting what a collect yields you
-  projectedShare: bigint; // YOUR cut of ponsOwed once collected — shown so 'nothing to claim' can never be the read
+  projectedShare: bigint; // YOUR cut of ponsOwed once collected, shown so 'nothing to claim' can never be the read
   projectedShares: bigint | null; // that cut quoted in the creator's payout asset, if any
-  myEth: bigint; // signer's ETH — an empty wallet must be told BEFORE the wallet prompt, not by a red banner inside it
+  myEth: bigint; // signer's ETH: an empty wallet must be told BEFORE the wallet prompt, not by a red banner inside it
   gasPrice: bigint;
   v7: V7 | null; // null for v1–v6 campaigns; this page serves every generation
   v8: { myLockUntil: number; myLockDays: number; maxLockDays: number } | null; // pre-launch lock (CampaignV4)
@@ -368,11 +368,11 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
         let text = 'Confirmed';
         if (a.kind === 'buy') text = `Bought ${fmtTok(tokDelta)} $${sym} for ${fmtEth(a.amount ?? 0n)} ETH`;
         else if (a.kind === 'sell') text = `Sold ${fmtTok(a.amount ?? -tokDelta)} $${sym} for ${fmtEth(ethNet, 6)} ETH`;
-        else if (a.kind === 'approve') text = `Approved the curve to take $${sym} you sell — now hit Sell`;
+        else if (a.kind === 'approve') text = `Approved the curve to take $${sym} you sell: now hit Sell`;
         else if (a.kind === 'claimTokens') text = `Claimed ${fmtTok(tokDelta)} $${sym} into your wallet`;
-        else if (a.kind === 'claimFees') text = s.splitterV4 && ethNet <= 0n ? 'Nothing paid — you sold your allocation, so that share went to the PROOF burn' : `Claimed ${fmtEth(ethNet, 6)} ETH of fees`;
+        else if (a.kind === 'claimFees') text = s.splitterV4 && ethNet <= 0n ? 'Nothing paid: you sold your allocation, so that share went to the PROOF burn' : `Claimed ${fmtEth(ethNet, 6)} ETH of fees`;
         else if (a.kind === 'claimFeesAs' && a.asset) text = `Claimed fees as ${a.asset.symbol}: ${fmtShares((assetAfter ?? 0n) - (a.assetBefore ?? 0n), a.asset.decimals)} ${a.asset.symbol} landed in your wallet`;
-        else if (a.kind === 'collect') text = 'Collected accrued fees from pons into the splitter — your share is updated below';
+        else if (a.kind === 'collect') text = 'Collected accrued fees from pons into the splitter. Your share is updated below';
         else if (a.label) text = a.label;
         setLastReceipt({ text: `${text} · gas ${fmtEth(gas, 7)} ETH`, hash: receipt.transactionHash });
       }
@@ -413,7 +413,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
 
   const act = (functionName: 'withdraw' | 'launch' | 'claimTokens' | 'refund' | 'cancel' | 'pokeCollect' | 'pokeHarvest') => {
     const kind: ActionKind = functionName === 'claimTokens' ? 'claimTokens' : functionName === 'pokeHarvest' || functionName === 'pokeCollect' ? 'collect' : 'other';
-    const labels: Record<string, string> = { withdraw: 'Withdrawn — your seat is free and your deposit is back', launch: 'Launched — token created on pons and the pooled buy executed', refund: 'Refunded — your deposit is back', cancel: 'Campaign cancelled — refunds open' };
+    const labels: Record<string, string> = { withdraw: 'Withdrawn: your seat is free and your deposit is back', launch: 'Launched: token created on pons and the pooled buy executed', refund: 'Refunded: your deposit is back', cancel: 'Campaign cancelled: refunds open' };
     void startAction(kind, { label: labels[functionName] });
     writeContract({ address: addr, abi: campaignAbi, functionName, chainId: robinhoodChain.id });
   };
@@ -487,7 +487,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
   };
   const lockPicker = v8 && s.myContribution === 0n ? (
     <label className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-      <span title="Your tokens stay in this campaign contract for this long AFTER launch. Visible to every backer before launch. Nobody can shorten it — there is no admin. Locking pays: 6 months earns fees at ×1.25, a year or more at ×1.5, out of the same pool sellers forfeit.">🔒 lock my tokens</span>
+      <span title="Your tokens stay in this campaign contract for this long AFTER launch. Visible to every backer before launch. Nobody can shorten it, there is no admin. Locking pays: 6 months earns fees at ×1.25, a year or more at ×1.5, out of the same pool sellers forfeit.">🔒 lock my tokens</span>
       <select value={lockDays} onChange={(e) => setLockDays(Number(e.target.value))}
         className="bg-[var(--background)] border border-[var(--border)] px-2 py-1.5 text-[10px] font-mono uppercase tracking-widest focus:border-[var(--accent)] focus:outline-none">
         <option value={0}>no lock · ×1 fees</option>
@@ -560,7 +560,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
             <div className="mb-3">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  Slots{v7 && v7.reservedSeats > 0 ? ' — team round' : ''}
+                  Slots{v7 && v7.reservedSeats > 0 ? ', team round' : ''}
                 </span>
                 <span className="text-xs font-mono text-[var(--accent)]">
                   {s.backerCount.toString()} / {s.maxBackers.toString()}
@@ -581,7 +581,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   return (
                     <div
                       key={i}
-                      title={reserved ? (taken ? 'Team seat — taken' : 'Team seat — reserved for the allowlist') : (taken ? 'Public seat — taken' : 'Public seat — open')}
+                      title={reserved ? (taken ? 'Team seat: taken' : 'Team seat: reserved for the allowlist') : (taken ? 'Public seat: taken' : 'Public seat: open')}
                       className={`h-4 ${
                         taken
                           ? reserved ? 'bg-[var(--accent-gold)]' : 'bg-[var(--accent)]'
@@ -674,7 +674,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   >
                     {s.myContribution > 0n
                       ? `Seat Taken ✓${v7?.mySeatBucket === 2 ? ' (reserved)' : ''}${iAmLocked ? ` · locked → ${myLockDate}` : ''}`
-                      : `Take a${takesReserved ? ' Reserved' : ''} Seat — ${q(s.minDeposit)} ${qSym}${lockDays > 0 ? ' · locked' : ''}`}
+                      : `Take a${takesReserved ? ' Reserved' : ''} Seat: ${q(s.minDeposit)} ${qSym}${lockDays > 0 ? ' · locked' : ''}`}
                   </button>
                 )
               ) : (
@@ -693,7 +693,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                       disabled={isPending || wantAmount === 0n || gateBlocked || publicFull}
                       className="btn-primary"
                     >
-                      Approve {qSym} — step 1 of 2
+                      Approve {qSym} · step 1 of 2
                     </button>
                   ) : (
                     <button
@@ -745,7 +745,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
 
           {isConnected && canLaunch && (
             <button onClick={() => act('launch')} disabled={isPending} className="btn-primary mt-4">
-              {iAmCreator ? 'Launch Now' : 'Launch (deadline passed — anyone may)'}
+              {iAmCreator ? 'Launch Now' : 'Launch (deadline passed: anyone may)'}
             </button>
           )}
 
@@ -761,7 +761,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
 
           {/* An ERC20-quoted raise escrows pons' launch fee in ETH at
               creation. If the raise dies that ETH sits in the campaign
-              until someone calls for it — with no button, a creator sees
+              until someone calls for it, with no button, a creator sees
               their money simply gone, which is exactly how we got called a
               scam the first time. The call is permissionless and always
               pays the creator, so anyone may trigger it. */}
@@ -865,7 +865,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                   </p>
                   {/* EIP-747: ask the wallet to TRACK the token. New tokens
                       on a young chain are invisible in wallet UIs until
-                      told — the #1 support question on the SOL side too. */}
+                      told: the #1 support question on the SOL side too. */}
                   <button
                     onClick={async () => {
                       // Route through the CONNECTED wallet's client (not a
@@ -886,7 +886,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     disabled={watchState === 'asking' || !walletClient}
                     className="px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors disabled:opacity-40"
                   >
-                    {watchState === 'asking' ? 'Check your wallet…' : watchState === 'ok' ? '✓ Added to wallet' : watchState === 'nope' ? 'Wallet refused — use Explorer →' : '+ Add Token to Wallet'}
+                    {watchState === 'asking' ? 'Check your wallet…' : watchState === 'ok' ? '✓ Added to wallet' : watchState === 'nope' ? 'Wallet refused: use Explorer →' : '+ Add Token to Wallet'}
                   </button>
                   <a
                     href={explorerUrl(s.token)}
@@ -969,7 +969,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               )}
               {s.launched && s.curve && s.curveGraduated && (
                 <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-                  {'> '}Graduated — trades on the locked Uniswap v4 pool via pons.
+                  {'> '}Graduated: trades on the locked Uniswap v4 pool via pons.
                 </p>
               )}
 
@@ -994,7 +994,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
               )}
               {isConnected && s.myEth < 300_000n * s.gasPrice && (
                 <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning,#c9a227)] border border-[var(--warning,#c9a227)]/40 bg-[var(--warning,#c9a227)]/5 px-3 py-2">
-                  {'> '}This wallet holds {fmtEth(s.myEth, 7)} ETH — not enough for gas. Add about 0.0005 ETH before trading or claiming, or the wallet will refuse with a simulation error.
+                  {'> '}This wallet holds {fmtEth(s.myEth, 7)} ETH: not enough for gas. Add about 0.0005 ETH before trading or claiming, or the wallet will refuse with a simulation error.
                 </p>
               )}
               {/* ── FEES. A backer needs ONE sentence — what they've earned —
@@ -1018,7 +1018,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                 };
                 const gasNote = lowGas && (
                   <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--warning,#c9a227)] border border-[var(--warning,#c9a227)]/40 bg-[var(--warning,#c9a227)]/5 px-3 py-2 w-full">
-                    {'> '}This wallet holds {fmtEth(s.myEth, 7)} ETH — not enough for gas. Add about {shortfall || '0.0005'} ETH (0.0005 is plenty) before claiming.
+                    {'> '}This wallet holds {fmtEth(s.myEth, 7)} ETH: not enough for gas. Add about {shortfall || '0.0005'} ETH (0.0005 is plenty) before claiming.
                   </p>
                 );
                 return (
@@ -1026,7 +1026,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
                     <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-2">{(s.backerBps / 100).toFixed(0)}% of every trade&apos;s creator tax goes to backers{s.splitterV4 ? ' · the fee stream follows the tokens' : ''}</p>
                     {s.splitterV4 && iBack && (
                       <p className={`text-[10px] font-mono uppercase tracking-widest mb-2 ${s.myHeldBps >= 9_000 ? 'text-[var(--success)]' : s.myHeldBps > 0 ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--error)]'}`}>
-                        {'> '}You hold {(s.myHeldBps / 100).toFixed(0)}% of your allocation{s.myHeldBps < 10_000 ? ` — you earn ${(s.myHeldBps / 100).toFixed(0)}% of your share; the rest buys and burns $PLAUNCH` : ' — full share'}
+                        {'> '}You hold {(s.myHeldBps / 100).toFixed(0)}% of your allocation{s.myHeldBps < 10_000 ? `, you earn ${(s.myHeldBps / 100).toFixed(0)}% of your share; the rest buys and burns $PLAUNCH` : ', full share'}
                       </p>
                     )}
                     <div className="space-y-3">
@@ -1145,7 +1145,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           {v8 && !s.launched && !s.cancelled && (
             <div className="border-b border-[var(--border)] pb-4">
               <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)] mb-2">On-chain · what pons will mint</div>
-              <OnChainMetaEditor campaign={addr} onSent={() => { setTool(null); void startAction('other', { label: 'Metadata updated on-chain — what launches is what you see now' }); }}
+              <OnChainMetaEditor campaign={addr} onSent={() => { setTool(null); void startAction('other', { label: 'Metadata updated on-chain: what launches is what you see now' }); }}
                 current={{ name: s.meta.name, symbol: s.meta.symbol, logo: s.meta.logo, description: s.meta.description,
                   socials: { twitter: s.meta.socials?.twitter ?? '', telegram: s.meta.socials?.telegram ?? '', discord: s.meta.socials?.discord ?? '', website: s.meta.socials?.website ?? '', farcaster: s.meta.socials?.farcaster ?? '' } }} />
             </div>
@@ -1177,7 +1177,7 @@ export default function CampaignPage({ params }: { params: Promise<{ address: st
           <a href={explorerUrl(addr)} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--muted)]">{addr}</a>
           {' '}· Splitter{' '}
           <a href={explorerUrl(s.feeSplitter)} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--muted)]">{s.feeSplitter.slice(0, 10)}…</a>
-          {' '}· Ownerless contracts — verify everything yourself
+          {' '}· Ownerless contracts: verify everything yourself
         </p>
       ) : (
         <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">

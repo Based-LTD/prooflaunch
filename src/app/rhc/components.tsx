@@ -204,7 +204,7 @@ export function ConnectButton() {
       <button
         onClick={() => switchChain({ chainId: robinhoodChain.id })}
         className="px-4 py-2.5 text-xs font-mono border border-[var(--warning)]/60 text-[var(--warning)] hover:bg-[var(--warning)] hover:text-black transition-colors"
-        title="Your wallet is on another network — click to hop back"
+        title="Your wallet is on another network, click to hop back"
       >
         {shortAddr(address)} ⚠
       </button>
@@ -242,7 +242,7 @@ export function RhcHeader() {
           Robinhood Chain
         </span>
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
-          {'// '}Pool the raise · own the float · earn the fees
+          Pool the raise · own the float · earn the fees
         </span>
       </div>
     </div>
@@ -308,7 +308,7 @@ export function CampaignCard({ r, footer }: { r: CampaignRow; footer?: React.Rea
         {/* Top bar — system path + status */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5 gap-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] truncate">
-            {'// '}{r.symbol.slice(0, 12)}
+            {r.symbol.slice(0, 12)}
           </span>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {test && <TestTag />}
@@ -454,7 +454,7 @@ export function Modal({ open, onClose, label, children, wide = false }: { open: 
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4" onClick={onClose} role="dialog" aria-modal="true">
       <div className={`w-full ${wide ? 'sm:max-w-3xl' : 'sm:max-w-xl'} max-h-[92vh] overflow-y-auto border border-[var(--border)] bg-[var(--card)]`} onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--card)] px-3 py-2">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">{'// '}{label}</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">{label}</span>
           <button onClick={onClose} aria-label="Close" className="text-[var(--muted)] hover:text-[var(--foreground)] text-sm leading-none px-1">✕</button>
         </div>
         <div className="p-4">{children}</div>

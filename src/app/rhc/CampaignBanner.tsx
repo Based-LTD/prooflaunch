@@ -52,14 +52,14 @@ export function SoftMetaEditor({ campaign, current, onSaved }: { campaign: `0x${
   useEffect(() => { setF({ description: current.description ?? '', twitter: current.twitter ?? '', telegram: current.telegram ?? '', discord: current.discord ?? '', website: current.website ?? '', github: current.github ?? '' }); }, [current]);
   const save = async () => {
     if (!me) return; setBusy(true); setMsg(null);
-    try { await saveSoftMeta(campaign, me, f, signMessageAsync); setMsg('Saved — the page updates on the next load'); onSaved(); }
-    catch (e) { const m = e instanceof Error ? e.message : String(e); setMsg(/reject|denied/i.test(m) ? 'Signature declined — nothing saved' : m.slice(0, 140)); }
+    try { await saveSoftMeta(campaign, me, f, signMessageAsync); setMsg('Saved: the page updates on the next load'); onSaved(); }
+    catch (e) { const m = e instanceof Error ? e.message : String(e); setMsg(/reject|denied/i.test(m) ? 'Signature declined: nothing saved' : m.slice(0, 140)); }
     finally { setBusy(false); }
   };
   const input = 'w-full bg-[var(--background)] border border-[var(--border)] px-3 py-2 text-xs font-mono focus:border-[var(--accent)] focus:outline-none';
   return (
     <div className="space-y-2">
-      <p className="text-xs font-mono text-[var(--muted)]">Description and links shown on this page. Editable any time; one signature saves. The token&apos;s on-chain name, symbol and logo are what pons has — those cannot change after launch.</p>
+      <p className="text-xs font-mono text-[var(--muted)]">Description and links shown on this page. Editable any time; one signature saves. The token&apos;s on-chain name, symbol and logo are what pons has, those cannot change after launch.</p>
       <textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} maxLength={600} rows={3} placeholder="Description (leave empty to use the on-chain one)" className={input} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {(['twitter', 'telegram', 'discord', 'website', 'github'] as const).map((k) => (
@@ -125,7 +125,7 @@ export function BannerManager({ campaign, current, onChanged }: { campaign: `0x$
       onChanged();
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
-      setErr(/reject|denied/i.test(m) ? 'Signature declined — banner not attached' : m.split('\n')[0].slice(0, 140));
+      setErr(/reject|denied/i.test(m) ? 'Signature declined: banner not attached' : m.split('\n')[0].slice(0, 140));
       setPreview(null);
     } finally {
       setBusy('idle');
@@ -145,7 +145,7 @@ export function BannerManager({ campaign, current, onChanged }: { campaign: `0x$
   return (
     <div className="space-y-2">
       <p className="text-xs font-mono text-[var(--muted)]">
-        Banner — the wide image above the page. 1500×500 (3:1), PNG/JPG/WebP, under 2 MB. One signature attaches it; only this campaign&apos;s creator can.
+        Banner: the wide image above the page. 1500×500 (3:1), PNG/JPG/WebP, under 2 MB. One signature attaches it; only this campaign&apos;s creator can.
       </p>
       {shown ? (
         <div className="relative">

@@ -93,7 +93,7 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
               className="btn-primary flex-1"
               disabled={busy || !preferredReady}
               onClick={() => preferredReady && onClaimAs(preferredAsset, minOutFrom(pq as bigint))}
-              title={preferredReady ? `${preferredAsset.symbol} is the creator's pick. Your ETH is swapped for shares in the same transaction; we never hold them.` : pq === null ? `${preferredAsset.symbol} can't be quoted right now — take ETH` : 'Quoting…'}
+              title={preferredReady ? `${preferredAsset.symbol} is the creator's pick. Your ETH is swapped for shares in the same transaction; we never hold them.` : pq === null ? `${preferredAsset.symbol} can't be quoted right now, take ETH` : 'Quoting…'}
             >
               {pq === 'loading' || pq === undefined
                 ? `Take ${preferredAsset.symbol} · quoting…`
@@ -182,7 +182,7 @@ export function ClaimAsPicker({ owed, account, busy, onClaimEth, onClaimAs, pref
 
           <p className="text-[10px] text-[var(--muted)] leading-relaxed pt-2">
             Quoted live against the pool, not a price feed. Your claim is paid in
-            ETH and swapped in the same transaction — we never hold the shares.
+            ETH and swapped in the same transaction, we never hold the shares.
             If the price moves past your slippage bound the claim reverts and
             stays yours to claim again.
           </p>

@@ -21,7 +21,7 @@ export default function RhcLaunchedPage() {
       <div className="border border-[var(--border)] bg-[var(--card)]">
         <div className="border-b border-[var(--border)] px-3 py-2">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {'// '}LAUNCHED
+            LAUNCHED
           </span>
         </div>
         <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

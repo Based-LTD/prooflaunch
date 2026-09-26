@@ -11,7 +11,7 @@ export function WpRecent() {
   return (
     <div className="border border-[var(--border)] bg-[var(--card)]">
       <div className="border-b border-[var(--border)] px-3 py-2">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">{'// '}LATEST PONS LAUNCHES WITH TRADES</span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">LATEST PONS LAUNCHES WITH TRADES</span>
       </div>
       <div className="divide-y divide-[var(--border)]">
         {rows.map((v) => {

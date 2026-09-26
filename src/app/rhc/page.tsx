@@ -104,7 +104,7 @@ export default function RhcBoardPage() {
 
       {error && (
         <p className="text-xs font-mono text-[var(--error)] border border-[var(--error)]/40 bg-[var(--error)]/5 p-3">
-          CHAIN READ FAILED: {error} — refresh to retry
+          CHAIN READ FAILED: {error}, refresh to retry
         </p>
       )}
 
@@ -159,11 +159,11 @@ export default function RhcBoardPage() {
               totalCount={totals.backing}
               isFiltered={!!search.trim()}
               items={backing}
-              emptyHint={search ? 'No matches' : 'No open raises — create one'}
+              emptyHint={search ? 'No matches' : 'No open raises: create one'}
               sortValue={backingSort}
               onSortChange={(v) => setBackingSort(v as BackingSort)}
               sortOptions={[
-                { value: 'ending_soon', label: 'ENDING_SOON' },
+                { value: 'ending_soon', label: 'ENDING SOON' },
                 { value: 'progress', label: 'PROGRESS' },
                 { value: 'newest', label: 'NEWEST' },
               ]}
@@ -244,7 +244,7 @@ const Column: React.FC<ColumnProps> = ({
         <div className="flex items-center gap-2 min-w-0">
           <Icon className={`w-3 h-3 ${iconColor} shrink-0`} />
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {'// '}{label.toUpperCase()}
+            {label.toUpperCase()}
           </span>
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] shrink-0">
             {isFiltered ? <><span className={iconColor}>{count}</span>/{totalCount}</> : <span className={iconColor}>{totalCount}</span>}

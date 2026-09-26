@@ -158,7 +158,7 @@ export function FlywheelPanel({ compact = false, strip = false }: { compact?: bo
   return (
     <div className={`border border-[var(--accent-gold)]/60 bg-[var(--card)] overflow-hidden ${flash ? 'fw-flash' : ''}`}>
       <div className="flex items-center justify-between border-b border-[var(--accent-gold)]/40 px-3 py-1.5">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">{'// '}FLYWHEEL — fees → burned $PLAUNCH</span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">FLYWHEEL · fees → burned $PLAUNCH</span>
         <span className="flex items-center gap-3 text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
           {!PROOF_BURNER_LIVE && <span>begins with the $PLAUNCH launch</span>}
           <Link href="/rhc/flywheel" className="text-[var(--accent)] hover:text-[var(--accent-hover)]">full flywheel →</Link>

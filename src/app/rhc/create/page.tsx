@@ -60,9 +60,9 @@ interface BotItem { kind: BotKind; pct: string; addr?: string }
 // directly after; proven on live-pool forks). First of their kind on
 // this chain; globally we say "we believe first" and mean the hedge.
 const BOT_ACTIONS: { kind: BotKind; label: string; tag: string; emoji: string; desc: string; disabled?: boolean }[] = [
-  { kind: 'burn',    label: 'BURN',           tag: 'Deflationary · Trustless', emoji: '🔥', desc: 'Ownerless contract buys the token with its fee share — on the bonding curve before graduation, directly on the Uniswap-v4 pool after — and sends everything to the dead address. Anyone can crank it; nobody, including us, can stop it.' },
-  { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'Liquidity · Trustless',    emoji: '🌊', desc: 'Ownerless contract mints full-range liquidity on the graduated v4 pool and compounds the position\'s own trading fees. It has NO withdraw function — protocol-owned liquidity locked by construction, not by promise.' },
-  { kind: 'vault',   label: 'VAULT',          tag: 'Treasury',                 emoji: '🏦', desc: 'A wallet you name (marketing / DAO / treasury) becomes a fee leg and pulls its share anytime. Address locked at creation — can never be changed.' },
+  { kind: 'burn',    label: 'BURN',           tag: 'Deflationary · Trustless', emoji: '🔥', desc: 'Ownerless contract buys the token with its fee share, on the bonding curve before graduation, directly on the Uniswap-v4 pool after, and sends everything to the dead address. Anyone can crank it; nobody, including us, can stop it.' },
+  { kind: 'feed_lp', label: 'POOL FEEDER',    tag: 'Liquidity · Trustless',    emoji: '🌊', desc: 'Ownerless contract mints full-range liquidity on the graduated v4 pool and compounds the position\'s own trading fees. It has NO withdraw function, protocol-owned liquidity locked by construction, not by promise.' },
+  { kind: 'vault',   label: 'VAULT',          tag: 'Treasury',                 emoji: '🏦', desc: 'A wallet you name (marketing / DAO / treasury) becomes a fee leg and pulls its share anytime. Address locked at creation, can never be changed.' },
   { kind: 'airdrop', label: 'HOLDER AIRDROP', tag: 'Loyalty · Platform-run',   emoji: '📸', desc: 'ProofLaunch snapshots your token\'s holders and airdrops this leg\'s fees pro-rata Platform-operated and labeled so; 🔥 BURN is the trustless holder reward.' },
   { kind: 'creator', label: 'CREATOR FEE',    tag: `Your wallet · max ${CREATOR_MAX_PCT}%`, emoji: '👤', desc: 'Pay yourself a fixed share of the fee stream, locked at creation and pointed at your connected wallet. It comes straight out of what backers keep, and your campaign page shows it as CREATOR with the percentage, so everyone funding you sees the trade before they do.' },
 ];
@@ -302,7 +302,7 @@ export default function CreateCampaignPage() {
     const meta = {
       name: f.name, symbol: f.symbol.toUpperCase(), logo: logoUrl, description: f.description,
       socials: { twitter: L.twitter, telegram: L.telegram, discord: L.discord, website: L.website, farcaster: L.farcaster },
-      feeWallet: '0x0000000000000000000000000000000000000000' as `0x${string}`, // unused on V2 — the contract sets creatorFeeRecipient = FeeSplitter
+      feeWallet: '0x0000000000000000000000000000000000000000' as `0x${string}`, // unused on V2, the contract sets creatorFeeRecipient = FeeSplitter
     };
     const vaultAddrs = vaultLegs.map((b) => (b.kind === 'airdrop' ? AIRDROP_OPERATOR : b.kind === 'creator' ? (address as `0x${string}`) : (b.addr as `0x${string}`)));
     const vaultBpsArr = vaultLegs.map((b) => Math.round(Number(b.pct) * 100));
@@ -368,7 +368,7 @@ export default function CreateCampaignPage() {
           const signature = await signMessageAsync({ message });
           preSigRef.current = { campaign: predicted.toLowerCase(), message, signature };
         } catch {
-          setBannerError('Signature declined — nothing was created. Submit again and approve both prompts, or clear the banner and GitHub fields first.');
+          setBannerError('Signature declined: nothing was created. Submit again and approve both prompts, or clear the banner and GitHub fields first.');
           return;
         }
       }
@@ -423,7 +423,7 @@ export default function CreateCampaignPage() {
         <div className="border border-[var(--success)] bg-[var(--card)]">
           <div className="border-b border-[var(--success)] px-4 py-2">
             <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--success)]">
-              {'// CAMPAIGN_LIVE'}
+              {'CAMPAIGN LIVE'}
             </span>
           </div>
           <div className="p-6">
@@ -448,7 +448,7 @@ export default function CreateCampaignPage() {
             >
               prooflaunch.fun/rhc/campaign/{created}
             </a>
-            <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">Check the METADATA card on that page before you share it — everything the token will say is listed there.</p>
+            <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[var(--muted-soft)]">Check the METADATA card on that page before you share it · everything the token will say is listed there.</p>
           </div>
         </div>
       </div>
@@ -467,7 +467,7 @@ export default function CreateCampaignPage() {
     ['raise', raiseStyle === 'seats' ? `${seatCount} seats × ${seatPrice} ${unitSym} = ${effGoalEth} ${unitSym}${reservedN ? ` · ${reservedN} team seats → ${allowlist.map((w) => `${shortAddr(w)}`).join(', ') || 'NONE NAMED'}, ${seatCount - reservedN} public` : ''}` : `open · goal ${f.goal} ${unitSym} · min ${f.min} · max ${f.max === '0' ? 'none' : f.max}`],
     ['creator tax', `${taxPct}% · traders pay ${(Number(taxPct) + 1).toFixed(Number(taxPct) % 1 ? 1 : 0)}% with pons' 1%`],
     ['fee payout', payoutName],
-    ['coin burn', `${burnPct}% of the fee stream buys and burns $${f.symbol.trim().toUpperCase() || 'YOUR TOKEN'}${presetName === 'Custom' ? '' : ` — the ${presetName} preset`}`, burnPct === 0],
+    ['coin burn', `${burnPct}% of the fee stream buys and burns $${f.symbol.trim().toUpperCase() || 'YOUR TOKEN'}${presetName === 'Custom' ? '' : `, the ${presetName} preset`}`, burnPct === 0],
     ...(creatorPct > 0 ? [['creator fee', `${creatorPct}% of the fee stream to YOUR wallet (${shortAddr(address)}), shown as CREATOR on your campaign page`, true] as [string, string, boolean]] : []),
     ['rest of stack', `${botsPct - burnPct - creatorPct}% other bots · ${backerPct}% backers · ${FIXED_LEGS_PCT.total}% fixed (${FIXED_LEGS_PCT.burn > 0 ? `${FIXED_LEGS_PCT.burn}% $PLAUNCH burn + ${FIXED_LEGS_PCT.platform}% platform` : `${FIXED_LEGS_PCT.platform}% platform + ${FIXED_LEGS_PCT.rewards}% retired`})`],
     ['deadline', `${f.days} days`],
@@ -483,12 +483,12 @@ export default function CreateCampaignPage() {
           {reviewRows.map(([k, v, warn]) => (
             <div key={k} className="contents">
               <dt className="text-[10px] uppercase tracking-widest text-[var(--muted)] pt-0.5">{k}</dt>
-              <dd className={warn ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--foreground)]'}>{v}{warn ? ' — ok?' : ''}</dd>
+              <dd className={warn ? 'text-[var(--warning,#c9a227)]' : 'text-[var(--foreground)]'}>{v}{warn ? ', ok?' : ''}</dd>
             </div>
           ))}
         </dl>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button onClick={() => { setReview(false); void submit(); }} className="btn-primary">Looks right — create it</button>
+          <button onClick={() => { setReview(false); void submit(); }} className="btn-primary">Looks right: create it</button>
           <button onClick={() => setReview(false)} className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest border border-[var(--border)] text-[var(--muted)]">Go back and change something</button>
         </div>
       </Modal>
@@ -496,7 +496,7 @@ export default function CreateCampaignPage() {
       <div className="border border-[var(--border)] bg-[var(--card)] mb-5">
         <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
-            {'// PROOF_LAUNCH.SYS // SUBMIT'}
+            {'SUBMIT A TOKEN'}
           </span>
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
             [INPUT]
@@ -510,7 +510,7 @@ export default function CreateCampaignPage() {
             Submit a Token<span className="cursor-blink" />
           </h1>
           <p className="text-xs font-mono text-[var(--muted)] mt-1.5">
-            Configure · Rally backers · Launch on pons — terms enforced by ownerless contracts
+            Configure · Rally backers · Launch on pons, terms enforced by ownerless contracts
           </p>
         </div>
       </div>
@@ -551,7 +551,7 @@ export default function CreateCampaignPage() {
             <section className="border border-[var(--border)] bg-[var(--card)]">
               <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                  {'// LAUNCH_PLATFORM'}
+                  {'LAUNCH PLATFORM'}
                 </span>
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                   1 LIVE
@@ -576,7 +576,7 @@ export default function CreateCampaignPage() {
             <section className="border border-[var(--border)] bg-[var(--card)]">
               <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                  {'// BASICS'}
+                  {'BASICS'}
                 </span>
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--error)] border border-[var(--error)] px-1.5 py-0.5">
                   REQUIRED
@@ -723,7 +723,7 @@ export default function CreateCampaignPage() {
             <section className="border border-[var(--border)] bg-[var(--card)]">
               <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">
-                  {'// LINKS'}
+                  {'LINKS'}
                 </span>
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] border border-[var(--border)] px-1.5 py-0.5">
                   ALL OPTIONAL
@@ -765,7 +765,7 @@ export default function CreateCampaignPage() {
               <section className="border border-[var(--border)] bg-[var(--card)]">
                 <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                    {'// QUOTE_ASSET'}
+                    {'QUOTE ASSET'}
                   </span>
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                     PONS-APPROVED PAIRS
@@ -808,7 +808,7 @@ export default function CreateCampaignPage() {
                     <span className="text-[var(--accent-gold)] uppercase tracking-widest">Heads up:</span>{' '}
                     backers deposit {quote.symbol} (one approval, then deposit), refunds and the
                     fee stream pay in {quote.symbol}, and pons&apos; 0.0005 ETH launch fee is
-                    escrowed from your wallet at creation — refundable to you if the raise never
+                    escrowed from your wallet at creation, refundable to you if the raise never
                     launches. Trustless 🔥/🌊 bots are ETH-quoted only for now.
                   </div>
                 )}
@@ -822,7 +822,7 @@ export default function CreateCampaignPage() {
               <section className="border border-[var(--border)] bg-[var(--card)]">
                 <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                    {'// FEE_PAYOUT'}
+                    {'FEE PAYOUT'}
                   </span>
                   <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)]">
                     default only · claimers choose
@@ -838,7 +838,7 @@ export default function CreateCampaignPage() {
                     <option value={0}>ETH (default)</option>
                     {EQUITY_ASSETS.map((a, i) => (
                       <option key={a.symbol} value={i + 1}>
-                        {a.symbol} — {a.label}{a.feeBps >= PRICEY_FEE_BPS ? ` (pool fee ${(a.feeBps / 100).toFixed(1)}%)` : ''}
+                        {a.symbol}, {a.label}{a.feeBps >= PRICEY_FEE_BPS ? ` (pool fee ${(a.feeBps / 100).toFixed(1)}%)` : ''}
                       </option>
                     ))}
                   </select>
@@ -854,7 +854,7 @@ export default function CreateCampaignPage() {
             <section className="border border-[var(--border)] bg-[var(--card)]">
               <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                  {'// RAISE_STYLE'}
+                  {'RAISE STYLE'}
                 </span>
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                   {f.days}-DAY DEADLINE
@@ -863,7 +863,7 @@ export default function CreateCampaignPage() {
               <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {([
                   { key: 'open' as const,  label: '⚡ OPEN RAISE', sub: 'ETH GOAL · UNLIMITED BACKERS', desc: 'Anyone can back with any amount. Launches when the pool hits the goal. Optional whale cap.' },
-                  { key: 'seats' as const, label: '🎟 SEAT ROUND', sub: 'N SEATS · FIXED PRICE · EQUAL ENTRY', desc: 'Every seat identical — same price, same share. The last seat filling IS the launch trigger, enforced by contract. The SOL mechanic, trustless.' },
+                  { key: 'seats' as const, label: '🎟 SEAT ROUND', sub: 'N SEATS · FIXED PRICE · EQUAL ENTRY', desc: 'Every seat identical: same price, same share. The last seat filling IS the launch trigger, enforced by contract. The SOL mechanic, trustless.' },
                 ]).map((t) => {
                   const active = raiseStyle === t.key;
                   return (
@@ -996,7 +996,7 @@ export default function CreateCampaignPage() {
                           ))}
                         </select>
                         <span className="text-[10px] font-mono text-[var(--muted)] mt-1 block">
-                          &gt; Exact deposit — no more, no less
+                          &gt; Exact deposit: no more, no less
                         </span>
                       </div>
                       <div>
@@ -1038,10 +1038,10 @@ export default function CreateCampaignPage() {
                               {Array.from({ length: seatCount + 1 }).map((_, n) => (
                                 <option key={n} value={String(n)}>
                                   {n === 0
-                                    ? '0 — fully open'
+                                    ? '0: fully open'
                                     : n === seatCount
-                                      ? `${n} of ${seatCount} — TEAM ROUND`
-                                      : `${n} of ${seatCount} — ${seatCount - n} open to public`}
+                                      ? `${n} of ${seatCount}, TEAM ROUND`
+                                      : `${n} of ${seatCount}, ${seatCount - n} open to public`}
                                 </option>
                               ))}
                             </select>
@@ -1087,7 +1087,7 @@ export default function CreateCampaignPage() {
                         {reservedN > 0 && allowlist.length < reservedN && (
                           <p className="text-[10px] font-mono text-[var(--warning)] uppercase tracking-widest">
                             {reservedN - allowlist.length} slot{reservedN - allowlist.length === 1 ? '' : 's'} still
-                            empty — those seats would sit unclaimable until the deadline.
+                            empty: those seats would sit unclaimable until the deadline.
                           </p>
                         )}
                       </div>
@@ -1096,7 +1096,7 @@ export default function CreateCampaignPage() {
                     <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 px-3 py-2.5 text-[11px] font-mono text-[var(--muted)] leading-relaxed">
                       <span className="text-[var(--accent)] font-semibold">{seatCount} seats × {seatPrice} {unitSym} = {effGoalEth} {unitSym} raise.</span>{' '}
                       Every backer deposits exactly the seat price, owns exactly 1/{seatCount} of the
-                      backer pool and fee stream — and the last seat filling meets the goal, so{' '}
+                      backer pool and fee stream, and the last seat filling meets the goal, so{' '}
                       <span className="text-[var(--foreground)]">filling the round IS the launch trigger</span>.
                     </div>
                   </>
@@ -1105,7 +1105,7 @@ export default function CreateCampaignPage() {
                 {effGoalEth > betaCap && (
                   <p className="text-xs font-mono text-[var(--warning)]">
                     BETA CAP: raises are limited to {betaCap} {unitSym} total until the external
-                    contract review completes{raiseStyle === 'seats' ? ' — lower the seat count or price' : ''}.
+                    contract review completes{raiseStyle === 'seats' ? ', lower the seat count or price' : ''}.
                   </p>
                 )}
               </div>
@@ -1115,7 +1115,7 @@ export default function CreateCampaignPage() {
             <section className="border border-[var(--border)] bg-[var(--card)]">
               <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                  {'// CREATOR_TAX'}
+                  {'CREATOR TAX'}
                 </span>
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                   0–10% · IMMUTABLE
@@ -1147,10 +1147,10 @@ export default function CreateCampaignPage() {
                     on Axiom after launch (punch list #6). */}
                 <p className="text-[11px] font-mono text-[var(--foreground)] leading-relaxed">
                   Traders pay <span className="text-[var(--accent)] font-semibold">{((Number(taxPct) || 0) + 1).toFixed(2).replace(/\.?0+$/, '')}%</span> on every buy and sell:
-                  your {taxPct || 0}% + pons&apos; 1% protocol fee. The 1% is pons revenue — it funds $PONS buybacks, the flywheel every launch here feeds.
+                  your {taxPct || 0}% + pons&apos; 1% protocol fee. The 1% is pons revenue, it funds $PONS buybacks, the flywheel every launch here feeds.
                 </p>
                 <p className="text-[11px] font-mono text-[var(--muted)] leading-relaxed">
-                  The pons trading tax on every buy and sell — same dial as launching on pons
+                  The pons trading tax on every buy and sell, same dial as launching on pons
                   directly, with one difference: here the tax flows to your campaign&apos;s
                   FeeSplitter, so <span className="text-[var(--accent)]">your backers earn it</span>{' '}
                   ({backerPct}% of it, on top of the standard creator-fee share). Locked at launch;
@@ -1164,7 +1164,7 @@ export default function CreateCampaignPage() {
                     curve diverted ~20%+ of buy volume into curve-held fee/
                     buyback pools (vs 1% with it off) on identical trades.
                     Backer tax income was unchanged, but where that extra
-                    take lands isn't proven yet — no creator should flip a
+                    take lands isn't proven yet: no creator should flip a
                     switch we can't fully explain. Nearly every live pons
                     launch runs with it off, too. */}
                 <label className="flex items-start gap-3 border-t border-[var(--border)] pt-3 opacity-50 cursor-not-allowed">
@@ -1184,7 +1184,7 @@ export default function CreateCampaignPage() {
               <section className="border border-[var(--border)] bg-[var(--card)]">
                 <div className="border-b border-[var(--border)] px-4 py-2 flex items-center justify-between">
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-                    {'// TOKEN_GATE'}
+                    {'TOKEN GATE'}
                   </span>
                   <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">
                     OPTIONAL
@@ -1243,7 +1243,7 @@ export default function CreateCampaignPage() {
                     ) : (
                       <>{FIXED_LEGS_PCT.total}% is fixed and never moves: {FIXED_LEGS_PCT.platform}% platform, {FIXED_LEGS_PCT.rewards}% retired holder-rewards. </>
                     )}
-                    The other {100 - FIXED_LEGS_PCT.total}% is yours to split between backers and ownerless bots — burn, locked liquidity, named vaults —
+                    The other {100 - FIXED_LEGS_PCT.total}% is yours to split between backers and ownerless bots, burn, locked liquidity, named vaults —
                     immutable from creation, pull-based forever. Anyone can crank the bots; nobody can stop or change them.
                   </p>
                   {FIXED_LEGS_NOTE && (
@@ -1273,12 +1273,12 @@ export default function CreateCampaignPage() {
                         <span className="text-[var(--muted)]">Fixed {FIXED_LEGS_PCT.total}%</span>
                       </div>
                       <div className={`text-[10px] font-mono uppercase tracking-widest ${overBudget ? 'text-red-400' : botsPct >= budget ? 'text-red-400' : 'text-[var(--success)]'}`}>
-                        {overBudget ? `over by ${botsPct - budget}% — bots can take at most ${budget}%` : botsPct >= budget ? 'backers get nothing — lower a bot' : `backers keep ${backerPct}%`}
+                        {overBudget ? `over by ${botsPct - budget}%: bots can take at most ${budget}%` : botsPct >= budget ? 'backers get nothing: lower a bot' : `backers keep ${backerPct}%`}
                       </div>
                     {creatorPct > 0 && !creatorValid && (
                       <p className="mt-1 text-[10px] font-mono uppercase tracking-widest text-red-400 leading-relaxed">
                         {creatorPct > CREATOR_MAX_PCT
-                          ? `Creator fee is capped at ${CREATOR_MAX_PCT}% — backers keep most of the stream here, by design.`
+                          ? `Creator fee is capped at ${CREATOR_MAX_PCT}%: backers keep most of the stream here, by design.`
                           : `Creator fee (${creatorPct}%) cannot exceed what backers keep (${backerPct}%).`}
                       </p>
                     )}
@@ -1320,7 +1320,7 @@ export default function CreateCampaignPage() {
                   {/* Advanced — the tiles and per-leg dials, collapsed by default. */}
                   <button type="button" onClick={() => setAdvancedOpen((v) => !v)} aria-expanded={advancedOpen}
                     className="flex items-center justify-between w-full text-left text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--foreground)] border-t border-[var(--border)] pt-3">
-                    <span>Advanced — add or tune legs ({stack.filter((b) => Number(b.pct) > 0).length} active)</span>
+                    <span>Advanced: add or tune legs ({stack.filter((b) => Number(b.pct) > 0).length} active)</span>
                     <span>{advancedOpen ? '▴' : '▾'}</span>
                   </button>
                   <div className={advancedOpen ? 'space-y-2' : 'hidden'}>
@@ -1509,7 +1509,7 @@ function CampaignPreviewPanel({ f, imagePreview, stack, backerPct, creatorWallet
       >
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
-            {'// LIVE_PREVIEW'}
+            {'LIVE PREVIEW'}
           </span>
           <span className="text-[9px] font-mono uppercase tracking-widest text-[var(--muted)] border border-[var(--muted)] px-1.5 py-0.5">
             DRAFT

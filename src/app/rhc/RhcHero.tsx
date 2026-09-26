@@ -50,6 +50,37 @@ export function RhcHero() {
         {V8_LIVE ? 'Every trade burns' : 'Built so every trade burns'} <span className="text-[var(--accent-gold)]">$PLAUNCH</span>.
       </p>
 
+      {/* What this is, in plain words. The first thing a stranger reads. */}
+      <p className="mt-6 max-w-2xl text-sm sm:text-base leading-relaxed text-[var(--foreground)]/85">
+        ProofLaunch is a launchpad where a group funds a token together. Seats fill, then one transaction
+        creates the token and buys it for every seat at the same price. From then on, every trade of that
+        token pays its backers a share of the fees, in ETH or tokenized stock, for as long as it trades.
+        The contracts have no owner, so nobody can change the deal.
+      </p>
+
+      {/* The same thing as a picture: three steps, one line. */}
+      <div className="mt-8 w-full max-w-3xl grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-0 text-left">
+        {[
+          ['1', 'Seats fill', 'Backers deposit ETH. Anyone can withdraw until launch.'],
+          ['2', 'One transaction launches', 'Token created and bought for every seat at once. Same block, same price.'],
+          ['3', 'Every trade pays backers', 'Trading fees flow to the seat holders. Claim any time, no lockup on the claim.'],
+        ].map(([n, title, desc], i) => (
+          <div key={n} className={`relative border border-[var(--border)] bg-[var(--card)] px-4 py-3 ${i > 0 ? 'sm:border-l-0' : ''}`}>
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-[var(--accent)] text-lg leading-none">{n}</span>
+              <span className="font-mono uppercase tracking-widest text-[11px] text-[var(--foreground)]">{title}</span>
+            </div>
+            <p className="mt-1.5 text-xs text-[var(--muted)] leading-snug">{desc}</p>
+            {i < 2 && <span aria-hidden className="hidden sm:block absolute -right-2 top-1/2 -translate-y-1/2 text-[var(--accent)] text-sm z-10 bg-[var(--card)]">→</span>}
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[11px] font-mono uppercase tracking-widest text-[var(--muted)]">
+        <Link href="/rhc/docs" className="text-[var(--accent)] hover:text-[var(--accent-hover)]">How it works →</Link>
+        <span className="opacity-50 mx-2">·</span>
+        <Link href="/rhc/flywheel" className="text-[var(--accent)] hover:text-[var(--accent-hover)]">The flywheel →</Link>
+      </p>
+
       {/* The flywheel, in the hero's stat tiles */}
       <div className="mt-10 sm:mt-14 w-full max-w-4xl">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-2 gap-y-6 sm:gap-x-6">
@@ -59,8 +90,7 @@ export function RhcHero() {
           <Stat value={ready ? pending.toFixed(3) : '0'} unit="ETH" label="Waiting to burn" color="var(--success)" />
         </div>
         <div className="mt-4 text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--muted)]">
-          <span className="text-[var(--accent-gold)]">30%</span> of every launch&apos;s creator tax{!V8_LIVE && ', from the flywheel factory onward'} ·{' '}
-          <Link href="/rhc/flywheel" className="text-[var(--accent)] hover:text-[var(--accent-hover)]">full flywheel →</Link>
+          <span className="text-[var(--accent-gold)]">30%</span> of every launch&apos;s creator tax{!V8_LIVE && ', from the flywheel factory onward'} buys and burns $PLAUNCH
         </div>
       </div>
 

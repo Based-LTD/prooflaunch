@@ -72,14 +72,14 @@ export function CampaignChat({ campaign, roster }: { campaign: `0x${string}`; ro
       }
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
-      setErr(/reject|denied/i.test(m) ? 'Signature declined — nothing was posted' : m.split('\n')[0].slice(0, 120));
+      setErr(/reject|denied/i.test(m) ? 'Signature declined: nothing was posted' : m.split('\n')[0].slice(0, 120));
     } finally { setSending(false); }
   };
 
   return (
     <div className="border border-[var(--border)] bg-[var(--card)]">
       <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-1.5">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">{'// '}CHAT</span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">CHAT</span>
         <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">{msgs.length} message{msgs.length === 1 ? '' : 's'}</span>
       </div>
       <div className="p-4">
@@ -89,7 +89,7 @@ export function CampaignChat({ campaign, roster }: { campaign: `0x${string}`; ro
           ) : disabled ? (
             <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">chat opens soon</p>
           ) : msgs.length === 0 ? (
-            <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">no messages yet — backers, say hello</p>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">no messages yet · backers, say hello</p>
           ) : msgs.map((m) => {
             const isMe = !!me && me.toLowerCase() === m.wallet.toLowerCase();
             const isBacker = roster?.has(m.wallet.toLowerCase());

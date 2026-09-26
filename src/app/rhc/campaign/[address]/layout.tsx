@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ address: 
   if (!isAddress(address)) return {};
   try {
     const meta = await rhcPublicClient.readContract({ address, abi: campaignAbi, functionName: 'tokenMeta' }) as { name: string; symbol: string; description: string };
-    const title = `$${meta.symbol} — ${meta.name} · ProofLaunch on Robinhood Chain`;
+    const title = `$${meta.symbol} · ${meta.name} · ProofLaunch on Robinhood Chain`;
     const description = (meta.description || 'A community-pooled token launch on Robinhood Chain. Back it, own the float, earn the fee stream.').slice(0, 200);
     const url = `${base}/rhc/campaign/${address}`;
     return {

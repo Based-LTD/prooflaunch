@@ -61,7 +61,7 @@ export default function FlywheelPage() {
       {/* hero */}
       <div className="border border-[var(--accent-gold)]/60 bg-[var(--card)]">
         <div className="flex items-center justify-between border-b border-[var(--accent-gold)]/40 px-3 py-1.5">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">{'// '}THE $PLAUNCH FLYWHEEL</span>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)]">THE $PLAUNCH FLYWHEEL</span>
           {PROOF_BURNER_LIVE
             ? <a href={explorerUrl(PROOF_BURNER)} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)]">burner contract ↗</a>
             : <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)]">begins with the $PLAUNCH launch</span>}
@@ -109,7 +109,7 @@ export default function FlywheelPage() {
 
       {!PROOF_BURNER_LIVE && (
         <div className="mt-4 border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
-          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-3">{'// '}HOW IT WILL RUN</div>
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] mb-3">HOW IT WILL RUN</div>
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-[10px] font-mono uppercase tracking-widest">
             {['A trade on any ProofLaunch token', 'creator tax (0–10%, set at creation)', '30% → the burner, fixed', '$PLAUNCH bought on-chain', 'sent to 0x…dEaD'].map((t, i) => (
               <div key={t} className="border border-[var(--border)] bg-[var(--background)] px-3 py-2 flex items-center gap-2"><span className="text-[var(--accent-gold)]">{i + 1}</span><span className="text-[var(--foreground)] normal-case tracking-normal">{t}</span></div>

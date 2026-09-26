@@ -9,7 +9,7 @@
 import { useMemo, useState } from 'react';
 
 export const SERIES = '#c98500';
-export const SERIES_2 = '#8a8a82'; // de-emphasis gray (emphasis form) — always labeled
+export const SERIES_2 = '#8a8a82'; // de-emphasis gray (emphasis form): always labeled
 
 export interface Pt { x: number; y: number; label: string; sub?: string }
 
