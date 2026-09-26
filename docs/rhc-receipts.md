@@ -307,6 +307,18 @@ until someone cranks it.
 
 ---
 
+**~23:40 UTC — the launcher burned its seat.** Launcher `0x04F2…4140`,
+the wallet that signed `launch()` and the one trackers call the dev,
+claimed its seat's 18,176,032 $PLAUNCH and sent them to 0x…dEaD in one
+transfer (block 72,589,690, tx `0x8b3e24a07379…`). Dev holds zero, as a
+transaction. A fifth coin-burn-leg crank (334,342, tx `0xa369b86af2c6…`)
+landed at block 72,591,403. **Total at 0x…dEaD: 28,714,936 $PLAUNCH,
+2.87% of supply**, of which 1,017,248 via the v8 burner, 9,521,656 via
+the token's own coin-burn leg, 18,176,032 sent directly. The flywheel
+page now reconciles all three to the dead address.
+
+---
+
 ## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;
