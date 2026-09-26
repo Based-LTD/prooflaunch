@@ -319,6 +319,16 @@ page now reconciles all three to the dead address.
 
 ---
 
+**2026-09-26 03:15:23 UTC — $PLAUNCH graduated** off the pons curve to
+Uniswap v4 (pool id `0xb56ebec11deb6547812ee909324f472ca0089420807c59878be2bd1dba8170b8`).
+Dexscreener listed it automatically within 90 seconds:
+https://dexscreener.com/robinhood/0xb56ebec11deb6547812ee909324f472ca0089420807c59878be2bd1dba8170b8
+From here both burners buy on v4 (fork-tested path). The on-site trade
+box retires itself on graduation; the card points at pons, Axiom and
+Dexscreener.
+
+---
+
 ## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;
