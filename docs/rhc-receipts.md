@@ -353,6 +353,18 @@ harvest and crank. A 0.24 ETH pile waited at pons for hours.
 
 ---
 
+**2026-09-26 05:01:33 UTC — the keeper's first automatic crank.**
+`/api/rhc/keeper` (Vercel cron, every 5 minutes; commit `8e61b7e`) went
+live with a gas-only signer, the deployer `0xC571…c58A`. Its first tick
+cranked $SMOKE's coin-burn leg with nobody at a keyboard: tx
+`0xf0f9d6d57fd7…`, 0.011181 ETH → 5,326,275 $SMOKE via the curve, sender
+= keeper wallet. At 05:06 UTC the read-only report
+(`GET /api/rhc/keeper`, no auth) listed zero pending actions: nothing
+waiting at pons, nothing owed to any leg, burner at 0. The two idle
+steps above now get pressed on a timer. Anyone may still press first.
+
+---
+
 ## 8. Things we have gotten wrong and corrected (so you don't have to find them)
 
 - Docs and audit page named factory v4 as "active" until 2026-09-19;
